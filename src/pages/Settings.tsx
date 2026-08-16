@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
 import { useMenuStore } from '../store/menuStore';
 import { useToast } from '../store/uiStore';
@@ -13,6 +13,22 @@ export default function Settings() {
   const toast = useToast();
   const [form, setForm] = useState({ ...settings });
   const [activeTab, setActiveTab] = useState('restaurant');
+  const [bridgeStatus, setBridgeStatus] = useState<'unknown'|'online'|'offline'>('unknown');
+
+  const checkBridge = async () => {
+    try {
+      const r = await fetch('http://localhost:7878/ping', { signal: AbortSignal.timeout(1500) });
+      setBridgeStatus(r.ok ? 'online' : 'offline');
+    } catch {
+      setBridgeStatus('offline');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'printing' && (form.printerType === 'lan' || form.printerType === 'wifi')) {
+      checkBridge();
+    }
+  }, [activeTab, form.printerType]);
 
   const handleSave = () => {
     updateSettings(form);
@@ -258,36 +274,79 @@ export default function Settings() {
 
                   {/* LAN / Wi-Fi IP & Port */}
                   {(form.printerType === 'lan' || form.printerType === 'wifi') && (
-                    <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.875rem' }}>
-                        {form.printerType === 'lan' ? '🔌 LAN Printer Settings' : '📶 Wi-Fi Printer Settings'}
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12 }}>
-                        <div className="input-group" style={{ margin: 0 }}>
-                          <label className="input-label">Printer IP Address</label>
-                          <input
-                            className="input"
-                            placeholder="e.g. 192.168.1.100"
-                            value={form.printerIp}
-                            onChange={(e) => setForm({ ...form, printerIp: e.target.value })}
-                          />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                      {/* IP + Port inputs */}
+                      <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.875rem' }}>
+                          {form.printerType === 'lan' ? '🔌 LAN / Ethernet Printer' : '📶 Wi-Fi Printer'}
                         </div>
-                        <div className="input-group" style={{ margin: 0 }}>
-                          <label className="input-label">Port</label>
-                          <input
-                            className="input"
-                            type="number"
-                            placeholder="9100"
-                            value={form.printerPort}
-                            onChange={(e) => setForm({ ...form, printerPort: parseInt(e.target.value) || 9100 })}
-                          />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12 }}>
+                          <div className="input-group" style={{ margin: 0 }}>
+                            <label className="input-label">Printer IP Address</label>
+                            <input
+                              className="input"
+                              placeholder="e.g. 192.168.1.100"
+                              value={form.printerIp}
+                              onChange={(e) => setForm({ ...form, printerIp: e.target.value })}
+                            />
+                          </div>
+                          <div className="input-group" style={{ margin: 0 }}>
+                            <label className="input-label">Port</label>
+                            <input
+                              className="input"
+                              type="number"
+                              placeholder="9100"
+                              value={form.printerPort}
+                              onChange={(e) => setForm({ ...form, printerPort: parseInt(e.target.value) || 9100 })}
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div style={{ marginTop: 10, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        ℹ️ Default port for ESC/POS thermal printers is <strong>9100</strong>. Make sure the printer and this device are on the same Wi-Fi network.
+
+                      {/* Bridge server status */}
+                      <div style={{
+                        padding: '14px 16px', borderRadius: 'var(--radius-md)',
+                        border: `1px solid ${bridgeStatus === 'online' ? '#22c55e' : bridgeStatus === 'offline' ? '#ef4444' : 'var(--border)'}`,
+                        background: bridgeStatus === 'online' ? '#dcfce7' : bridgeStatus === 'offline' ? '#fee2e2' : 'var(--bg-elevated)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                            {bridgeStatus === 'online'  && '✅ Print Bridge: ONLINE'}
+                            {bridgeStatus === 'offline' && '❌ Print Bridge: NOT RUNNING'}
+                            {bridgeStatus === 'unknown' && '⬜ Print Bridge: Not checked'}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', marginTop: 3, color: bridgeStatus === 'online' ? '#166534' : '#991b1b' }}>
+                            {bridgeStatus === 'online'  && 'Bridge is running. Printing will go directly to your thermal printer!'}
+                            {bridgeStatus === 'offline' && 'Start the bridge server on your laptop first (see steps below).'}
+                            {bridgeStatus === 'unknown' && 'Click "Check" to test the connection.'}
+                          </div>
+                        </div>
+                        <button className="btn btn-ghost btn-sm" type="button" onClick={checkBridge} style={{ flexShrink: 0 }}>
+                          Check
+                        </button>
+                      </div>
+
+                      {/* Step-by-step setup guide */}
+                      <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.875rem' }}>🛠️ One-time Setup (do this once on your laptop)</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                          <div><strong style={{ color: 'var(--text)' }}>Step 1 – Install Node.js</strong><br/>Download from <a href="https://nodejs.org" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>nodejs.org</a> (LTS version) and install it on your laptop.</div>
+                          <div><strong style={{ color: 'var(--text)' }}>Step 2 – Open Terminal / Command Prompt</strong><br/>Press <kbd>Win+R</kbd> → type <code>cmd</code> → Enter  (or open Terminal on Mac).</div>
+                          <div style={{ background: '#1e293b', color: '#94a3b8', padding: '10px 14px', borderRadius: 8, fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                            <div style={{ color: '#64748b', marginBottom: 4 }}># Navigate to the print-server folder inside the project</div>
+                            <div>cd &quot;{window.location.pathname.includes('localhost') ? 'C:\\path\\to\\Restaurant_Billing' : '/path/to/Restaurant_Billing'}/print-server&quot;</div>
+                            <div style={{ marginTop: 6 }}>node server.js</div>
+                          </div>
+                          <div><strong style={{ color: 'var(--text)' }}>Step 3 – Keep the terminal open</strong><br/>You will see <em>"Listening on http://localhost:7878"</em>. Keep this window open while billing.</div>
+                          <div><strong style={{ color: 'var(--text)' }}>Step 4 – Find your printer's IP</strong><br/>Print a self-test page from the printer (hold Feed button on power-on). The IP address will be printed on it. Enter it above.</div>
+                          <div><strong style={{ color: 'var(--text)' }}>Step 5 – Click "Check" above to verify, then Save Settings.</strong></div>
+                        </div>
                       </div>
                     </div>
                   )}
+
 
                   {/* USB */}
                   {form.printerType === 'usb' && (

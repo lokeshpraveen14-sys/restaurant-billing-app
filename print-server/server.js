@@ -1,0 +1,107 @@
+/**
+ * Restaurant Billing – Local Print Bridge Server
+ * ------------------------------------------------
+ * Run this on the laptop that has access to the network printer.
+ *   node server.js
+ *
+ * It listens on http://localhost:7878 and:
+ *   POST /print  { ip, port, data: "<hex or base64 encoded ESC/POS>" }
+ *   GET  /ping   → returns { ok: true }
+ *
+ * The web app (running in the browser) calls this endpoint to print.
+ */
+
+const http  = require('http');
+const net   = require('net');
+
+const BRIDGE_PORT = 7878;
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function sendToPrinter(ip, port, rawBuffer) {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    socket.setTimeout(6000);
+    socket.connect(port, ip, () => {
+      socket.write(rawBuffer, () => {
+        socket.destroy();
+        resolve();
+      });
+    });
+    socket.on('timeout', () => { socket.destroy(); reject(new Error('Connection timeout')); });
+    socket.on('error',   (err) => reject(err));
+  });
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end',  () => resolve(body));
+    req.on('error', reject);
+  });
+}
+
+function jsonResponse(res, status, data) {
+  const body = JSON.stringify(data);
+  res.writeHead(status, {
+    'Content-Type':                'application/json',
+    'Access-Control-Allow-Origin': '*',  // allow the browser to call us
+    'Access-Control-Allow-Headers':'Content-Type',
+  });
+  res.end(body);
+}
+
+// ─── HTTP Server ─────────────────────────────────────────────────────────────
+
+const server = http.createServer(async (req, res) => {
+  // CORS pre-flight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin':  '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/ping') {
+    return jsonResponse(res, 200, { ok: true, version: '1.0' });
+  }
+
+  if (req.method === 'POST' && req.url === '/print') {
+    try {
+      const raw  = await readBody(req);
+      const body = JSON.parse(raw);
+      const { ip, port = 9100, data, encoding = 'base64' } = body;
+
+      if (!ip)   return jsonResponse(res, 400, { ok: false, error: 'Missing printer IP' });
+      if (!data) return jsonResponse(res, 400, { ok: false, error: 'Missing print data'  });
+
+      const buf = encoding === 'base64'
+        ? Buffer.from(data, 'base64')
+        : Buffer.from(data, 'binary');
+
+      await sendToPrinter(ip, port, buf);
+      console.log(`✅  Printed ${buf.length} bytes → ${ip}:${port}`);
+      return jsonResponse(res, 200, { ok: true });
+
+    } catch (err) {
+      console.error('❌  Print error:', err.message);
+      return jsonResponse(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  jsonResponse(res, 404, { ok: false, error: 'Not found' });
+});
+
+server.listen(BRIDGE_PORT, '127.0.0.1', () => {
+  console.log('');
+  console.log('╔══════════════════════════════════════════╗');
+  console.log('║   Restaurant Billing – Print Bridge       ║');
+  console.log(`║   Listening on http://localhost:${BRIDGE_PORT}     ║`);
+  console.log('║   Keep this window open while billing.    ║');
+  console.log('╚══════════════════════════════════════════╝');
+  console.log('');
+});

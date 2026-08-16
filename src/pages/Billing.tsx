@@ -12,6 +12,7 @@ import { Printer, FilePdf, CurrencyInr, Receipt } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useReactToPrint } from 'react-to-print';
 import { QRCodeSVG } from 'qrcode.react';
+import { printReceipt, buildBillReceipt } from '../lib/printer';
 
 export default function Billing() {
   const [searchParams] = useSearchParams();
@@ -35,7 +36,37 @@ export default function Billing() {
   const [showPrint, setShowPrint] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = useReactToPrint({ content: () => printRef.current });
+  const browserPrint = useReactToPrint({ content: () => printRef.current });
+
+  const handlePrint = async (bill?: Bill | null) => {
+    const b = bill || billGenerated;
+    if (!b) { browserPrint(); return; }
+    const lines = buildBillReceipt({
+      restaurantName: settings.restaurantName,
+      address:        settings.address,
+      gstin:          settings.gstin,
+      invoiceNumber:  b.invoiceNumber,
+      tableNumber:    b.tableNumber,
+      orderType:      b.orderType,
+      staffName:      b.staffName,
+      items:          b.items,
+      subtotal:       b.subtotal,
+      totalGST:       b.totalGST,
+      serviceCharge:  b.serviceCharge,
+      discountAmount: b.discountAmount,
+      roundOff:       b.roundOff,
+      totalAmount:    b.totalAmount,
+      paymentMode:    b.payments?.[0]?.mode || 'cash',
+      amountPaid:     b.amountPaid,
+      changeDue:      b.changeDue,
+    });
+    const result = await printReceipt(lines, browserPrint);
+    if (result.method === 'browser' && result.error) {
+      toast.warning('Printer fallback', result.error);
+    } else if (result.method === 'bridge') {
+      toast.success('Printed!', 'Sent to thermal printer');
+    }
+  };
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.totalPrice, 0);
   const totalCoverCharge = (order?.coverCharge || 0) * (order?.guestCount || 0);

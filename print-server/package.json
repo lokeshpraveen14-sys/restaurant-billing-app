@@ -1,0 +1,12 @@
+{
+  "name": "restaurant-print-bridge",
+  "version": "1.0.0",
+  "description": "Local bridge: forwards ESC/POS print jobs from browser to network thermal printer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}
