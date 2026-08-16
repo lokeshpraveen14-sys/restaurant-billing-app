@@ -100,6 +100,7 @@ export const useOrderStore = create<OrderState>()(
           updatedAt: new Date(),
         };
         set((state) => ({ orders: [...state.orders, newOrder], activeOrder: newOrder }));
+        syncOrderToDB(newOrder);
         return newOrder;
       },
 
@@ -118,6 +119,8 @@ export const useOrderStore = create<OrderState>()(
             activeOrder: state.activeOrder?.id === orderId ? updatedOrders.find(o => o.id === orderId) : state.activeOrder,
           };
         });
+        const order = get().orders.find((o) => o.id === orderId);
+        if (order) syncOrderToDB(order);
       },
 
       removeItemFromOrder: (orderId, itemId) => {
@@ -132,6 +135,8 @@ export const useOrderStore = create<OrderState>()(
             activeOrder: state.activeOrder?.id === orderId ? updatedOrders.find(o => o.id === orderId) : state.activeOrder,
           };
         });
+        const order = get().orders.find((o) => o.id === orderId);
+        if (order) syncOrderToDB(order);
       },
 
       updateItemQty: (orderId, itemId, qty) => {
@@ -156,6 +161,8 @@ export const useOrderStore = create<OrderState>()(
             activeOrder: state.activeOrder?.id === orderId ? updatedOrders.find(o => o.id === orderId) : state.activeOrder,
           };
         });
+        const order = get().orders.find((o) => o.id === orderId);
+        if (order) syncOrderToDB(order);
       },
 
       updateItemNote: (orderId, itemId, note) => {
@@ -166,6 +173,8 @@ export const useOrderStore = create<OrderState>()(
               : o
           ),
         }));
+        const order = get().orders.find((o) => o.id === orderId);
+        if (order) syncOrderToDB(order);
       },
 
       submitKOT: (orderId) => {
