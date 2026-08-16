@@ -238,17 +238,25 @@ export interface Settings {
   logoUrl?: string;
   serviceChargePercent: number;
   serviceChargeEnabled: boolean;
+  // Printer – Paper
   printerWidth: '58mm' | '80mm' | 'A4';
+  // Printer – Connection
+  printerType: 'browser' | 'lan' | 'wifi' | 'usb' | 'bluetooth';
+  printerIp: string;        // for LAN / WiFi printers
+  printerPort: number;      // default 9100
+  printerBluetoothName: string; // for BT pairing hint
+  autoPrintBill: boolean;
+  autoPrintKot: boolean;
   upiId?: string;
-  financialYear: string; // e.g., "2025-26"
-  invoicePrefix: string; // e.g., "INV"
+  financialYear: string;
+  invoicePrefix: string;
   invoiceCounter: number;
   outlet: string;
   currency: string;
   // GST Settings
   gstEnabled: boolean;
   defaultGstRate: 0 | 5 | 12 | 18 | 28;
-  categoryGstRates: Record<string, number>; // categoryId -> gst rate override
+  categoryGstRates: Record<string, number>;
 }
 
 // Toast notification

@@ -11,6 +11,13 @@ const DEFAULT_SETTINGS: Settings = {
   serviceChargePercent: 5,
   serviceChargeEnabled: false,
   printerWidth: '80mm',
+  // Printer connection defaults
+  printerType: 'browser',
+  printerIp: '',
+  printerPort: 9100,
+  printerBluetoothName: '',
+  autoPrintBill: false,
+  autoPrintKot: false,
   upiId: 'railway@upi',
   financialYear: '2025-26',
   invoicePrefix: 'INV',
