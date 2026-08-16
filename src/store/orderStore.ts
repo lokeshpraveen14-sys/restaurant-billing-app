@@ -58,9 +58,9 @@ const syncOrderToDB = async (order: Order) => {
     items: order.items,
     guest_count: order.guestCount || null,
     cover_charge: order.coverCharge || null,
-    created_at: order.createdAt.toISOString(),
+    created_at: new Date(order.createdAt).toISOString(),
     updated_at: new Date().toISOString(),
-    kot_printed_at: order.kotPrintedAt?.toISOString() || null,
+    kot_printed_at: order.kotPrintedAt ? new Date(order.kotPrintedAt).toISOString() : null,
   });
   if (error) {
     console.error('Failed to sync order to DB:', error);
