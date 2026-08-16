@@ -14,13 +14,62 @@ export default function Settings() {
   const [form, setForm] = useState({ ...settings });
   const [activeTab, setActiveTab] = useState('restaurant');
   const [bridgeStatus, setBridgeStatus] = useState<'unknown'|'online'|'offline'>('unknown');
+  const [bridgeChecking, setBridgeChecking] = useState(false);
+  const [bridgePrinting, setBridgePrinting] = useState(false);
 
   const checkBridge = async () => {
+    setBridgeChecking(true);
     try {
-      const r = await fetch('http://localhost:7878/ping', { signal: AbortSignal.timeout(1500) });
+      const r = await fetch('http://localhost:7878/ping', { signal: AbortSignal.timeout(2000) });
       setBridgeStatus(r.ok ? 'online' : 'offline');
     } catch {
       setBridgeStatus('offline');
+    } finally {
+      setBridgeChecking(false);
+    }
+  };
+
+  const sendBridgeTestPrint = async () => {
+    const ip   = form.printerIp?.trim();
+    const port = form.printerPort || 9100;
+    if (!ip) { toast.error('No IP', 'Enter the printer IP address first'); return; }
+    setBridgePrinting(true);
+    try {
+      // Build a minimal ESC/POS test page
+      const ESC = '\x1b', GS = '\x1d';
+      const raw =
+        ESC + '@' +                          // init
+        ESC + 'a' + '\x01' +                // center
+        ESC + 'E' + '\x01' +                // bold on
+        (form.restaurantName || 'Restaurant') + '\n' +
+        ESC + 'E' + '\x00' +                // bold off
+        '------------------------------\n' +
+        '   ** TEST PRINT **\n' +
+        'Printer : ' + ip + ':' + port + '\n' +
+        'Paper   : ' + (form.printerWidth || '80mm') + '\n' +
+        '------------------------------\n' +
+        'If you can read this,\n' +
+        'printer is working correctly!\n' +
+        new Date().toLocaleString() + '\n' +
+        '\n\n\n\n' +
+        GS + 'V' + '\x00';                  // cut
+
+      const b64 = btoa(unescape(encodeURIComponent(raw)));
+      const resp = await fetch('http://localhost:7878/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, port, data: b64, encoding: 'base64' }),
+      });
+      const json = await resp.json();
+      if (resp.ok) {
+        toast.success('Test print sent!', 'Check your thermal printer');
+      } else {
+        toast.error('Print failed', json.error || 'Unknown error');
+      }
+    } catch (e: any) {
+      toast.error('Bridge error', e.message);
+    } finally {
+      setBridgePrinting(false);
     }
   };
 
@@ -323,9 +372,28 @@ export default function Settings() {
                             {bridgeStatus === 'unknown' && 'Click "Check" to test the connection.'}
                           </div>
                         </div>
-                        <button className="btn btn-ghost btn-sm" type="button" onClick={checkBridge} style={{ flexShrink: 0 }}>
-                          Check
-                        </button>
+                        <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexDirection: 'column', alignItems: 'flex-end' }}>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            type="button"
+                            onClick={checkBridge}
+                            disabled={bridgeChecking}
+                            style={{ minWidth: 90 }}
+                          >
+                            {bridgeChecking ? '⏳ Checking…' : '🔄 Check'}
+                          </button>
+                          {bridgeStatus === 'online' && (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              type="button"
+                              onClick={sendBridgeTestPrint}
+                              disabled={bridgePrinting}
+                              style={{ minWidth: 90 }}
+                            >
+                              {bridgePrinting ? '⏳ Sending…' : '🖨️ Test Print'}
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Step-by-step setup guide */}
