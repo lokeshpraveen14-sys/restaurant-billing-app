@@ -35,16 +35,20 @@ export default function OrderTaking() {
 
   const table = tables.find((t) => t.id === tableId);
 
-  // Wait for orders to load from DB before creating or restoring order
+  // Restore existing order for this table immediately from cache (localStorage)
+  // Then sync with DB once loaded
   useEffect(() => {
-    if (!currentUser || !ordersLoaded) return;
+    if (!currentUser) return;
     const existing = tableId ? getOrderByTable(tableId) : null;
     if (existing) {
+      // Found in cache immediately — no waiting
       setActiveOrder(existing);
-    } else {
+    } else if (ordersLoaded) {
+      // DB loaded and no order found — create a new one
       const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount, table?.extraChargePerPerson);
       setActiveOrder(newOrder);
     }
+    // If not loaded yet, the next render after ordersLoaded=true will re-run this
   }, [tableId, ordersLoaded]);
 
   const filteredItems = getFilteredItems();
