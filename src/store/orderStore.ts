@@ -46,10 +46,13 @@ function mapDbOrder(o: any): Order {
 }
 
 const syncOrderToDB = async (order: Order) => {
+  // Only pass table_id if it's a valid UUID, otherwise pass null to avoid postgres uuid syntax error
+  const isValidUUID = (id: string | null | undefined) => id && id.length === 36;
+  
   const { error } = await supabase.from('orders').upsert({
     id: order.id,
     local_id: order.localId,
-    table_id: order.tableId || null,
+    table_id: isValidUUID(order.tableId) ? order.tableId : null,
     table_number: order.tableNumber || null,
     order_type: order.orderType,
     status: order.status,
