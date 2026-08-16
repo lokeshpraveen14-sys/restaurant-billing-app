@@ -20,7 +20,15 @@ export default function Settings() {
   const checkBridge = async () => {
     setBridgeChecking(true);
     try {
-      const r = await fetch('http://localhost:7878/ping', { signal: AbortSignal.timeout(2000) });
+      let url = 'http://localhost:7878';
+      if (form.bridgeServerIp?.trim()) {
+        const ip = form.bridgeServerIp.trim();
+        url = (ip.startsWith('http://') || ip.startsWith('https://'))
+          ? (ip.endsWith('/') ? ip.slice(0, -1) : ip)
+          : `http://${ip}:${form.bridgeServerPort || 7878}`;
+      }
+      
+      const r = await fetch(`${url}/ping`, { signal: AbortSignal.timeout(3000) });
       setBridgeStatus(r.ok ? 'online' : 'offline');
     } catch {
       setBridgeStatus('offline');
@@ -266,11 +274,14 @@ export default function Settings() {
                 };
 
                 const testPrint = async (p: typeof printers[number]) => {
-                  const bridgeIp   = form.bridgeServerIp?.trim() || 'localhost';
+                  const bridgeIp   = form.bridgeServerIp?.trim();
                   const bridgePort = form.bridgeServerPort || 7878;
-                  const url = bridgeIp === 'localhost' || !bridgeIp
-                    ? `http://localhost:${bridgePort}`
-                    : `http://${bridgeIp}:${bridgePort}`;
+                  let url = `http://localhost:${bridgePort}`;
+                  if (bridgeIp) {
+                    url = (bridgeIp.startsWith('http://') || bridgeIp.startsWith('https://'))
+                      ? (bridgeIp.endsWith('/') ? bridgeIp.slice(0, -1) : bridgeIp)
+                      : `http://${bridgeIp}:${bridgePort}`;
+                  }
 
                   const ESC = '\x1b', GS = '\x1d';
                   const raw =
@@ -316,8 +327,8 @@ export default function Settings() {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, marginBottom: 10 }}>
                         <div className="input-group" style={{ margin: 0 }}>
-                          <label className="input-label">Bridge Server IP (laptop's LAN IP)</label>
-                          <input className="input" placeholder="e.g. 192.168.1.50" value={form.bridgeServerIp || ''} onChange={e => setForm({ ...form, bridgeServerIp: e.target.value })} />
+                          <label className="input-label">Bridge Server IP or HTTPS URL</label>
+                          <input className="input" placeholder="192.168.1.50 or https://..." value={form.bridgeServerIp || ''} onChange={e => setForm({ ...form, bridgeServerIp: e.target.value })} />
                         </div>
                         <div className="input-group" style={{ margin: 0 }}>
                           <label className="input-label">Port</label>

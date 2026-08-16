@@ -165,7 +165,16 @@ function getBridgeUrl(): string {
   const { settings } = useSettingsStore.getState();
   const ip   = settings.bridgeServerIp?.trim();
   const port = settings.bridgeServerPort || 7878;
-  if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+  
+  if (!ip) return `http://localhost:${port}`;
+  
+  if (ip.startsWith('http://') || ip.startsWith('https://')) {
+    // If it's a full URL (like ngrok/localtunnel), return it directly (ignores port field)
+    // Strip trailing slash if any
+    return ip.endsWith('/') ? ip.slice(0, -1) : ip;
+  }
+  
+  if (ip !== 'localhost' && ip !== '127.0.0.1') {
     return `http://${ip}:${port}`;
   }
   return `http://localhost:${port}`;
