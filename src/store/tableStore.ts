@@ -6,23 +6,23 @@ import { supabase } from '../lib/supabase';
 const INITIAL_TABLES: Table[] = [
   // Main Hall
   { id: 't1', number: 'T1', capacity: 2, status: 'free', section: 'Main Hall', posX: 0, posY: 0 },
-  { id: 't2', number: 'T2', capacity: 2, status: 'occupied', section: 'Main Hall', posX: 1, posY: 0, occupiedSince: new Date(Date.now() - 25 * 60000) },
-  { id: 't3', number: 'T3', capacity: 4, status: 'occupied', section: 'Main Hall', posX: 2, posY: 0, occupiedSince: new Date(Date.now() - 45 * 60000) },
+  { id: 't2', number: 'T2', capacity: 2, status: 'free', section: 'Main Hall', posX: 1, posY: 0 },
+  { id: 't3', number: 'T3', capacity: 4, status: 'free', section: 'Main Hall', posX: 2, posY: 0 },
   { id: 't4', number: 'T4', capacity: 4, status: 'free', section: 'Main Hall', posX: 3, posY: 0 },
-  { id: 't5', number: 'T5', capacity: 6, status: 'reserved', section: 'Main Hall', posX: 0, posY: 1, reservedFor: 'Mehta Family - 8:00 PM' },
-  { id: 't6', number: 'T6', capacity: 4, status: 'billing', section: 'Main Hall', posX: 1, posY: 1 },
+  { id: 't5', number: 'T5', capacity: 6, status: 'free', section: 'Main Hall', posX: 0, posY: 1 },
+  { id: 't6', number: 'T6', capacity: 4, status: 'free', section: 'Main Hall', posX: 1, posY: 1 },
   { id: 't7', number: 'T7', capacity: 2, status: 'free', section: 'Main Hall', posX: 2, posY: 1 },
-  { id: 't8', number: 'T8', capacity: 4, status: 'cleaning', section: 'Main Hall', posX: 3, posY: 1 },
+  { id: 't8', number: 'T8', capacity: 4, status: 'free', section: 'Main Hall', posX: 3, posY: 1 },
   // Garden
   { id: 't9', number: 'G1', capacity: 4, status: 'free', section: 'Garden', posX: 0, posY: 2 },
-  { id: 't10', number: 'G2', capacity: 4, status: 'occupied', section: 'Garden', posX: 1, posY: 2, occupiedSince: new Date(Date.now() - 15 * 60000) },
+  { id: 't10', number: 'G2', capacity: 4, status: 'free', section: 'Garden', posX: 1, posY: 2 },
   { id: 't11', number: 'G3', capacity: 6, status: 'free', section: 'Garden', posX: 2, posY: 2 },
-  { id: 't12', number: 'G4', capacity: 8, status: 'reserved', section: 'Garden', posX: 3, posY: 2, reservedFor: 'Corporate Party - 7:00 PM' },
+  { id: 't12', number: 'G4', capacity: 8, status: 'free', section: 'Garden', posX: 3, posY: 2 },
   // AC Dining
   { id: 't13', number: 'A1', capacity: 2, status: 'free', section: 'AC Dining', posX: 0, posY: 3 },
-  { id: 't14', number: 'A2', capacity: 4, status: 'occupied', section: 'AC Dining', posX: 1, posY: 3, occupiedSince: new Date(Date.now() - 60 * 60000) },
+  { id: 't14', number: 'A2', capacity: 4, status: 'free', section: 'AC Dining', posX: 1, posY: 3 },
   { id: 't15', number: 'A3', capacity: 4, status: 'free', section: 'AC Dining', posX: 2, posY: 3 },
-  { id: 't16', number: 'A4', capacity: 6, status: 'billing', section: 'AC Dining', posX: 3, posY: 3 },
+  { id: 't16', number: 'A4', capacity: 6, status: 'free', section: 'AC Dining', posX: 3, posY: 3 },
 ];
 
 interface TableState {
@@ -160,26 +160,50 @@ export const useTableStore = create<TableState>()(
         // Initial fetch
         const { data, error } = await supabase.from('restaurant_tables').select('*');
         if (!error && data) {
-          set((state) => {
-            const newTables = data.map((dbTable) => {
-              const localTable = state.tables.find(t => t.number === dbTable.number);
-              return {
-                id: dbTable.id,
-                number: dbTable.number,
-                capacity: dbTable.capacity,
-                section: dbTable.section,
-                posX: localTable?.posX || 0,
-                posY: localTable?.posY || 0,
-                status: dbTable.status as TableStatus,
-                reservedFor: dbTable.reserved_for,
-                occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined
-              };
+          if (data.length > 0) {
+            // DB has tables — use them as source of truth
+            set((state) => {
+              const newTables = data.map((dbTable) => {
+                const localTable = state.tables.find(t => t.number === dbTable.number);
+                return {
+                  id: dbTable.id,
+                  number: dbTable.number,
+                  capacity: dbTable.capacity,
+                  section: dbTable.section,
+                  posX: localTable?.posX ?? dbTable.pos_x ?? 0,
+                  posY: localTable?.posY ?? dbTable.pos_y ?? 0,
+                  status: dbTable.status as TableStatus,
+                  reservedFor: dbTable.reserved_for || undefined,
+                  occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined
+                };
+              });
+              return { tables: newTables };
             });
-            return { tables: newTables };
-          });
+          } else {
+            // DB is empty — push local persisted tables to DB (first-time seed)
+            const localTables = get().tables;
+            for (const t of localTables) {
+              await supabase.from('restaurant_tables').upsert({
+                id: t.id,
+                table_number: t.number,
+                capacity: t.capacity,
+                status: 'free',
+                section: t.section,
+                pos_x: t.posX,
+                pos_y: t.posY
+              });
+            }
+            // Now set all local tables as free
+            set((state) => ({
+              tables: state.tables.map(t => ({ ...t, status: 'free' as TableStatus, occupiedSince: undefined, reservedFor: undefined }))
+            }));
+          }
         }
 
         // Subscribe to real-time changes
+        const existingChannel = supabase.getChannels().find(c => c.topic === 'realtime:public:restaurant_tables');
+        if (existingChannel) return;
+
         supabase.channel('public:restaurant_tables')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, payload => {
             if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
@@ -191,7 +215,7 @@ export const useTableStore = create<TableState>()(
                   newTables[idx] = {
                     ...newTables[idx],
                     status: dbTable.status as TableStatus,
-                    reservedFor: dbTable.reserved_for,
+                    reservedFor: dbTable.reserved_for || undefined,
                     occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined
                   };
                 } else {
@@ -200,10 +224,10 @@ export const useTableStore = create<TableState>()(
                     number: dbTable.number,
                     capacity: dbTable.capacity,
                     section: dbTable.section,
-                    posX: 0,
-                    posY: 0,
+                    posX: dbTable.pos_x ?? 0,
+                    posY: dbTable.pos_y ?? 0,
                     status: dbTable.status as TableStatus,
-                    reservedFor: dbTable.reserved_for,
+                    reservedFor: dbTable.reserved_for || undefined,
                     occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined
                   });
                 }
