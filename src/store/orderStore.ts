@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useUIStore } from './uiStore';
 import { Order, OrderItem, OrderType, OrderStatus } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -287,6 +288,18 @@ export const useOrderStore = create<OrderState>()(
 
               if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
                 const mappedOrder = mapDbOrder(payload.new);
+                
+                // Notify if order just became ready
+                const existingOrder = get().orders.find(o => o.id === mappedOrder.id);
+                if (mappedOrder.status === 'ready' && existingOrder?.status !== 'ready') {
+                  const tableText = mappedOrder.tableNumber ? `Table ${mappedOrder.tableNumber}` : 'Takeaway';
+                  useUIStore.getState().addToast({
+                    type: 'success',
+                    title: 'Food Ready! 🔔',
+                    message: `Order is ready for ${tableText}`
+                  });
+                }
+
                 set((state) => {
                   const newOrders = [...state.orders];
                   const idx = newOrders.findIndex(o => o.id === mappedOrder.id);
