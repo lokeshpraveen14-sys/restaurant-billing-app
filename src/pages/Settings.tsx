@@ -28,7 +28,10 @@ export default function Settings() {
           : `http://${ip}:${form.bridgeServerPort || 7878}`;
       }
       
-      const r = await fetch(`${url}/ping`, { signal: AbortSignal.timeout(3000) });
+      const r = await fetch(`${url}/ping`, { 
+        signal: AbortSignal.timeout(3000),
+        headers: { 'Bypass-Tunnel-Reminder': 'true' }
+      });
       setBridgeStatus(r.ok ? 'online' : 'offline');
     } catch {
       setBridgeStatus('offline');
@@ -302,7 +305,11 @@ export default function Settings() {
                   const b64 = btoa(unescape(encodeURIComponent(raw)));
                   try {
                     const resp = await fetch(`${url}/print`, {
-                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      method: 'POST', 
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Bypass-Tunnel-Reminder': 'true'
+                      },
                       body: JSON.stringify({ ip: p.ip, port: p.port, data: b64, encoding: 'base64' }),
                     });
                     const json = await resp.json();

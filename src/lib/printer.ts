@@ -182,7 +182,10 @@ function getBridgeUrl(): string {
 
 export async function isBridgeAlive(): Promise<boolean> {
   try {
-    const r = await fetch(`${getBridgeUrl()}/ping`, { signal: AbortSignal.timeout(2000) });
+    const r = await fetch(`${getBridgeUrl()}/ping`, { 
+      signal: AbortSignal.timeout(3000),
+      headers: { 'Bypass-Tunnel-Reminder': 'true' }
+    });
     return r.ok;
   } catch {
     return false;
@@ -235,7 +238,10 @@ export async function printReceipt(
   try {
     const resp = await fetch(`${bridgeUrl}/print`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Bypass-Tunnel-Reminder': 'true'
+      },
       body:    JSON.stringify({ ip: printer.ip, port: printer.port || 9100, data: b64, encoding: 'base64' }),
     });
     if (resp.ok) return { method: 'bridge' };
