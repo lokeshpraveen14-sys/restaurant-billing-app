@@ -244,9 +244,6 @@ export default function BakeryCounter() {
                         🖨️ {p.name}
                       </button>
                     ))}
-                    <button className="btn btn-secondary" onClick={() => handlePrint()}>
-                      📄 Browser Print
-                    </button>
                   </div>
 
                   <button className="btn btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={() => setBillGenerated(null)}>

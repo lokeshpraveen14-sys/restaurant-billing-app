@@ -321,14 +321,6 @@ export default function JuiceCounter() {
                         </button>
                       </div>
                     ))}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                      <button className="btn btn-secondary" style={{ flex: 1, fontSize: '0.8rem' }} onClick={() => handlePrint()}>
-                        📄 Browser Bill
-                      </button>
-                      <button className="btn btn-secondary" style={{ flex: 1, fontSize: '0.8rem' }} onClick={() => handleKotPrint()}>
-                        📄 Browser KOT
-                      </button>
-                    </div>
                   </div>
 
                   <button className="btn btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={() => setBillGenerated(null)}>
