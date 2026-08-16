@@ -70,6 +70,13 @@ const syncOrderToDB = async (order: Order) => {
   }
 };
 
+const deleteOrderFromDB = async (orderId: string) => {
+  const { error } = await supabase.from('orders').delete().eq('id', orderId);
+  if (error) {
+    console.error('Failed to delete order from DB:', error);
+  }
+};
+
 export const useOrderStore = create<OrderState>()(
   persist(
     (set, get) => ({
@@ -95,7 +102,6 @@ export const useOrderStore = create<OrderState>()(
           updatedAt: new Date(),
         };
         set((state) => ({ orders: [...state.orders, newOrder], activeOrder: newOrder }));
-        syncOrderToDB(newOrder);
         return newOrder;
       },
 
@@ -114,8 +120,6 @@ export const useOrderStore = create<OrderState>()(
             activeOrder: state.activeOrder?.id === orderId ? updatedOrders.find(o => o.id === orderId) : state.activeOrder,
           };
         });
-        const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
       },
 
       removeItemFromOrder: (orderId, itemId) => {
@@ -130,8 +134,6 @@ export const useOrderStore = create<OrderState>()(
             activeOrder: state.activeOrder?.id === orderId ? updatedOrders.find(o => o.id === orderId) : state.activeOrder,
           };
         });
-        const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
       },
 
       updateItemQty: (orderId, itemId, qty) => {
@@ -156,8 +158,6 @@ export const useOrderStore = create<OrderState>()(
             activeOrder: state.activeOrder?.id === orderId ? updatedOrders.find(o => o.id === orderId) : state.activeOrder,
           };
         });
-        const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
       },
 
       updateItemNote: (orderId, itemId, note) => {
@@ -168,8 +168,6 @@ export const useOrderStore = create<OrderState>()(
               : o
           ),
         }));
-        const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
       },
 
       submitKOT: (orderId) => {
@@ -200,7 +198,13 @@ export const useOrderStore = create<OrderState>()(
           orders: state.orders.map((o) => (o.id === orderId ? { ...o, status } : o)),
         }));
         const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
+        if (order) {
+          if (status === 'paid' || status === 'void') {
+            deleteOrderFromDB(orderId);
+          } else {
+            syncOrderToDB(order);
+          }
+        }
       },
 
       voidOrder: (orderId, _reason) => {
@@ -211,8 +215,7 @@ export const useOrderStore = create<OrderState>()(
               : o
           ),
         }));
-        const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
+        deleteOrderFromDB(orderId);
       },
 
       getOrderByTable: (tableId) => {
