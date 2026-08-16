@@ -22,7 +22,6 @@ async function checkRecentOrders() {
     console.log(`    Status: ${o.status}`);
     console.log(`    Table: ${o.table_number}`);
     console.log(`    Created At: ${o.created_at}`);
-    console.log(`    Items:`, JSON.stringify(o.items));
   });
 }
 

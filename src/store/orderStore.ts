@@ -59,8 +59,6 @@ const syncOrderToDB = async (order: Order) => {
     staff_id: order.staffId,
     staff_name: order.staffName,
     items: order.items,
-    guest_count: order.guestCount || null,
-    cover_charge: order.coverCharge || null,
     created_at: new Date(order.createdAt).toISOString(),
     updated_at: new Date().toISOString(),
     kot_printed_at: order.kotPrintedAt ? new Date(order.kotPrintedAt).toISOString() : null,
