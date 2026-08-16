@@ -10,6 +10,8 @@ import TopBar from '../components/layout/TopBar';
 import { OrderItem, Bill } from '../types';
 import { calculateGSTBreakdown, gstRoundOff, generateInvoiceNumber } from '../lib/gst';
 import { useReactToPrint } from 'react-to-print';
+import { printReceipt, buildBillReceipt, buildKotReceipt, BillPrintData, KotPrintData } from '../lib/printer';
+import { PrinterRole } from '../types';
 
 interface CartEntry {
   menuItemId: string;
@@ -46,6 +48,63 @@ export default function JuiceCounter() {
   const displayItems = juiceItems.filter(
     (i) => (!selectedCat || i.categoryId === selectedCat) && i.available
   );
+
+  const sendToCloudPrinter = async (role: PrinterRole, type: 'bill' | 'kot') => {
+    if (!billGenerated) return;
+    
+    if (type === 'bill') {
+      const printData: BillPrintData = {
+        restaurantName: settings.restaurantName,
+        address: settings.address,
+        gstin: settings.gstin,
+        invoiceNumber: billGenerated.invoiceNumber,
+        orderType: 'counter',
+        staffName: 'Juice Counter',
+        items: billGenerated.items.map(i => ({
+          menuItemName: i.menuItemName,
+          quantity: i.quantity,
+          totalPrice: i.totalPrice
+        })),
+        subtotal: billGenerated.subtotal,
+        totalGST: billGenerated.totalGST,
+        serviceCharge: billGenerated.serviceCharge,
+        discountAmount: billGenerated.discountAmount,
+        roundOff: billGenerated.roundOff,
+        totalAmount: billGenerated.totalAmount,
+        paymentMode: billGenerated.payments?.[0]?.mode || 'cash',
+        amountPaid: billGenerated.amountPaid,
+        changeDue: billGenerated.changeDue,
+      };
+      
+      const lines = buildBillReceipt(printData);
+      const { method, error } = await printReceipt(lines, role, () => {});
+      
+      if (method === 'bridge') {
+        toast.success('Cloud Print Sent', `Printing bill to ${role} printer...`);
+      } else if (error) {
+        toast.error('Print Error', error);
+      }
+    } else {
+      const kotData: KotPrintData = {
+        orderType: 'counter',
+        staffName: 'Juice Counter',
+        items: billGenerated.items.map(i => ({
+          menuItemName: i.menuItemName,
+          quantity: i.quantity
+        })),
+        kotTime: new Date().toLocaleTimeString('en-IN', { hour12: true })
+      };
+      
+      const lines = buildKotReceipt(kotData);
+      const { method, error } = await printReceipt(lines, role, () => {});
+      
+      if (method === 'bridge') {
+        toast.success('Cloud Print Sent', `Printing KOT to ${role} printer...`);
+      } else if (error) {
+        toast.error('Print Error', error);
+      }
+    }
+  };
 
   const handleAdd = (item: typeof juiceItems[0]) => {
     if (item.variants && item.variants.length > 1) {
@@ -249,12 +308,29 @@ export default function JuiceCounter() {
                   </div>
                   <div className="empty-state-title" style={{ color: '#06b6d4' }}>Bill Generated!</div>
                   <div style={{ fontWeight: 600, marginBottom: 'var(--space-4)' }}>{billGenerated.invoiceNumber}</div>
-                  <button className="btn btn-primary btn-lg" style={{ width: '100%', background: '#06b6d4', borderColor: '#06b6d4' }} onClick={() => handlePrint()}>
-                    Print Bill
-                  </button>
-                  <button className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} onClick={() => handleKotPrint()}>
-                    Print Juice KOT
-                  </button>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginBottom: 12 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Print to:</div>
+                    {(settings.printers || []).filter(p => p.enabled).map(p => (
+                      <div key={p.id} style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-primary" style={{ flex: 1, background: '#06b6d4', borderColor: '#06b6d4' }} onClick={() => sendToCloudPrinter(p.role, 'bill')}>
+                          🖨️ Bill ({p.name})
+                        </button>
+                        <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => sendToCloudPrinter(p.role, 'kot')}>
+                          🖨️ KOT ({p.name})
+                        </button>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <button className="btn btn-secondary" style={{ flex: 1, fontSize: '0.8rem' }} onClick={() => handlePrint()}>
+                        📄 Browser Bill
+                      </button>
+                      <button className="btn btn-secondary" style={{ flex: 1, fontSize: '0.8rem' }} onClick={() => handleKotPrint()}>
+                        📄 Browser KOT
+                      </button>
+                    </div>
+                  </div>
+
                   <button className="btn btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={() => setBillGenerated(null)}>
                     New Order
                   </button>

@@ -74,7 +74,7 @@ export default function BakeryCounter() {
     };
     
     const lines = buildBillReceipt(printData);
-    const { method, error } = await printReceipt(lines, role, () => handlePrint());
+    const { method, error } = await printReceipt(lines, role, () => {});
     
     if (method === 'bridge') {
       toast.success('Cloud Print Sent', `Printing to ${role} printer...`);
