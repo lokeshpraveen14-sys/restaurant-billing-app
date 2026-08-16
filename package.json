@@ -1,0 +1,37 @@
+{
+  "name": "restaurant-billing",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.7",
+    "@supabase/supabase-js": "^2.112.0",
+    "date-fns": "^3.6.0",
+    "dexie": "^3.2.7",
+    "dexie-react-hooks": "^1.1.7",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.1",
+    "qrcode.react": "^3.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0",
+    "react-to-print": "^2.15.1",
+    "recharts": "^2.12.7",
+    "uuid": "^10.0.0",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.0"
+  }
+}
