@@ -13,6 +13,7 @@ import TopBar from '../components/layout/TopBar';
 import { useReactToPrint } from 'react-to-print';
 import { QRCodeSVG } from 'qrcode.react';
 import { printReceipt, buildBillReceipt } from '../lib/printer';
+import { PrinterRole } from '../types';
 
 export default function Billing() {
   const [searchParams] = useSearchParams();
@@ -38,7 +39,8 @@ export default function Billing() {
 
   const browserPrint = useReactToPrint({ content: () => printRef.current });
 
-  const handlePrint = async (bill?: Bill | null) => {
+
+  const handlePrint = async (role: PrinterRole = 'billing', bill?: Bill | null) => {
     const b = bill || billGenerated;
     if (!b) { browserPrint(); return; }
     const lines = buildBillReceipt({
@@ -60,7 +62,7 @@ export default function Billing() {
       amountPaid:     b.amountPaid,
       changeDue:      b.changeDue,
     });
-    const result = await printReceipt(lines, 'billing', browserPrint);
+    const result = await printReceipt(lines, role, browserPrint);
     if (result.method === 'browser' && result.error) {
       toast.warning('Printer fallback', result.error);
     } else if (result.method === 'bridge') {
@@ -386,16 +388,19 @@ export default function Billing() {
                 <Receipt size={20} /> Generate Bill
               </button>
               {billGenerated && (
-                <>
-                  <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => handlePrint()}>
-                    <Printer size={18} /> Print Bill
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Print Bill to:</div>
+                  {(settings.printers || []).filter(p => p.enabled).map(p => (
+                    <button key={p.id} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => handlePrint(p.role)}>
+                      <Printer size={18} /> {p.name}
+                    </button>
+                  ))}
+                  <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => browserPrint()}>
+                    <FilePdf size={18} /> Browser Print / PDF
                   </button>
-                  <button className="btn btn-ghost" style={{ width: '100%' }}>
-                    <FilePdf size={18} /> Download PDF
-                  </button>
-
-                </>
+                </div>
               )}
+
             </div>
           </div>
         </div>

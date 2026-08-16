@@ -9,6 +9,8 @@ import TopBar from '../components/layout/TopBar';
 import { OrderItem, Bill } from '../types';
 import { calculateGSTBreakdown, gstRoundOff, generateInvoiceNumber } from '../lib/gst';
 import { useReactToPrint } from 'react-to-print';
+import { printReceipt, buildBillReceipt, BillPrintData } from '../lib/printer';
+import { PrinterRole } from '../types';
 
 interface CartEntry {
   menuItemId: string;
@@ -44,6 +46,42 @@ export default function BakeryCounter() {
   const displayItems = bakeryItems.filter(
     (i) => (!selectedCat || i.categoryId === selectedCat) && i.available
   );
+
+  const sendToCloudPrinter = async (role: PrinterRole) => {
+    if (!billGenerated) return;
+    
+    const printData: BillPrintData = {
+      restaurantName: settings.restaurantName,
+      address: settings.address,
+      gstin: settings.gstin,
+      invoiceNumber: billGenerated.invoiceNumber,
+      orderType: 'counter',
+      staffName: 'Bakery Staff',
+      items: billGenerated.items.map(i => ({
+        menuItemName: i.menuItemName,
+        quantity: i.quantity,
+        totalPrice: i.totalPrice
+      })),
+      subtotal: billGenerated.subtotal,
+      totalGST: billGenerated.totalGST,
+      serviceCharge: billGenerated.serviceCharge,
+      discountAmount: billGenerated.discountAmount,
+      roundOff: billGenerated.roundOff,
+      totalAmount: billGenerated.totalAmount,
+      paymentMode: billGenerated.payments?.[0]?.mode || 'cash',
+      amountPaid: billGenerated.amountPaid,
+      changeDue: billGenerated.changeDue,
+    };
+    
+    const lines = buildBillReceipt(printData);
+    const { method, error } = await printReceipt(lines, role, () => handlePrint());
+    
+    if (method === 'bridge') {
+      toast.success('Cloud Print Sent', `Printing to ${role} printer...`);
+    } else if (error) {
+      toast.error('Print Error', error);
+    }
+  };
 
   const handleAdd = (item: typeof bakeryItems[0]) => {
     if (item.pricePerKg) {
@@ -198,9 +236,19 @@ export default function BakeryCounter() {
                   </div>
                   <div className="empty-state-title" style={{ fontSize: '1.25rem', color: 'var(--status-free)' }}>Bill Generated!</div>
                   <div className="empty-state-desc" style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 'var(--space-4)' }}>{billGenerated.invoiceNumber}</div>
-                  <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={() => handlePrint()}>
-                    Print Receipt
-                  </button>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginBottom: 12 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Print to:</div>
+                    {(settings.printers || []).filter(p => p.enabled).map(p => (
+                      <button key={p.id} className="btn btn-primary" onClick={() => sendToCloudPrinter(p.role)}>
+                        🖨️ {p.name}
+                      </button>
+                    ))}
+                    <button className="btn btn-secondary" onClick={() => handlePrint()}>
+                      📄 Browser Print
+                    </button>
+                  </div>
+
                   <button className="btn btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={() => setBillGenerated(null)}>
                     New Order
                   </button>
