@@ -176,31 +176,38 @@ export function buildKotReceipt(data: KotPrintData): ReceiptLine[] {
 // ─── Core print function ──────────────────────────────────────────────────────
 
 /**
- * Find the printer profile for a given role.
- * Returns the first enabled profile matching the role, or undefined.
+ * Find the printer profile for a given role or ID.
+ * Returns the first enabled profile matching the ID or role, or undefined.
  */
-export function getPrinterForRole(role: PrinterRole): PrinterProfile | undefined {
+export function getPrinterTarget(printerIdOrRole: string): PrinterProfile | undefined {
   const { settings } = useSettingsStore.getState();
-  return (settings.printers || []).find(p => p.role === role && p.enabled && p.ip);
+  const enabledPrinters = settings.printers?.filter(p => p.enabled !== false) || [];
+  
+  // First try to find by explicit printer ID
+  const byId = enabledPrinters.find(p => p.id === printerIdOrRole);
+  if (byId) return byId;
+  
+  // Fallback to role-based lookup
+  return enabledPrinters.find(p => p.role === printerIdOrRole);
 }
 
 /**
  * printReceipt – the single entry point for all printing.
  * @param lines     - Array of ReceiptLine (built by buildBillReceipt / buildKotReceipt)
- * @param role      - Printer role to look up (billing, kot, bakery, etc.)
- * @param htmlFallback - Called if no LAN printer is configured
+ * @param printerIdOrRole - Printer ID or fallback role (billing, kot, bakery, etc.)
  */
 export async function printReceipt(
   lines: ReceiptLine[],
-  role: PrinterRole,
-  htmlFallback: () => void,
-): Promise<{ method: 'bridge' | 'browser'; error?: string }> {
-  const printer = getPrinterForRole(role);
+  printerIdOrRole: string
+): Promise<{ success: boolean; error?: string }> {
+  const printer = getPrinterTarget(printerIdOrRole);
 
   if (!printer) {
-    // No printer profile configured for this role → use browser print
-    htmlFallback();
-    return { method: 'browser', error: `No ${role} printer configured. Add one in Settings → Printing.` };
+    return { success: false, error: `No printer configured for ${printerIdOrRole}. Add one in Settings → Printing.` };
+  }
+  
+  if (!printer.ip) {
+    return { success: false, error: `Printer ${printer.name} is missing an IP address.` };
   }
 
   const charWidth = printer.width === '58mm' ? 32 : 48;
@@ -217,14 +224,12 @@ export async function printReceipt(
 
     if (error) {
       console.error('Supabase print insert error:', error);
-      htmlFallback();
-      return { method: 'browser', error: 'Cloud print failed: ' + error.message };
+      return { success: false, error: 'Cloud print failed: ' + error.message };
     }
 
-    return { method: 'bridge' };
+    return { success: true };
   } catch (e: any) {
     console.error('Print queue exception:', e);
-    htmlFallback();
-    return { method: 'browser', error: e.message };
+    return { success: false, error: e.message };
   }
 }

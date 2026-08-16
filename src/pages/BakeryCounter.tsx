@@ -8,7 +8,6 @@ import { Plus, Minus, Barcode, Scales, Printer, Storefront, ShoppingCart, X } fr
 import TopBar from '../components/layout/TopBar';
 import { OrderItem, Bill } from '../types';
 import { calculateGSTBreakdown, gstRoundOff, generateInvoiceNumber } from '../lib/gst';
-import { useReactToPrint } from 'react-to-print';
 import { printReceipt, buildBillReceipt, BillPrintData } from '../lib/printer';
 import { PrinterRole } from '../types';
 
@@ -40,14 +39,12 @@ export default function BakeryCounter() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
-  const printRef = React.useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({ content: () => printRef.current });
 
   const displayItems = bakeryItems.filter(
     (i) => (!selectedCat || i.categoryId === selectedCat) && i.available
   );
 
-  const sendToCloudPrinter = async (role: PrinterRole) => {
+  const sendToCloudPrinter = async (printerId: string) => {
     if (!billGenerated) return;
     
     const printData: BillPrintData = {
@@ -74,12 +71,12 @@ export default function BakeryCounter() {
     };
     
     const lines = buildBillReceipt(printData);
-    const { method, error } = await printReceipt(lines, role, () => {});
+    const { success, error } = await printReceipt(lines, printerId);
     
-    if (method === 'bridge') {
-      toast.success('Cloud Print Sent', `Printing to ${role} printer...`);
-    } else if (error) {
-      toast.error('Print Error', error);
+    if (success) {
+      toast.success('Cloud Print Sent', `Printing to thermal printer...`);
+    } else {
+      toast.error('Print Error', error || 'Failed to print');
     }
   };
 
@@ -239,8 +236,8 @@ export default function BakeryCounter() {
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginBottom: 12 }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Print to:</div>
-                    {(settings.printers || []).filter(p => p.enabled).map(p => (
-                      <button key={p.id} className="btn btn-primary" onClick={() => sendToCloudPrinter(p.role)}>
+                    {(settings.printers || []).filter(p => p.enabled !== false).map(p => (
+                      <button key={p.id} className="btn btn-primary" onClick={() => sendToCloudPrinter(p.id)}>
                         🖨️ {p.name}
                       </button>
                     ))}
@@ -395,50 +392,7 @@ export default function BakeryCounter() {
         </div>
       )}
 
-      {/* Thermal Print Template (hidden) */}
-      <div style={{ display: 'none' }}>
-        <div ref={printRef} className="bill-print">
-          {billGenerated && (
-            <>
-              <div className="bill-center bill-bold bill-large">{settings.restaurantName}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>{settings.address}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>Ph: {settings.phone}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>GSTIN: {settings.gstin}</div>
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Invoice: {billGenerated.invoiceNumber}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                <span>Date: {new Date().toLocaleDateString('en-IN')}</span>
-                <span>Time: {new Date().toLocaleTimeString('en-IN', { hour12: true })}</span>
-              </div>
-              <div style={{ fontSize: 10 }}>Table: Takeaway (Bakery)</div>
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: 10 }}>
-                <span>Item</span><span>Qty</span><span>Amount</span>
-              </div>
-              <div className="bill-hr" />
-              {billGenerated.items.map((item) => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}>
-                  <span style={{ flex: 2 }}>{item.menuItemName}</span>
-                  <span style={{ flex: 0, margin: '0 8px' }}>{item.quantity}</span>
-                  <span style={{ flex: 1, textAlign: 'right' }}>₹{item.totalPrice.toFixed(2)}</span>
-                </div>
-              ))}
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>Subtotal</span><span>₹{billGenerated.subtotal.toFixed(2)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>GST</span><span>₹{billGenerated.totalGST.toFixed(2)}</span></div>
-              {billGenerated.roundOff !== 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>Round Off</span><span>₹{billGenerated.roundOff.toFixed(2)}</span></div>}
-              <div className="bill-total-line" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                <span>TOTAL</span><span>₹{billGenerated.totalAmount.toFixed(2)}</span>
-              </div>
-              <div className="bill-hr" />
-              <div className="bill-center" style={{ fontSize: 10 }}>Thank you for visiting!</div>
-              <div className="bill-center" style={{ fontSize: 9 }}>www.appricots.com</div>
-            </>
-          )}
-        </div>
-      </div>
+
     </>
   );
 }

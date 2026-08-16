@@ -34,15 +34,10 @@ export default function Billing() {
   const [cashTendered, setCashTendered] = useState('');
   const [upiRef, setUpiRef] = useState('');
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
-  const [showPrint, setShowPrint] = useState(false);
-  const printRef = useRef<HTMLDivElement>(null);
 
-  const browserPrint = useReactToPrint({ content: () => printRef.current });
-
-
-  const handlePrint = async (role: PrinterRole = 'billing', bill?: Bill | null) => {
+  const handlePrint = async (printerId: string = 'billing', bill?: Bill | null) => {
     const b = bill || billGenerated;
-    if (!b) { browserPrint(); return; }
+    if (!b) return;
     const lines = buildBillReceipt({
       restaurantName: settings.restaurantName,
       address:        settings.address,
@@ -62,10 +57,10 @@ export default function Billing() {
       amountPaid:     b.amountPaid,
       changeDue:      b.changeDue,
     });
-    const result = await printReceipt(lines, role, browserPrint);
-    if (result.method === 'browser' && result.error) {
-      toast.warning('Printer fallback', result.error);
-    } else if (result.method === 'bridge') {
+    const result = await printReceipt(lines, printerId);
+    if (!result.success) {
+      toast.error('Print Error', result.error || 'Failed to print');
+    } else {
       toast.success('Printed!', 'Sent to thermal printer');
     }
   };
@@ -133,7 +128,6 @@ export default function Billing() {
     updateOrderStatus(order.id, 'paid');
     if (order.tableId) updateTableStatus(order.tableId, 'free');
     toast.success('Bill Generated', `Invoice ${invoiceNumber} created`);
-    setShowPrint(true);
   };
 
 
@@ -387,74 +381,39 @@ export default function Billing() {
               >
                 <Receipt size={20} /> Generate Bill
               </button>
-              {billGenerated && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Print Bill to:</div>
-                  {(settings.printers || []).filter(p => p.enabled).map(p => (
-                    <button key={p.id} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => handlePrint(p.role)}>
+            {/* Printer Section — always visible */}
+            <div style={{ marginTop: 8, padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                🖨️ Print Bill to Thermal Printer
+              </div>
+              {(settings.printers || []).length === 0 ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--status-occupied)', padding: '8px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  ⚠️ No printers configured. Go to <strong>Settings → Printing</strong> to add your 4 thermal printers.
+                </div>
+              ) : !billGenerated ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: '8px 10px', background: 'var(--bg)', borderRadius: 'var(--radius-sm)' }}>
+                  Generate the bill first, then click a printer below to print.
+                </div>
+              ) : null}
+              {(settings.printers || []).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(settings.printers || []).filter(p => p.enabled !== false).map(p => (
+                    <button
+                      key={p.id}
+                      className="btn btn-secondary"
+                      style={{ width: '100%', justifyContent: 'flex-start', opacity: billGenerated ? 1 : 0.45, cursor: billGenerated ? 'pointer' : 'not-allowed' }}
+                      onClick={() => billGenerated && handlePrint(p.id)}
+                      title={!billGenerated ? 'Generate bill first' : `Print to ${p.name}`}
+                    >
                       <Printer size={18} /> {p.name}
+                      <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>({p.role})</span>
                     </button>
                   ))}
-                  <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => browserPrint()}>
-                    <FilePdf size={18} /> Browser Print / PDF
-                  </button>
                 </div>
               )}
-
+            </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Thermal Print Template (hidden) */}
-      <div style={{ display: 'none' }}>
-        <div ref={printRef} className="bill-print">
-          {billGenerated && (
-            <>
-              <div className="bill-center bill-bold bill-large">{settings.restaurantName}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>{settings.address}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>Ph: {settings.phone}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>GSTIN: {settings.gstin}</div>
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Invoice: {billGenerated.invoiceNumber}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                <span>Date: {new Date().toLocaleDateString('en-IN')}</span>
-                <span>Time: {new Date().toLocaleTimeString('en-IN', { hour12: true })}</span>
-              </div>
-              {billGenerated.tableNumber && <div style={{ fontSize: 10 }}>Table: {billGenerated.tableNumber}</div>}
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: 10 }}>
-                <span>Item</span><span>Qty</span><span>Amount</span>
-              </div>
-              <div className="bill-hr" />
-              {cartItems.map((item) => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}>
-                  <span style={{ flex: 2 }}>{item.menuItemName}{item.variantName ? ` (${item.variantName})` : ''}</span>
-                  <span style={{ flex: 0, margin: '0 8px' }}>{item.quantity}</span>
-                  <span style={{ flex: 1, textAlign: 'right' }}>₹{item.totalPrice.toFixed(2)}</span>
-                </div>
-              ))}
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span></div>
-              {settings.gstEnabled && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>GST</span><span>₹{totalGST.toFixed(2)}</span></div>}
-              {roundOff !== 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>Round Off</span><span>₹{roundOff.toFixed(2)}</span></div>}
-              <div className="bill-total-line" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                <span>TOTAL</span><span>₹{totalAmount.toFixed(2)}</span>
-              </div>
-              {settings.gstEnabled && gstBreakdown.map((g) => g.rate > 0 && (
-                <div key={g.rate} style={{ fontSize: 9, display: 'flex', justifyContent: 'space-between' }}>
-                  <span>GST@{g.rate}% Taxable: ₹{g.taxableAmount.toFixed(2)}</span>
-                  <span>CGST: ₹{g.cgst.toFixed(2)} SGST: ₹{g.sgst.toFixed(2)}</span>
-                </div>
-              ))}
-
-              <div className="bill-hr" />
-              <div className="bill-center" style={{ fontSize: 10 }}>Thank you for dining with us!</div>
-              <div className="bill-center" style={{ fontSize: 9 }}>www.appricots.com</div>
-            </>
-          )}
         </div>
       </div>
     </>

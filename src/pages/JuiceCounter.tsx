@@ -9,7 +9,6 @@ import { Plus, Minus, Printer, Drop, ShoppingCart, X } from '@phosphor-icons/rea
 import TopBar from '../components/layout/TopBar';
 import { OrderItem, Bill } from '../types';
 import { calculateGSTBreakdown, gstRoundOff, generateInvoiceNumber } from '../lib/gst';
-import { useReactToPrint } from 'react-to-print';
 import { printReceipt, buildBillReceipt, buildKotReceipt, BillPrintData, KotPrintData } from '../lib/printer';
 import { PrinterRole } from '../types';
 
@@ -40,16 +39,12 @@ export default function JuiceCounter() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
   const [variantModal, setVariantModal] = useState<typeof juiceItems[0] | null>(null);
-  const printRef = React.useRef<HTMLDivElement>(null);
-  const kotRef = React.useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({ content: () => printRef.current });
-  const handleKotPrint = useReactToPrint({ content: () => kotRef.current });
 
   const displayItems = juiceItems.filter(
     (i) => (!selectedCat || i.categoryId === selectedCat) && i.available
   );
 
-  const sendToCloudPrinter = async (role: PrinterRole, type: 'bill' | 'kot') => {
+  const sendToCloudPrinter = async (printerId: string, type: 'bill' | 'kot') => {
     if (!billGenerated) return;
     
     if (type === 'bill') {
@@ -77,12 +72,12 @@ export default function JuiceCounter() {
       };
       
       const lines = buildBillReceipt(printData);
-      const { method, error } = await printReceipt(lines, role, () => {});
+      const { success, error } = await printReceipt(lines, printerId);
       
-      if (method === 'bridge') {
-        toast.success('Cloud Print Sent', `Printing bill to ${role} printer...`);
-      } else if (error) {
-        toast.error('Print Error', error);
+      if (success) {
+        toast.success('Cloud Print Sent', `Printing bill to thermal printer...`);
+      } else {
+        toast.error('Print Error', error || 'Failed to print');
       }
     } else {
       const kotData: KotPrintData = {
@@ -96,12 +91,12 @@ export default function JuiceCounter() {
       };
       
       const lines = buildKotReceipt(kotData);
-      const { method, error } = await printReceipt(lines, role, () => {});
+      const { success, error } = await printReceipt(lines, printerId);
       
-      if (method === 'bridge') {
-        toast.success('Cloud Print Sent', `Printing KOT to ${role} printer...`);
-      } else if (error) {
-        toast.error('Print Error', error);
+      if (success) {
+        toast.success('Cloud Print Sent', `Printing KOT to thermal printer...`);
+      } else {
+        toast.error('Print Error', error || 'Failed to print');
       }
     }
   };
@@ -311,12 +306,12 @@ export default function JuiceCounter() {
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginBottom: 12 }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Print to:</div>
-                    {(settings.printers || []).filter(p => p.enabled).map(p => (
+                    {(settings.printers || []).filter(p => p.enabled !== false).map(p => (
                       <div key={p.id} style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn btn-primary" style={{ flex: 1, background: '#06b6d4', borderColor: '#06b6d4' }} onClick={() => sendToCloudPrinter(p.role, 'bill')}>
+                        <button className="btn btn-primary" style={{ flex: 1, background: '#06b6d4', borderColor: '#06b6d4' }} onClick={() => sendToCloudPrinter(p.id, 'bill')}>
                           🖨️ Bill ({p.name})
                         </button>
-                        <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => sendToCloudPrinter(p.role, 'kot')}>
+                        <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => sendToCloudPrinter(p.id, 'kot')}>
                           🖨️ KOT ({p.name})
                         </button>
                       </div>
@@ -401,75 +396,6 @@ export default function JuiceCounter() {
           </div>
         </div>
       )}
-
-      {/* Thermal Bill Print (hidden) */}
-      <div style={{ display: 'none' }}>
-        <div ref={printRef} className="bill-print">
-          {billGenerated && (
-            <>
-              <div className="bill-center bill-bold bill-large">{settings.restaurantName}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>{settings.address}</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>Ph: {settings.phone}</div>
-              {settings.gstEnabled && <div className="bill-center" style={{ fontSize: 10 }}>GSTIN: {settings.gstin}</div>}
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                <span>Invoice: {billGenerated.invoiceNumber}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                <span>Date: {new Date().toLocaleDateString('en-IN')}</span>
-                <span>Time: {new Date().toLocaleTimeString('en-IN', { hour12: true })}</span>
-              </div>
-              <div style={{ fontSize: 10 }}>Counter: Juice Counter</div>
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: 10 }}>
-                <span>Item</span><span>Qty</span><span>Amount</span>
-              </div>
-              <div className="bill-hr" />
-              {billGenerated.items.map((item) => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}>
-                  <span style={{ flex: 2 }}>{item.menuItemName}</span>
-                  <span style={{ flex: 0, margin: '0 8px' }}>{item.quantity}</span>
-                  <span style={{ flex: 1, textAlign: 'right' }}>₹{item.totalPrice.toFixed(2)}</span>
-                </div>
-              ))}
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>Subtotal</span><span>₹{billGenerated.subtotal.toFixed(2)}</span></div>
-              {settings.gstEnabled && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}><span>GST</span><span>₹{billGenerated.totalGST.toFixed(2)}</span></div>}
-              <div className="bill-total-line" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                <span>TOTAL</span><span>₹{billGenerated.totalAmount.toFixed(2)}</span>
-              </div>
-              <div className="bill-hr" />
-              <div className="bill-center" style={{ fontSize: 10 }}>Thank you for visiting!</div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Juice KOT Print (hidden) */}
-      <div style={{ display: 'none' }}>
-        <div ref={kotRef} className="bill-print">
-          {billGenerated && (
-            <>
-              <div className="bill-center bill-bold" style={{ fontSize: 14 }}>🥤 JUICE KOT</div>
-              <div className="bill-center" style={{ fontSize: 10 }}>{settings.restaurantName} — Juice Counter</div>
-              <div className="bill-hr" />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                <span>KOT#: {billGenerated.invoiceNumber}</span>
-                <span>{new Date().toLocaleTimeString('en-IN', { hour12: true })}</span>
-              </div>
-              <div className="bill-hr" />
-              {billGenerated.items.map((item) => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 'bold', marginBottom: 6 }}>
-                  <span style={{ flex: 1 }}>{item.menuItemName}</span>
-                  <span style={{ marginLeft: 16 }}>× {item.quantity}</span>
-                </div>
-              ))}
-              <div className="bill-hr" />
-              <div className="bill-center" style={{ fontSize: 9 }}>— Juice Counter KOT —</div>
-            </>
-          )}
-        </div>
-      </div>
     </>
   );
 }
