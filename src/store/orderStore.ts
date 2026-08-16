@@ -18,11 +18,12 @@ interface OrderState {
   voidOrder: (orderId: string, reason: string) => void;
   getOrderByTable: (tableId: string) => Order | undefined;
   getActiveKitchenOrders: () => Order[];
+  fetchActiveOrders: () => Promise<void>;
   initOrderSync: () => void;
 }
 
 const syncOrderToDB = async (order: Order) => {
-  await supabase.from('orders').upsert({
+  const { error } = await supabase.from('orders').upsert({
     id: order.id,
     local_id: order.localId,
     table_id: order.tableId || null,
@@ -38,6 +39,9 @@ const syncOrderToDB = async (order: Order) => {
     updated_at: new Date().toISOString(),
     kot_printed_at: order.kotPrintedAt?.toISOString() || null
   });
+  if (error) {
+    console.error('Failed to sync order to DB:', error);
+  }
 };
 
 export const useOrderStore = create<OrderState>((set, get) => ({
@@ -190,7 +194,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     return get().orders.filter((o) => ['kot_sent', 'preparing', 'ready'].includes(o.status));
   },
 
-  initOrderSync: async () => {
+  fetchActiveOrders: async () => {
     const { data, error } = await supabase.from('orders')
       .select('*')
       .in('status', ['open', 'kot_sent', 'preparing', 'ready']);
@@ -214,6 +218,14 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       }));
       set({ orders: dbOrders });
     }
+  },
+
+  initOrderSync: () => {
+    get().fetchActiveOrders();
+
+    // Prevent multiple subscriptions
+    const existingChannel = supabase.getChannels().find(c => c.topic === 'realtime:public:orders');
+    if (existingChannel) return;
 
     supabase.channel('public:orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, payload => {

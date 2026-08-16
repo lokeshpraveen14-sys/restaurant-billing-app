@@ -78,6 +78,17 @@ export default function App() {
     initOrderSync();
     initBillSync();
     initShiftSync();
+    
+    // Auto-refresh when tablet wakes up from sleep
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        useOrderStore.getState().fetchActiveOrders();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [initTableSync, initMenuSync, initOrderSync, initBillSync, initShiftSync]);
 
   return (
