@@ -252,9 +252,6 @@ export interface Settings {
   serviceChargeEnabled: boolean;
   // Legacy single-printer (kept for backwards compat / browser fallback)
   printerWidth: '58mm' | '80mm' | 'A4';
-  // Bridge server (runs on laptop, accessible to all LAN devices)
-  bridgeServerIp: string;   // e.g. "192.168.1.50" – the laptop's LAN IP
-  bridgeServerPort: number; // default 7878
   // Printer profiles – one per counter
   printers: PrinterProfile[];
   autoPrintBill: boolean;

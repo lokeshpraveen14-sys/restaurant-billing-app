@@ -16,6 +16,7 @@
 
 import { useSettingsStore } from '../store/settingsStore';
 import { PrinterRole, PrinterProfile } from '../types';
+import { supabase } from './supabase';
 
 // ─── ESC/POS byte helpers ─────────────────────────────────────────────────────
 
@@ -156,43 +157,6 @@ export function buildKotReceipt(data: KotPrintData): ReceiptLine[] {
 // ─── Core print function ──────────────────────────────────────────────────────
 
 /**
- * Get the bridge server base URL.
- * On the laptop itself: localhost:7878
- * On Android tablets/phones: <bridgeServerIp>:<bridgeServerPort>
- * We always use the configured bridgeServerIp if set; otherwise fallback to localhost.
- */
-function getBridgeUrl(): string {
-  const { settings } = useSettingsStore.getState();
-  const ip   = settings.bridgeServerIp?.trim();
-  const port = settings.bridgeServerPort || 7878;
-  
-  if (!ip) return `http://localhost:${port}`;
-  
-  if (ip.startsWith('http://') || ip.startsWith('https://')) {
-    // If it's a full URL (like ngrok/localtunnel), return it directly (ignores port field)
-    // Strip trailing slash if any
-    return ip.endsWith('/') ? ip.slice(0, -1) : ip;
-  }
-  
-  if (ip !== 'localhost' && ip !== '127.0.0.1') {
-    return `http://${ip}:${port}`;
-  }
-  return `http://localhost:${port}`;
-}
-
-export async function isBridgeAlive(): Promise<boolean> {
-  try {
-    const r = await fetch(`${getBridgeUrl()}/ping`, { 
-      signal: AbortSignal.timeout(3000),
-      headers: { 'Bypass-Tunnel-Reminder': 'true' }
-    });
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Find the printer profile for a given role.
  * Returns the first enabled profile matching the role, or undefined.
  */
@@ -205,7 +169,7 @@ export function getPrinterForRole(role: PrinterRole): PrinterProfile | undefined
  * printReceipt – the single entry point for all printing.
  * @param lines     - Array of ReceiptLine (built by buildBillReceipt / buildKotReceipt)
  * @param role      - Printer role to look up (billing, kot, bakery, etc.)
- * @param htmlFallback - Called if no LAN printer is configured or bridge is down
+ * @param htmlFallback - Called if no LAN printer is configured
  */
 export async function printReceipt(
   lines: ReceiptLine[],
@@ -220,35 +184,27 @@ export async function printReceipt(
     return { method: 'browser', error: `No ${role} printer configured. Add one in Settings → Printing.` };
   }
 
-  const bridgeUrl = getBridgeUrl();
-  const alive = await isBridgeAlive();
-
-  if (!alive) {
-    htmlFallback();
-    return {
-      method: 'browser',
-      error: 'Print bridge not reachable. Make sure the laptop is running "node server.js" and the Bridge Server IP is correct in Settings.',
-    };
-  }
-
   const charWidth = printer.width === '58mm' ? 32 : 48;
   const escData   = buildEscPos(lines, charWidth);
   const b64       = strToBase64(escData);
 
   try {
-    const resp = await fetch(`${bridgeUrl}/print`, {
-      method:  'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Bypass-Tunnel-Reminder': 'true'
-      },
-      body:    JSON.stringify({ ip: printer.ip, port: printer.port || 9100, data: b64, encoding: 'base64' }),
+    const { error } = await supabase.from('print_jobs').insert({
+      printer_ip: printer.ip,
+      printer_port: printer.port || 9100,
+      receipt_data: b64,
+      status: 'pending'
     });
-    if (resp.ok) return { method: 'bridge' };
-    const err = await resp.json().catch(() => ({ error: 'Unknown error' }));
-    htmlFallback();
-    return { method: 'browser', error: err.error };
+
+    if (error) {
+      console.error('Supabase print insert error:', error);
+      htmlFallback();
+      return { method: 'browser', error: 'Cloud print failed: ' + error.message };
+    }
+
+    return { method: 'bridge' };
   } catch (e: any) {
+    console.error('Print queue exception:', e);
     htmlFallback();
     return { method: 'browser', error: e.message };
   }

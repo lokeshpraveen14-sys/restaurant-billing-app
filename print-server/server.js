@@ -1,38 +1,14 @@
 /**
- * Restaurant Billing – Local Print Bridge Server
+ * Restaurant Billing – Cloud Print Queue Daemon
  * ------------------------------------------------
- * Run this ONCE on the laptop that is connected to the same network as the printers.
- *   node server.js
- *
- * All Android tablets/phones on the same Wi-Fi/LAN can reach this server
- * at the laptop's LAN IP (shown on startup) on port 7878.
- *
- * API:
- *   GET  /ping               → { ok: true, ip: "192.168.1.50" }
- *   POST /print              → { ip, port, data (base64 ESC/POS), encoding }
+ * Listens to Supabase for new print jobs and routes them to local LAN printers.
  */
+const { createClient } = require('@supabase/supabase-js');
+const net = require('net');
 
-const http = require('http');
-const net  = require('net');
-const os   = require('os');
-
-const BRIDGE_PORT = 7878;
-
-// ─── Detect LAN IP ────────────────────────────────────────────────────────────
-
-function getLanIp() {
-  const ifaces = os.networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
-    for (const iface of ifaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return '127.0.0.1';
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const supabaseUrl = 'https://dhsafujrmxsqrsxgoifi.supabase.co';
+const supabaseKey = 'sb_publishable_wc50FKxA-mWJnyikDRT1wg_vIzFhkwD';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 function sendToPrinter(ip, port, rawBuffer) {
   return new Promise((resolve, reject) => {
@@ -49,81 +25,78 @@ function sendToPrinter(ip, port, rawBuffer) {
   });
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end',  () => resolve(body));
-    req.on('error', reject);
-  });
+async function processJob(job) {
+  try {
+    const { id, printer_ip, printer_port, receipt_data } = job;
+    console.log(`\n🖨️  New print job received [ID: ${id.split('-')[0]}]`);
+    console.log(`   Routing to ${printer_ip}:${printer_port}...`);
+
+    const buf = Buffer.from(receipt_data, 'base64');
+    await sendToPrinter(printer_ip, printer_port, buf);
+    console.log(`✅  Printed successfully!`);
+
+    // Delete job after completion to keep DB clean and fast
+    await supabase.from('print_jobs').delete().eq('id', id);
+
+  } catch (err) {
+    console.error(`❌  Print failed for job ${job.id}:`, err.message);
+    await supabase.from('print_jobs').update({ status: 'failed' }).eq('id', job.id);
+  }
 }
 
-function jsonResponse(res, status, data) {
-  const body = JSON.stringify(data);
-  res.writeHead(status, {
-    'Content-Type':                'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers':'Content-Type',
-  });
-  res.end(body);
-}
+let isPolling = false;
+async function pollPendingJobs() {
+  if (isPolling) return;
+  isPolling = true;
+  try {
+    const { data, error } = await supabase
+      .from('print_jobs')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
 
-// ─── HTTP Server ──────────────────────────────────────────────────────────────
-
-const lanIp = getLanIp();
-
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin':  '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    });
-    res.end();
-    return;
-  }
-
-  if (req.method === 'GET' && req.url === '/ping') {
-    return jsonResponse(res, 200, { ok: true, version: '1.0', ip: lanIp });
-  }
-
-  if (req.method === 'POST' && req.url === '/print') {
-    try {
-      const raw  = await readBody(req);
-      const body = JSON.parse(raw);
-      const { ip, port = 9100, data, encoding = 'base64' } = body;
-
-      if (!ip)   return jsonResponse(res, 400, { ok: false, error: 'Missing printer IP' });
-      if (!data) return jsonResponse(res, 400, { ok: false, error: 'Missing print data'  });
-
-      const buf = encoding === 'base64'
-        ? Buffer.from(data, 'base64')
-        : Buffer.from(data, 'binary');
-
-      await sendToPrinter(ip, port, buf);
-      console.log(`✅  Printed ${buf.length} bytes → ${ip}:${port}`);
-      return jsonResponse(res, 200, { ok: true });
-
-    } catch (err) {
-      console.error('❌  Print error:', err.message);
-      return jsonResponse(res, 500, { ok: false, error: err.message });
+    if (error) {
+      console.error('Error fetching pending jobs:', error.message);
+      return;
     }
+    for (const job of data || []) {
+      await processJob(job);
+    }
+  } finally {
+    isPolling = false;
   }
+}
 
-  jsonResponse(res, 404, { ok: false, error: 'Not found' });
-});
-
-// Bind on ALL interfaces (0.0.0.0) so Android devices on LAN can reach this server
-server.listen(BRIDGE_PORT, '0.0.0.0', () => {
+function startDaemon() {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════╗');
-  console.log('║        Restaurant Billing – Print Bridge Server           ║');
+  console.log('║       Restaurant Billing – Cloud Print Daemon             ║');
   console.log('╠══════════════════════════════════════════════════════════╣');
-  console.log(`║  Local :  http://localhost:${BRIDGE_PORT}                         ║`);
-  console.log(`║  LAN   :  http://${lanIp}:${BRIDGE_PORT}  ← Enter this in Settings ║`);
-  console.log('║                                                            ║');
-  console.log('║  Settings → Printing → Bridge Server IP                   ║');
-  console.log('║  Keep this window OPEN while billing.                     ║');
+  console.log('║  Status: Connected to Supabase Cloud                     ║');
+  console.log('║  Listening for remote print jobs from all devices...     ║');
+  console.log('║  Keep this window OPEN while billing.                    ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log('');
-});
+
+  // 1. Process any missed jobs on startup
+  pollPendingJobs();
+
+  // 2. Subscribe to realtime inserts
+  supabase
+    .channel('public:print_jobs')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'print_jobs' }, payload => {
+      if (payload.new.status === 'pending') {
+        processJob(payload.new);
+      }
+    })
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('📡 Realtime connection established. Waiting for jobs...');
+      }
+    });
+
+  // 3. Fallback polling every 10 seconds just in case realtime drops
+  setInterval(pollPendingJobs, 10000);
+}
+
+startDaemon();

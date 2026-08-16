@@ -4,6 +4,7 @@ import { useMenuStore } from '../store/menuStore';
 import { useToast } from '../store/uiStore';
 import { Gear, Printer, CreditCard, Building, Percent } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
+import { supabase } from '../lib/supabase';
 
 const GST_RATES = [0, 5, 12, 18, 28] as const;
 
@@ -13,40 +14,7 @@ export default function Settings() {
   const toast = useToast();
   const [form, setForm] = useState({ ...settings });
   const [activeTab, setActiveTab] = useState('restaurant');
-  const [bridgeStatus, setBridgeStatus] = useState<'unknown'|'online'|'offline'>('unknown');
-  const [bridgeChecking, setBridgeChecking] = useState(false);
   const [bridgePrinting, setBridgePrinting] = useState(false);
-
-  const checkBridge = async () => {
-    setBridgeChecking(true);
-    try {
-      let url = 'http://localhost:7878';
-      if (form.bridgeServerIp?.trim()) {
-        const ip = form.bridgeServerIp.trim();
-        url = (ip.startsWith('http://') || ip.startsWith('https://'))
-          ? (ip.endsWith('/') ? ip.slice(0, -1) : ip)
-          : `http://${ip}:${form.bridgeServerPort || 7878}`;
-      }
-      
-      const r = await fetch(`${url}/ping`, { 
-        signal: AbortSignal.timeout(3000),
-        headers: { 'Bypass-Tunnel-Reminder': 'true' }
-      });
-      setBridgeStatus(r.ok ? 'online' : 'offline');
-    } catch {
-      setBridgeStatus('offline');
-    } finally {
-      setBridgeChecking(false);
-    }
-  };
-
-
-
-  useEffect(() => {
-    if (activeTab === 'printing') {
-      checkBridge();
-    }
-  }, [activeTab]);
 
   const handleSave = () => {
     updateSettings(form);
@@ -277,15 +245,11 @@ export default function Settings() {
                 };
 
                 const testPrint = async (p: typeof printers[number]) => {
-                  const bridgeIp   = form.bridgeServerIp?.trim();
-                  const bridgePort = form.bridgeServerPort || 7878;
-                  let url = `http://localhost:${bridgePort}`;
-                  if (bridgeIp) {
-                    url = (bridgeIp.startsWith('http://') || bridgeIp.startsWith('https://'))
-                      ? (bridgeIp.endsWith('/') ? bridgeIp.slice(0, -1) : bridgeIp)
-                      : `http://${bridgeIp}:${bridgePort}`;
+                  if (!p.ip) {
+                    toast.error('Missing IP', 'Please enter a valid IP address for this printer.');
+                    return;
                   }
-
+                  
                   const ESC = '\x1b', GS = '\x1d';
                   const raw =
                     ESC + '@' + ESC + 'a\x01' + ESC + 'E\x01' +
@@ -304,58 +268,22 @@ export default function Settings() {
 
                   const b64 = btoa(unescape(encodeURIComponent(raw)));
                   try {
-                    const resp = await fetch(`${url}/print`, {
-                      method: 'POST', 
-                      headers: { 
-                        'Content-Type': 'application/json',
-                        'Bypass-Tunnel-Reminder': 'true'
-                      },
-                      body: JSON.stringify({ ip: p.ip, port: p.port, data: b64, encoding: 'base64' }),
+                    const { error } = await supabase.from('print_jobs').insert({
+                      printer_ip: p.ip,
+                      printer_port: p.port || 9100,
+                      receipt_data: b64,
+                      status: 'pending'
                     });
-                    const json = await resp.json();
-                    if (resp.ok) toast.success('Test print sent!', `${p.name} should print now`);
-                    else         toast.error('Print failed', json.error);
+                    
+                    if (error) throw error;
+                    toast.success('Cloud Print Sent!', `${p.name} will print in a few seconds.`);
                   } catch (e: any) {
-                    toast.error('Bridge error', e.message);
+                    toast.error('Cloud Print Error', e.message);
                   }
                 };
 
                 return (
                   <>
-                    {/* Bridge Server */}
-                    <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontWeight: 700, marginBottom: 4, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        🖧 Print Bridge Server (runs on laptop)
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 14 }}>
-                        The bridge server converts print jobs from your Android tablets & phones to real printer commands.
-                        Run <code style={{ background: 'var(--bg)', padding: '1px 6px', borderRadius: 4 }}>node server.js</code> in the <code>print-server/</code> folder on the laptop.
-                        The terminal will show the laptop's LAN IP — enter it below.
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, marginBottom: 10 }}>
-                        <div className="input-group" style={{ margin: 0 }}>
-                          <label className="input-label">Bridge Server IP or HTTPS URL</label>
-                          <input className="input" placeholder="192.168.1.50 or https://..." value={form.bridgeServerIp || ''} onChange={e => setForm({ ...form, bridgeServerIp: e.target.value })} />
-                        </div>
-                        <div className="input-group" style={{ margin: 0 }}>
-                          <label className="input-label">Port</label>
-                          <input className="input" type="number" value={form.bridgeServerPort || 7878} onChange={e => setForm({ ...form, bridgeServerPort: parseInt(e.target.value) || 7878 })} />
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <button className="btn btn-ghost btn-sm" type="button" disabled={bridgeChecking} onClick={checkBridge}>
-                          {bridgeChecking ? '⏳ Checking…' : '🔄 Check Connection'}
-                        </button>
-                        <div style={{
-                          fontSize: '0.82rem', fontWeight: 600,
-                          color: bridgeStatus === 'online' ? '#16a34a' : bridgeStatus === 'offline' ? '#dc2626' : 'var(--text-muted)',
-                        }}>
-                          {bridgeStatus === 'online'  && '✅ Bridge Online — all devices can print'}
-                          {bridgeStatus === 'offline' && '❌ Bridge offline — start the print server on the laptop'}
-                          {bridgeStatus === 'unknown' && '⬜ Not checked yet'}
-                        </div>
-                      </div>
-                    </div>
 
                     {/* Default paper width */}
                     <div className="input-group" style={{ margin: 0 }}>
@@ -432,7 +360,7 @@ export default function Settings() {
                                 <input type="checkbox" checked={p.enabled} onChange={e => updatePrinter(p.id, { enabled: e.target.checked })} style={{ accentColor: 'var(--accent)' }} />
                                 Enabled
                               </label>
-                              <button className="btn btn-ghost btn-sm" type="button" disabled={!p.ip || bridgeStatus !== 'online'} onClick={() => testPrint(p)}>
+                              <button className="btn btn-ghost btn-sm" type="button" disabled={!p.ip} onClick={() => testPrint(p)}>
                                 🖨️ Test Print
                               </button>
                               <button className="btn btn-ghost btn-sm" type="button" style={{ color: '#ef4444', marginLeft: 'auto' }} onClick={() => removePrinter(p.id)}>
