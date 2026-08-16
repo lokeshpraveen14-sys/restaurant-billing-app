@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 interface OrderState {
   orders: Order[];
   activeOrder: Order | null;
+  ordersLoaded: boolean;
 
   createOrder: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount?: number, coverCharge?: number) => Order;
   setActiveOrder: (order: Order | null) => void;
@@ -47,6 +48,7 @@ const syncOrderToDB = async (order: Order) => {
 export const useOrderStore = create<OrderState>((set, get) => ({
   orders: [],
   activeOrder: null,
+  ordersLoaded: false,
 
   createOrder: (tableId, tableNumber, orderType, staffId, staffName, guestCount, coverCharge) => {
     const newOrder: Order = {
@@ -216,7 +218,10 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         updatedAt: new Date(o.updated_at),
         kotPrintedAt: o.kot_printed_at ? new Date(o.kot_printed_at) : undefined
       }));
-      set({ orders: dbOrders });
+      set({ orders: dbOrders, ordersLoaded: true });
+    } else {
+      // Even on error, mark as loaded so the UI doesn't wait forever
+      set({ ordersLoaded: true });
     }
   },
 

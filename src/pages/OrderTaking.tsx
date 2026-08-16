@@ -22,7 +22,7 @@ export default function OrderTaking() {
   const initialGuestCount = guestsParam ? parseInt(guestsParam) : undefined;
 
   const { categories, items, searchQuery, selectedCategoryId, setSearch, setCategory, getFilteredItems } = useMenuStore();
-  const { createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrderByTable, activeOrder, setActiveOrder } = useOrderStore();
+  const { createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrderByTable, activeOrder, setActiveOrder, ordersLoaded } = useOrderStore();
   const { tables, updateTableStatus } = useTableStore();
   const { currentUser } = useAuthStore();
   const { ingredients } = useInventoryStore();
@@ -35,9 +35,9 @@ export default function OrderTaking() {
 
   const table = tables.find((t) => t.id === tableId);
 
-  // Create or load existing order
+  // Wait for orders to load from DB before creating or restoring order
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !ordersLoaded) return;
     const existing = tableId ? getOrderByTable(tableId) : null;
     if (existing) {
       setActiveOrder(existing);
@@ -45,7 +45,7 @@ export default function OrderTaking() {
       const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount, table?.extraChargePerPerson);
       setActiveOrder(newOrder);
     }
-  }, [tableId]);
+  }, [tableId, ordersLoaded]);
 
   const filteredItems = getFilteredItems();
 
@@ -123,6 +123,16 @@ export default function OrderTaking() {
 
   const cartItems = activeOrder?.items.filter((i) => i.status !== 'void') || [];
   const subtotal = cartItems.reduce((sum, i) => sum + i.totalPrice, 0);
+
+  // Show loading state while fetching orders from DB after a page refresh
+  if (!ordersLoaded) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16 }}>
+        <div className="spinner" style={{ width: 40, height: 40, border: '3px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Loading order...</div>
+      </div>
+    );
+  }
 
   return (
     <>
