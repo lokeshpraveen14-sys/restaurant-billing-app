@@ -29,55 +29,13 @@ export default function Settings() {
     }
   };
 
-  const sendBridgeTestPrint = async () => {
-    const ip   = form.printerIp?.trim();
-    const port = form.printerPort || 9100;
-    if (!ip) { toast.error('No IP', 'Enter the printer IP address first'); return; }
-    setBridgePrinting(true);
-    try {
-      // Build a minimal ESC/POS test page
-      const ESC = '\x1b', GS = '\x1d';
-      const raw =
-        ESC + '@' +                          // init
-        ESC + 'a' + '\x01' +                // center
-        ESC + 'E' + '\x01' +                // bold on
-        (form.restaurantName || 'Restaurant') + '\n' +
-        ESC + 'E' + '\x00' +                // bold off
-        '------------------------------\n' +
-        '   ** TEST PRINT **\n' +
-        'Printer : ' + ip + ':' + port + '\n' +
-        'Paper   : ' + (form.printerWidth || '80mm') + '\n' +
-        '------------------------------\n' +
-        'If you can read this,\n' +
-        'printer is working correctly!\n' +
-        new Date().toLocaleString() + '\n' +
-        '\n\n\n\n' +
-        GS + 'V' + '\x00';                  // cut
 
-      const b64 = btoa(unescape(encodeURIComponent(raw)));
-      const resp = await fetch('http://localhost:7878/print', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip, port, data: b64, encoding: 'base64' }),
-      });
-      const json = await resp.json();
-      if (resp.ok) {
-        toast.success('Test print sent!', 'Check your thermal printer');
-      } else {
-        toast.error('Print failed', json.error || 'Unknown error');
-      }
-    } catch (e: any) {
-      toast.error('Bridge error', e.message);
-    } finally {
-      setBridgePrinting(false);
-    }
-  };
 
   useEffect(() => {
-    if (activeTab === 'printing' && (form.printerType === 'lan' || form.printerType === 'wifi')) {
+    if (activeTab === 'printing') {
       checkBridge();
     }
-  }, [activeTab, form.printerType]);
+  }, [activeTab]);
 
   const handleSave = () => {
     updateSettings(form);
@@ -283,279 +241,194 @@ export default function Settings() {
                 </>
               )}
 
-              {activeTab === 'printing' && (
-                <>
-                  {/* Connection Type */}
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Printer size={18} color="var(--accent)" />
-                      Printer Connection Type
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
-                      {([
-                        { id: 'browser', label: 'Browser / OS', icon: '🖥️', desc: 'Use system print dialog' },
-                        { id: 'lan',     label: 'LAN (Ethernet)', icon: '🔌', desc: 'Wired network printer' },
-                        { id: 'wifi',    label: 'Wi-Fi',          icon: '📶', desc: 'Wireless network printer' },
-                        { id: 'usb',     label: 'USB',            icon: '🔷', desc: 'Direct USB connection' },
-                        { id: 'bluetooth', label: 'Bluetooth',    icon: '📡', desc: 'Bluetooth thermal printer' },
-                      ] as const).map(pt => (
-                        <button
-                          key={pt.id}
-                          type="button"
-                          onClick={() => setForm({ ...form, printerType: pt.id })}
-                          style={{
-                            padding: '14px 10px',
-                            borderRadius: 'var(--radius-md)',
-                            border: `2px solid ${form.printerType === pt.id ? 'var(--accent)' : 'var(--border)'}`,
-                            background: form.printerType === pt.id ? 'var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent))' : 'var(--bg-elevated)',
-                            cursor: 'pointer',
-                            textAlign: 'center',
-                            transition: 'all 0.15s',
-                          }}
-                        >
-                          <div style={{ fontSize: '1.6rem', marginBottom: 6 }}>{pt.icon}</div>
-                          <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: form.printerType === pt.id ? 'var(--accent)' : 'var(--text)' }}>{pt.label}</div>
-                          <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)', marginTop: 3 }}>{pt.desc}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              {activeTab === 'printing' && (() => {
+                const printers = form.printers || [];
+                const ROLES = [
+                  { id: 'billing',  label: 'Cashier / Bill',   icon: '🧾' },
+                  { id: 'kot',      label: 'Kitchen KOT',       icon: '🍳' },
+                  { id: 'bakery',   label: 'Bakery Counter',    icon: '🥐' },
+                  { id: 'juice',    label: 'Juice Counter',     icon: '🥤' },
+                  { id: 'shawarma', label: 'Shawarma Counter',  icon: '🌯' },
+                  { id: 'custom',   label: 'Custom / Other',    icon: '🖨️' },
+                ] as const;
 
-                  {/* LAN / Wi-Fi IP & Port */}
-                  {(form.printerType === 'lan' || form.printerType === 'wifi') && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                const addPrinter = () => {
+                  const newP = { id: crypto.randomUUID(), name: 'New Printer', role: 'billing' as const, ip: '', port: 9100, width: '80mm' as const, enabled: true };
+                  setForm({ ...form, printers: [...printers, newP] });
+                };
 
-                      {/* IP + Port inputs */}
-                      <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                        <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.875rem' }}>
-                          {form.printerType === 'lan' ? '🔌 LAN / Ethernet Printer' : '📶 Wi-Fi Printer'}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12 }}>
-                          <div className="input-group" style={{ margin: 0 }}>
-                            <label className="input-label">Printer IP Address</label>
-                            <input
-                              className="input"
-                              placeholder="e.g. 192.168.1.100"
-                              value={form.printerIp}
-                              onChange={(e) => setForm({ ...form, printerIp: e.target.value })}
-                            />
-                          </div>
-                          <div className="input-group" style={{ margin: 0 }}>
-                            <label className="input-label">Port</label>
-                            <input
-                              className="input"
-                              type="number"
-                              placeholder="9100"
-                              value={form.printerPort}
-                              onChange={(e) => setForm({ ...form, printerPort: parseInt(e.target.value) || 9100 })}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                const updatePrinter = (id: string, patch: object) => {
+                  setForm({ ...form, printers: printers.map(p => p.id === id ? { ...p, ...patch } : p) });
+                };
 
-                      {/* Bridge server status */}
-                      <div style={{
-                        padding: '14px 16px', borderRadius: 'var(--radius-md)',
-                        border: `1px solid ${bridgeStatus === 'online' ? '#22c55e' : bridgeStatus === 'offline' ? '#ef4444' : 'var(--border)'}`,
-                        background: bridgeStatus === 'online' ? '#dcfce7' : bridgeStatus === 'offline' ? '#fee2e2' : 'var(--bg-elevated)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                      }}>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                            {bridgeStatus === 'online'  && '✅ Print Bridge: ONLINE'}
-                            {bridgeStatus === 'offline' && '❌ Print Bridge: NOT RUNNING'}
-                            {bridgeStatus === 'unknown' && '⬜ Print Bridge: Not checked'}
-                          </div>
-                          <div style={{ fontSize: '0.78rem', marginTop: 3, color: bridgeStatus === 'online' ? '#166534' : '#991b1b' }}>
-                            {bridgeStatus === 'online'  && 'Bridge is running. Printing will go directly to your thermal printer!'}
-                            {bridgeStatus === 'offline' && 'Start the bridge server on your laptop first (see steps below).'}
-                            {bridgeStatus === 'unknown' && 'Click "Check" to test the connection.'}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            type="button"
-                            onClick={checkBridge}
-                            disabled={bridgeChecking}
-                            style={{ minWidth: 90 }}
-                          >
-                            {bridgeChecking ? '⏳ Checking…' : '🔄 Check'}
-                          </button>
-                          {bridgeStatus === 'online' && (
-                            <button
-                              className="btn btn-primary btn-sm"
-                              type="button"
-                              onClick={sendBridgeTestPrint}
-                              disabled={bridgePrinting}
-                              style={{ minWidth: 90 }}
-                            >
-                              {bridgePrinting ? '⏳ Sending…' : '🖨️ Test Print'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                const removePrinter = (id: string) => {
+                  setForm({ ...form, printers: printers.filter(p => p.id !== id) });
+                };
 
-                      {/* Step-by-step setup guide */}
-                      <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                        <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.875rem' }}>🛠️ One-time Setup (do this once on your laptop)</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.7 }}>
-                          <div><strong style={{ color: 'var(--text)' }}>Step 1 – Install Node.js</strong><br/>Download from <a href="https://nodejs.org" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>nodejs.org</a> (LTS version) and install it on your laptop.</div>
-                          <div><strong style={{ color: 'var(--text)' }}>Step 2 – Open Terminal / Command Prompt</strong><br/>Press <kbd>Win+R</kbd> → type <code>cmd</code> → Enter  (or open Terminal on Mac).</div>
-                          <div style={{ background: '#1e293b', color: '#94a3b8', padding: '10px 14px', borderRadius: 8, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                            <div style={{ color: '#64748b', marginBottom: 4 }}># Navigate to the print-server folder inside the project</div>
-                            <div>cd &quot;{window.location.pathname.includes('localhost') ? 'C:\\path\\to\\Restaurant_Billing' : '/path/to/Restaurant_Billing'}/print-server&quot;</div>
-                            <div style={{ marginTop: 6 }}>node server.js</div>
-                          </div>
-                          <div><strong style={{ color: 'var(--text)' }}>Step 3 – Keep the terminal open</strong><br/>You will see <em>"Listening on http://localhost:7878"</em>. Keep this window open while billing.</div>
-                          <div><strong style={{ color: 'var(--text)' }}>Step 4 – Find your printer's IP</strong><br/>Print a self-test page from the printer (hold Feed button on power-on). The IP address will be printed on it. Enter it above.</div>
-                          <div><strong style={{ color: 'var(--text)' }}>Step 5 – Click "Check" above to verify, then Save Settings.</strong></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                const testPrint = async (p: typeof printers[number]) => {
+                  const bridgeIp   = form.bridgeServerIp?.trim() || 'localhost';
+                  const bridgePort = form.bridgeServerPort || 7878;
+                  const url = bridgeIp === 'localhost' || !bridgeIp
+                    ? `http://localhost:${bridgePort}`
+                    : `http://${bridgeIp}:${bridgePort}`;
 
+                  const ESC = '\x1b', GS = '\x1d';
+                  const raw =
+                    ESC + '@' + ESC + 'a\x01' + ESC + 'E\x01' +
+                    (form.restaurantName || 'Restaurant') + '\n' +
+                    ESC + 'E\x00' +
+                    '------------------------------\n' +
+                    '   ** TEST PRINT **\n' +
+                    'Counter : ' + (ROLES.find(r => r.id === p.role)?.label || p.role) + '\n' +
+                    'Printer : ' + p.name + '\n' +
+                    'IP      : ' + p.ip + ':' + p.port + '\n' +
+                    'Paper   : ' + p.width + '\n' +
+                    '------------------------------\n' +
+                    'Printer is working correctly!\n' +
+                    new Date().toLocaleString() + '\n' +
+                    '\n\n\n\n' + GS + 'V\x00';
 
-                  {/* USB */}
-                  {form.printerType === 'usb' && (
+                  const b64 = btoa(unescape(encodeURIComponent(raw)));
+                  try {
+                    const resp = await fetch(`${url}/print`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ ip: p.ip, port: p.port, data: b64, encoding: 'base64' }),
+                    });
+                    const json = await resp.json();
+                    if (resp.ok) toast.success('Test print sent!', `${p.name} should print now`);
+                    else         toast.error('Print failed', json.error);
+                  } catch (e: any) {
+                    toast.error('Bridge error', e.message);
+                  }
+                };
+
+                return (
+                  <>
+                    {/* Bridge Server */}
                     <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontWeight: 700, marginBottom: 8, fontSize: '0.875rem' }}>🔷 USB Printer</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                        USB printing works via the <strong>browser's system print dialog</strong>. Connect your USB printer to the same device running this app and the OS will detect it automatically. Choose the correct printer name in the print dialog.
+                      <div style={{ fontWeight: 700, marginBottom: 4, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        🖧 Print Bridge Server (runs on laptop)
                       </div>
-                    </div>
-                  )}
-
-                  {/* Bluetooth */}
-                  {form.printerType === 'bluetooth' && (
-                    <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.875rem' }}>📡 Bluetooth Printer Settings</div>
-                      <div className="input-group" style={{ margin: 0 }}>
-                        <label className="input-label">Bluetooth Device Name (for your reference)</label>
-                        <input
-                          className="input"
-                          placeholder="e.g. POS-80 or Xprinter BT"
-                          value={form.printerBluetoothName}
-                          onChange={(e) => setForm({ ...form, printerBluetoothName: e.target.value })}
-                        />
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 14 }}>
+                        The bridge server converts print jobs from your Android tablets & phones to real printer commands.
+                        Run <code style={{ background: 'var(--bg)', padding: '1px 6px', borderRadius: 4 }}>node server.js</code> in the <code>print-server/</code> folder on the laptop.
+                        The terminal will show the laptop's LAN IP — enter it below.
                       </div>
-                      <div style={{ marginTop: 10, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                        ℹ️ Pair the Bluetooth printer with your device via OS Bluetooth settings first. Then printing will route through the browser's print dialog to the paired BT printer.
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, marginBottom: 10 }}>
+                        <div className="input-group" style={{ margin: 0 }}>
+                          <label className="input-label">Bridge Server IP (laptop's LAN IP)</label>
+                          <input className="input" placeholder="e.g. 192.168.1.50" value={form.bridgeServerIp || ''} onChange={e => setForm({ ...form, bridgeServerIp: e.target.value })} />
+                        </div>
+                        <div className="input-group" style={{ margin: 0 }}>
+                          <label className="input-label">Port</label>
+                          <input className="input" type="number" value={form.bridgeServerPort || 7878} onChange={e => setForm({ ...form, bridgeServerPort: parseInt(e.target.value) || 7878 })} />
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Paper Width */}
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      🧻 Paper Roll Width
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                      {([
-                        { val: '58mm', label: '58 mm',  desc: 'Narrow – portable printers' },
-                        { val: '80mm', label: '80 mm',  desc: 'Standard – most POS printers' },
-                        { val: 'A4',   label: 'A4 Page',desc: 'Laser / Inkjet / PDF' },
-                      ] as const).map(pw => (
-                        <button
-                          key={pw.val}
-                          type="button"
-                          onClick={() => setForm({ ...form, printerWidth: pw.val })}
-                          style={{
-                            padding: '12px 10px',
-                            borderRadius: 'var(--radius-md)',
-                            border: `2px solid ${form.printerWidth === pw.val ? 'var(--accent)' : 'var(--border)'}`,
-                            background: form.printerWidth === pw.val ? 'var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent))' : 'var(--bg-elevated)',
-                            cursor: 'pointer',
-                            textAlign: 'center',
-                            transition: 'all 0.15s',
-                          }}
-                        >
-                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: form.printerWidth === pw.val ? 'var(--accent)' : 'var(--text)' }}>{pw.label}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 3 }}>{pw.desc}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button className="btn btn-ghost btn-sm" type="button" disabled={bridgeChecking} onClick={checkBridge}>
+                          {bridgeChecking ? '⏳ Checking…' : '🔄 Check Connection'}
                         </button>
-                      ))}
+                        <div style={{
+                          fontSize: '0.82rem', fontWeight: 600,
+                          color: bridgeStatus === 'online' ? '#16a34a' : bridgeStatus === 'offline' ? '#dc2626' : 'var(--text-muted)',
+                        }}>
+                          {bridgeStatus === 'online'  && '✅ Bridge Online — all devices can print'}
+                          {bridgeStatus === 'offline' && '❌ Bridge offline — start the print server on the laptop'}
+                          {bridgeStatus === 'unknown' && '⬜ Not checked yet'}
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Auto-Print toggles */}
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.9375rem' }}>⚡ Auto-Print</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {[
-                        { key: 'autoPrintBill' as const, label: 'Auto-print Bill', desc: 'Open print dialog automatically when a bill is finalized' },
-                        { key: 'autoPrintKot'  as const, label: 'Auto-print KOT',  desc: 'Open print dialog automatically when a KOT is sent to kitchen' },
-                      ].map(toggle => (
-                        <label
-                          key={toggle.key}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 14,
-                            padding: '12px 14px', background: 'var(--bg-elevated)',
-                            borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!!form[toggle.key]}
-                            onChange={(e) => setForm({ ...form, [toggle.key]: e.target.checked })}
-                            style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer' }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{toggle.label}</div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>{toggle.desc}</div>
-                          </div>
+                    {/* Default paper width */}
+                    <div className="input-group" style={{ margin: 0 }}>
+                      <label className="input-label">Default Paper Width (used for browser fallback)</label>
+                      <select className="input select" value={form.printerWidth} onChange={e => setForm({ ...form, printerWidth: e.target.value as '58mm' | '80mm' | 'A4' })}>
+                        <option value="58mm">58 mm – Narrow portable</option>
+                        <option value="80mm">80 mm – Standard thermal</option>
+                        <option value="A4">A4 – Laser / PDF</option>
+                      </select>
+                    </div>
+
+                    {/* Auto-print */}
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      {([{ key: 'autoPrintBill', label: 'Auto-print Bill' }, { key: 'autoPrintKot', label: 'Auto-print KOT' }] as const).map(t => (
+                        <label key={t.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.875rem' }}>
+                          <input type="checkbox" checked={!!form[t.key]} onChange={e => setForm({ ...form, [t.key]: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+                          {t.label}
                         </label>
                       ))}
                     </div>
-                  </div>
 
-                  {/* Test Print */}
-                  <div style={{ padding: '14px 16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>🖨️ Test Print</div>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-                      Print a sample receipt to verify your printer is connected and configured correctly.
+                    {/* Printer Profiles */}
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>🖨️ Printer Profiles</span>
+                        <button className="btn btn-primary btn-sm" type="button" onClick={addPrinter}>+ Add Printer</button>
+                      </div>
+
+                      {printers.length === 0 && (
+                        <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                          No printers added yet. Click <strong>+ Add Printer</strong> for each counter.
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {printers.map(p => (
+                          <div key={p.id} style={{
+                            padding: '14px 16px', borderRadius: 'var(--radius-md)',
+                            border: `1px solid ${p.enabled ? 'var(--border)' : 'var(--border)'}`,
+                            background: p.enabled ? 'var(--bg-elevated)' : 'var(--bg)',
+                            opacity: p.enabled ? 1 : 0.6,
+                          }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                              <div className="input-group" style={{ margin: 0 }}>
+                                <label className="input-label">Printer Name</label>
+                                <input className="input" placeholder="e.g. Cashier Printer" value={p.name} onChange={e => updatePrinter(p.id, { name: e.target.value })} />
+                              </div>
+                              <div className="input-group" style={{ margin: 0 }}>
+                                <label className="input-label">Counter / Role</label>
+                                <select className="input select" value={p.role} onChange={e => updatePrinter(p.id, { role: e.target.value })}>
+                                  {ROLES.map(r => <option key={r.id} value={r.id}>{r.icon} {r.label}</option>)}
+                                </select>
+                              </div>
+                              <div className="input-group" style={{ margin: 0 }}>
+                                <label className="input-label">Printer IP Address</label>
+                                <input className="input" placeholder="192.168.1.100" value={p.ip} onChange={e => updatePrinter(p.id, { ip: e.target.value })} />
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                <div className="input-group" style={{ margin: 0 }}>
+                                  <label className="input-label">Port</label>
+                                  <input className="input" type="number" value={p.port} onChange={e => updatePrinter(p.id, { port: parseInt(e.target.value) || 9100 })} />
+                                </div>
+                                <div className="input-group" style={{ margin: 0 }}>
+                                  <label className="input-label">Paper</label>
+                                  <select className="input select" value={p.width} onChange={e => updatePrinter(p.id, { width: e.target.value })}>
+                                    <option value="58mm">58mm</option>
+                                    <option value="80mm">80mm</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', cursor: 'pointer' }}>
+                                <input type="checkbox" checked={p.enabled} onChange={e => updatePrinter(p.id, { enabled: e.target.checked })} style={{ accentColor: 'var(--accent)' }} />
+                                Enabled
+                              </label>
+                              <button className="btn btn-ghost btn-sm" type="button" disabled={!p.ip || bridgeStatus !== 'online'} onClick={() => testPrint(p)}>
+                                🖨️ Test Print
+                              </button>
+                              <button className="btn btn-ghost btn-sm" type="button" style={{ color: '#ef4444', marginLeft: 'auto' }} onClick={() => removePrinter(p.id)}>
+                                🗑️ Remove
+                              </button>
+                            </div>
+                            {!p.ip && <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: 6 }}>⚠️ Enter IP address to enable printing</div>}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      type="button"
-                      onClick={() => {
-                        const w = window.open('', '_blank', 'width=400,height=500');
-                        if (!w) return;
-                        const width = form.printerWidth === '58mm' ? '58mm' : form.printerWidth === '80mm' ? '80mm' : '210mm';
-                        w.document.write(`
-                          <html><head><title>Test Print</title>
-                          <style>
-                            body { font-family: monospace; font-size: 12px; width: ${width}; margin: 0 auto; padding: 8px; }
-                            h2 { text-align: center; font-size: 14px; margin: 4px 0; }
-                            p  { text-align: center; margin: 2px 0; }
-                            hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
-                          </style></head>
-                          <body>
-                            <h2>${form.restaurantName || 'Restaurant'}</h2>
-                            <p>${form.outlet || ''}</p>
-                            <hr/>
-                            <p>** TEST PRINT **</p>
-                            <p>Printer: ${(form.printerType || 'browser').toUpperCase()}</p>
-                            ${(form.printerType === 'lan' || form.printerType === 'wifi') ? `<p>IP: ${form.printerIp || '-'} : ${form.printerPort || 9100}</p>` : ''}
-                            <p>Paper: ${form.printerWidth}</p>
-                            <hr/>
-                            <p>If you can read this, your</p>
-                            <p>printer is working correctly!</p>
-                            <hr/>
-                            <p>${new Date().toLocaleString()}</p>
-                          </body></html>
-                        `);
-                        w.document.close();
-                        w.print();
-                      }}
-                    >
-                      <Printer size={15} /> Print Test Page
-                    </button>
-                  </div>
-                </>
-              )}
-
-
+                  </>
+                );
+              })()}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => setForm({ ...settings })}>Reset</button>
                 <button className="btn btn-primary" onClick={handleSave}>
@@ -569,3 +442,4 @@ export default function Settings() {
     </>
   );
 }
+

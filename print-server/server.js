@@ -1,22 +1,38 @@
 /**
  * Restaurant Billing – Local Print Bridge Server
  * ------------------------------------------------
- * Run this on the laptop that has access to the network printer.
+ * Run this ONCE on the laptop that is connected to the same network as the printers.
  *   node server.js
  *
- * It listens on http://localhost:7878 and:
- *   POST /print  { ip, port, data: "<hex or base64 encoded ESC/POS>" }
- *   GET  /ping   → returns { ok: true }
+ * All Android tablets/phones on the same Wi-Fi/LAN can reach this server
+ * at the laptop's LAN IP (shown on startup) on port 7878.
  *
- * The web app (running in the browser) calls this endpoint to print.
+ * API:
+ *   GET  /ping               → { ok: true, ip: "192.168.1.50" }
+ *   POST /print              → { ip, port, data (base64 ESC/POS), encoding }
  */
 
-const http  = require('http');
-const net   = require('net');
+const http = require('http');
+const net  = require('net');
+const os   = require('os');
 
 const BRIDGE_PORT = 7878;
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Detect LAN IP ────────────────────────────────────────────────────────────
+
+function getLanIp() {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function sendToPrinter(ip, port, rawBuffer) {
   return new Promise((resolve, reject) => {
@@ -46,16 +62,17 @@ function jsonResponse(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     'Content-Type':                'application/json',
-    'Access-Control-Allow-Origin': '*',  // allow the browser to call us
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers':'Content-Type',
   });
   res.end(body);
 }
 
-// ─── HTTP Server ─────────────────────────────────────────────────────────────
+// ─── HTTP Server ──────────────────────────────────────────────────────────────
+
+const lanIp = getLanIp();
 
 const server = http.createServer(async (req, res) => {
-  // CORS pre-flight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin':  '*',
@@ -67,7 +84,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/ping') {
-    return jsonResponse(res, 200, { ok: true, version: '1.0' });
+    return jsonResponse(res, 200, { ok: true, version: '1.0', ip: lanIp });
   }
 
   if (req.method === 'POST' && req.url === '/print') {
@@ -96,12 +113,17 @@ const server = http.createServer(async (req, res) => {
   jsonResponse(res, 404, { ok: false, error: 'Not found' });
 });
 
-server.listen(BRIDGE_PORT, '127.0.0.1', () => {
+// Bind on ALL interfaces (0.0.0.0) so Android devices on LAN can reach this server
+server.listen(BRIDGE_PORT, '0.0.0.0', () => {
   console.log('');
-  console.log('╔══════════════════════════════════════════╗');
-  console.log('║   Restaurant Billing – Print Bridge       ║');
-  console.log(`║   Listening on http://localhost:${BRIDGE_PORT}     ║`);
-  console.log('║   Keep this window open while billing.    ║');
-  console.log('╚══════════════════════════════════════════╝');
+  console.log('╔══════════════════════════════════════════════════════════╗');
+  console.log('║        Restaurant Billing – Print Bridge Server           ║');
+  console.log('╠══════════════════════════════════════════════════════════╣');
+  console.log(`║  Local :  http://localhost:${BRIDGE_PORT}                         ║`);
+  console.log(`║  LAN   :  http://${lanIp}:${BRIDGE_PORT}  ← Enter this in Settings ║`);
+  console.log('║                                                            ║');
+  console.log('║  Settings → Printing → Bridge Server IP                   ║');
+  console.log('║  Keep this window OPEN while billing.                     ║');
+  console.log('╚══════════════════════════════════════════════════════════╝');
   console.log('');
 });

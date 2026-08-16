@@ -11,11 +11,11 @@ const DEFAULT_SETTINGS: Settings = {
   serviceChargePercent: 5,
   serviceChargeEnabled: false,
   printerWidth: '80mm',
-  // Printer connection defaults
-  printerType: 'browser',
-  printerIp: '',
-  printerPort: 9100,
-  printerBluetoothName: '',
+  // Bridge server (runs on laptop)
+  bridgeServerIp: '',
+  bridgeServerPort: 7878,
+  // Printer profiles – add one per counter
+  printers: [],
   autoPrintBill: false,
   autoPrintKot: false,
   upiId: 'railway@upi',

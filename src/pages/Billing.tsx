@@ -60,7 +60,7 @@ export default function Billing() {
       amountPaid:     b.amountPaid,
       changeDue:      b.changeDue,
     });
-    const result = await printReceipt(lines, browserPrint);
+    const result = await printReceipt(lines, 'billing', browserPrint);
     if (result.method === 'browser' && result.error) {
       toast.warning('Printer fallback', result.error);
     } else if (result.method === 'bridge') {

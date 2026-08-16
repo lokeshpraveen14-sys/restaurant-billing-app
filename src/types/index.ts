@@ -229,6 +229,18 @@ export interface Shift {
   notes?: string;
 }
 
+export type PrinterRole = 'billing' | 'kot' | 'bakery' | 'juice' | 'shawarma' | 'custom';
+
+export interface PrinterProfile {
+  id: string;
+  name: string;           // e.g. "Cashier Printer", "Kitchen KOT"
+  role: PrinterRole;      // which counter uses this
+  ip: string;             // e.g. "192.168.1.100"
+  port: number;           // default 9100
+  width: '58mm' | '80mm';
+  enabled: boolean;
+}
+
 export interface Settings {
   restaurantName: string;
   address: string;
@@ -238,13 +250,13 @@ export interface Settings {
   logoUrl?: string;
   serviceChargePercent: number;
   serviceChargeEnabled: boolean;
-  // Printer – Paper
+  // Legacy single-printer (kept for backwards compat / browser fallback)
   printerWidth: '58mm' | '80mm' | 'A4';
-  // Printer – Connection
-  printerType: 'browser' | 'lan' | 'wifi' | 'usb' | 'bluetooth';
-  printerIp: string;        // for LAN / WiFi printers
-  printerPort: number;      // default 9100
-  printerBluetoothName: string; // for BT pairing hint
+  // Bridge server (runs on laptop, accessible to all LAN devices)
+  bridgeServerIp: string;   // e.g. "192.168.1.50" – the laptop's LAN IP
+  bridgeServerPort: number; // default 7878
+  // Printer profiles – one per counter
+  printers: PrinterProfile[];
   autoPrintBill: boolean;
   autoPrintKot: boolean;
   upiId?: string;
