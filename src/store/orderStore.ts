@@ -251,7 +251,21 @@ export const useOrderStore = create<OrderState>()(
             const localOnly = state.orders.filter(
               o => !dbIds.has(o.id) && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
             );
-            return { orders: [...dbOrders, ...localOnly], ordersLoaded: true };
+            
+            // Merge DB orders with local fields that aren't in DB
+            const mergedDbOrders = dbOrders.map(dbO => {
+              const localO = state.orders.find(o => o.id === dbO.id);
+              if (localO) {
+                return {
+                  ...dbO,
+                  guestCount: dbO.guestCount ?? localO.guestCount,
+                  coverCharge: dbO.coverCharge ?? localO.coverCharge,
+                };
+              }
+              return dbO;
+            });
+            
+            return { orders: [...mergedDbOrders, ...localOnly], ordersLoaded: true };
           });
         } else {
           // On error, mark loaded anyway so UI doesn't freeze
@@ -315,14 +329,20 @@ export const useOrderStore = create<OrderState>()(
                   }
 
                   if (idx >= 0) {
-                    newOrders[idx] = mappedOrder;
+                    // Merge with existing local order to preserve coverCharge and guestCount
+                    const existingLocal = newOrders[idx];
+                    newOrders[idx] = {
+                      ...mappedOrder,
+                      guestCount: mappedOrder.guestCount ?? existingLocal.guestCount,
+                      coverCharge: mappedOrder.coverCharge ?? existingLocal.coverCharge,
+                    };
                   } else {
                     newOrders.push(mappedOrder);
                   }
 
                   return {
                     orders: newOrders,
-                    activeOrder: state.activeOrder?.id === mappedOrder.id ? mappedOrder : state.activeOrder,
+                    activeOrder: state.activeOrder?.id === mappedOrder.id ? newOrders[idx] : state.activeOrder,
                   };
                 });
               }

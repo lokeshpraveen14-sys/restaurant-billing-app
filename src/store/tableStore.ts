@@ -174,7 +174,8 @@ export const useTableStore = create<TableState>()(
                   posY: localTable?.posY ?? dbTable.pos_y ?? 0,
                   status: dbTable.status as TableStatus,
                   reservedFor: dbTable.reserved_for || undefined,
-                  occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined
+                  occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined,
+                  extraChargePerPerson: localTable?.extraChargePerPerson
                 };
               });
               return { tables: newTables };

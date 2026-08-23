@@ -125,6 +125,24 @@ export default function Settings() {
                     </div>
                   )}
 
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginTop: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Parcel / Packaging Charge</div>
+                      <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Apply flat extra charge for takeaway orders</div>
+                    </div>
+                    <label className="switch">
+                      <input type="checkbox" checked={form.parcelChargeEnabled} onChange={(e) => setForm({ ...form, parcelChargeEnabled: e.target.checked })} />
+                      <span className="switch-slider" />
+                    </label>
+                  </div>
+
+                  {form.parcelChargeEnabled && (
+                    <div className="input-group" style={{ marginTop: 12 }}>
+                      <label className="input-label">Parcel Charge Amount (₹)</label>
+                      <input className="input" type="number" min={0} value={form.parcelCharge || 0} onChange={(e) => setForm({ ...form, parcelCharge: parseFloat(e.target.value) || 0 })} />
+                    </div>
+                  )}
+
                   <div className="input-group">
                     <label className="input-label">UPI ID (for QR payments)</label>
                     <input className="input" value={form.upiId || ''} onChange={(e) => setForm({ ...form, upiId: e.target.value })} placeholder="yourrestaurant@upi" />

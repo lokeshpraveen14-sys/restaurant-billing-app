@@ -10,6 +10,8 @@ const DEFAULT_SETTINGS: Settings = {
   gstin: '33AABCU9603R1ZX',
   serviceChargePercent: 5,
   serviceChargeEnabled: false,
+  parcelCharge: 20,
+  parcelChargeEnabled: false,
   printerWidth: '80mm',
   // Printer profiles – add one per counter
   printers: [],

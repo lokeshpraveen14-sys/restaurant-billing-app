@@ -28,6 +28,7 @@ export default function Billing() {
   const cartItems = order?.items.filter((i) => i.status !== 'void') || [];
 
   const [serviceChargeEnabled, setServiceChargeEnabled] = useState(settings.serviceChargeEnabled);
+  const [applyParcelCharge, setApplyParcelCharge] = useState(settings.parcelChargeEnabled && order?.orderType === 'takeaway');
   const [discountType, setDiscountType] = useState<DiscountType>('flat');
   const [discountValue, setDiscountValue] = useState(0);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
@@ -50,6 +51,7 @@ export default function Billing() {
       subtotal:       b.subtotal,
       totalGST:       b.totalGST,
       serviceCharge:  b.serviceCharge,
+      parcelCharge:   b.parcelCharge,
       discountAmount: b.discountAmount,
       roundOff:       b.roundOff,
       totalAmount:    b.totalAmount,
@@ -67,7 +69,8 @@ export default function Billing() {
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.totalPrice, 0);
   const totalCoverCharge = (order?.coverCharge || 0) * (order?.guestCount || 0);
-  const subtotalWithCover = subtotal + totalCoverCharge;
+  const parcelCharge = applyParcelCharge ? settings.parcelCharge : 0;
+  const subtotalWithCover = subtotal + totalCoverCharge + parcelCharge;
   const serviceCharge = serviceChargeEnabled ? calculateServiceCharge(subtotalWithCover, settings.serviceChargePercent) : 0;
   const discountAmount = calculateDiscount(subtotalWithCover, discountType, discountValue);
   const taxableBase = subtotalWithCover + serviceCharge - discountAmount;
@@ -108,6 +111,7 @@ export default function Billing() {
       discountAmount,
       roundOff,
       totalAmount,
+      parcelCharge: applyParcelCharge ? settings.parcelCharge : 0,
       payments: [{ mode: paymentMode, amount: totalAmount }],
       amountPaid: parseFloat(cashTendered) || totalAmount,
       changeDue: Math.max(0, changeDue),
@@ -210,6 +214,20 @@ export default function Billing() {
                   </label>
                 </div>
 
+                {/* Parcel Charge */}
+                {settings.parcelChargeEnabled && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Parcel Charge (₹{settings.parcelCharge})</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Packaging fee</div>
+                    </div>
+                    <label className="switch">
+                      <input type="checkbox" checked={applyParcelCharge} onChange={(e) => setApplyParcelCharge(e.target.checked)} />
+                      <span className="switch-slider" />
+                    </label>
+                  </div>
+                )}
+
                 {/* Discount */}
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: 8 }}>Discount</div>
@@ -287,6 +305,12 @@ export default function Billing() {
                   <div className="bill-row">
                     <span>Cover Charge (₹{order?.coverCharge} × {order?.guestCount})</span>
                     <span className="amount">{formatAmount(totalCoverCharge)}</span>
+                  </div>
+                )}
+                {parcelCharge > 0 && (
+                  <div className="bill-row">
+                    <span>Parcel Charge</span>
+                    <span className="amount">{formatAmount(parcelCharge)}</span>
                   </div>
                 )}
                 {serviceChargeEnabled && (

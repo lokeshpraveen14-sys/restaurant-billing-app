@@ -98,6 +98,7 @@ export interface BillPrintData {
   paymentMode:    string;
   amountPaid?:    number;
   changeDue?:     number;
+  parcelCharge?:  number;
 }
 
 export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
@@ -124,6 +125,7 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
     ...data.items.map(i => ({ type: 'item' as const, left: `${i.menuItemName} x${i.quantity}`, leftVal: fmt(i.totalPrice) })),
     { type: 'divider' },
     { type: 'item', left: 'Subtotal',  leftVal: fmt(data.subtotal) },
+    ...(data.parcelCharge   ? [{ type: 'item' as const, left: 'Parcel Charge',  leftVal: fmt(data.parcelCharge) }] : []),
     ...(data.serviceCharge  ? [{ type: 'item' as const, left: 'Service Charge', leftVal: fmt(data.serviceCharge)  }] : []),
     ...(data.discountAmount ? [{ type: 'item' as const, left: 'Discount',       leftVal: `-${fmt(data.discountAmount)}` }] : []),
     ...(data.totalGST       ? [{ type: 'item' as const, left: 'GST',            leftVal: fmt(data.totalGST) }] : []),

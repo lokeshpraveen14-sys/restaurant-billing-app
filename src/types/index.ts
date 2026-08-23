@@ -151,6 +151,7 @@ export interface Bill {
   totalGST: number;
   serviceCharge: number;
   serviceChargePercent: number;
+  parcelCharge?: number;
   discountType?: DiscountType;
   discountValue: number;
   discountAmount: number;
@@ -250,6 +251,8 @@ export interface Settings {
   logoUrl?: string;
   serviceChargePercent: number;
   serviceChargeEnabled: boolean;
+  parcelCharge: number;
+  parcelChargeEnabled: boolean;
   // Legacy single-printer (kept for backwards compat / browser fallback)
   printerWidth: '58mm' | '80mm' | 'A4';
   // Printer profiles – one per counter
