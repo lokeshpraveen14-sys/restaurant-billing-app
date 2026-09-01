@@ -43,16 +43,15 @@ export default function Dashboard() {
   const freeTables = tables.filter((t) => t.status === 'free').length;
   const activeOrders = orders.filter((o) => ['kot_sent', 'preparing'].includes(o.status)).length;
   
-  // Use shift start time if active, otherwise midnight
+  // Calculate daily totals from midnight, regardless of shifts
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const filterStartTime = currentShift ? new Date(currentShift.openedAt) : startOfToday;
   
-  const todayBills = bills.filter(b => new Date(b.createdAt) >= filterStartTime && b.status !== 'void');
+  const todayBills = bills.filter(b => new Date(b.createdAt) >= startOfToday && b.status !== 'void');
   const todayRevenue = todayBills.reduce((sum, bill) => sum + bill.totalAmount, 0);
   
   const activeCovers = orders
-    .filter(o => new Date(o.createdAt) >= filterStartTime && ['open', 'kot_sent', 'preparing', 'ready', 'billed'].includes(o.status))
+    .filter(o => new Date(o.createdAt) >= startOfToday && ['open', 'kot_sent', 'preparing', 'ready', 'billed'].includes(o.status))
     .reduce((sum, order) => sum + (order.guestCount || 0), 0);
     
   const todayCovers = todayBills.reduce((sum, bill) => sum + (bill.guestCount || 0), 0) + activeCovers;

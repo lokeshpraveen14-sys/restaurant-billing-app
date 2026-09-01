@@ -5,13 +5,19 @@ import { useToast } from '../store/uiStore';
 import { Bill } from '../types';
 import { formatAmount } from '../lib/gst';
 import { printReceipt, buildBillReceipt } from '../lib/printer';
-import { Receipt, Eye, XCircle, Calendar, WarningCircle, Printer } from '@phosphor-icons/react';
+import { Receipt, Eye, XCircle, Calendar, WarningCircle, Printer, PencilSimple } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
+import { useNavigate } from 'react-router-dom';
+import { useOrderStore } from '../store/orderStore';
+import { useTableStore } from '../store/tableStore';
 
 export default function BillHistory() {
   const { fetchBillsByDateRange, voidBill, bills: localBills } = useBillStore();
   const { settings } = useSettingsStore();
+  const { createOrder, addItemToOrder, setActiveOrder } = useOrderStore();
+  const { updateTableStatus } = useTableStore();
   const toast = useToast();
+  const navigate = useNavigate();
   
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today');
   const [bills, setBills] = useState<Bill[]>([]);
@@ -75,6 +81,50 @@ export default function BillHistory() {
     toast.success('Bill Voided', 'The bill has been successfully voided.');
     setSelectedBill(null);
     loadBills();
+  };
+
+  const handleReviseBill = async (bill: Bill) => {
+    if (!window.confirm('Are you sure you want to revise this bill? This will void the current bill and reopen the order so you can add items.')) {
+      return;
+    }
+
+    // 1. Void the existing bill
+    await voidBill(bill.id);
+
+    // 2. Re-create the order
+    const newOrder = createOrder(
+      bill.tableId,
+      bill.tableNumber,
+      bill.orderType,
+      'staff-id-revised', // fallback, actual staff id not in bill currently
+      bill.staffName,
+      bill.guestCount
+    );
+
+    // 3. Add items back
+    bill.items.forEach(item => {
+      addItemToOrder(newOrder.id, {
+        menuItemId: item.menuItemId,
+        menuItemName: item.menuItemName,
+        unitPrice: item.unitPrice || 0, // Fallback if missing
+        quantity: item.quantity,
+        totalPrice: item.totalPrice,
+        variantName: item.variantName,
+        addons: item.addons || [],
+        isVeg: item.isVeg || true,
+        gstRate: item.gstRate || 0,
+      });
+    });
+
+    // 4. Update table status if dine-in
+    if (bill.tableId && bill.orderType === 'dine-in') {
+      updateTableStatus(bill.tableId, 'occupied');
+    }
+
+    // 5. Navigate to order screen
+    setActiveOrder(useOrderStore.getState().orders.find(o => o.id === newOrder.id) || newOrder);
+    toast.success('Bill Revised', 'Order reopened for editing');
+    navigate(bill.tableId ? `/order?table=${bill.tableId}` : '/order');
   };
 
   const handleReprint = async (bill: Bill, printerId: string) => {
@@ -295,9 +345,15 @@ export default function BillHistory() {
                 </div>
               )}
 
-              {/* Void Button */}
+              {/* Action Buttons */}
               {selectedBill.status !== 'void' && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handleReviseBill(selectedBill)}
+                  >
+                    <PencilSimple size={18} /> Revise Bill
+                  </button>
                   <button
                     className="btn btn-secondary"
                     style={{ color: 'var(--status-void)' }}

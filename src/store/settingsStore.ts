@@ -96,8 +96,8 @@ export const useSettingsStore = create<SettingsState>()(
         if (existing) return;
 
         supabase.channel('public:app_settings')
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'app_settings' }, (payload) => {
-            const printers = payload.new?.printers;
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+            const printers = (payload.new as any)?.printers;
             if (printers && Array.isArray(printers)) {
               set((state) => ({
                 settings: { ...state.settings, printers },

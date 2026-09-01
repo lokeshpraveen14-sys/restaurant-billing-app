@@ -329,7 +329,20 @@ export default function Settings() {
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span>🖨️ Printer Profiles</span>
-                        <button className="btn btn-primary btn-sm" type="button" onClick={addPrinter}>+ Add Printer</button>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            type="button"
+                            onClick={async () => {
+                              await useSettingsStore.getState().fetchPrintersFromCloud();
+                              setForm(useSettingsStore.getState().settings);
+                              toast.success('Printers Refreshed', 'Pulled latest printer settings from cloud');
+                            }}
+                          >
+                            🔄 Refresh Cloud Printers
+                          </button>
+                          <button className="btn btn-primary btn-sm" type="button" onClick={addPrinter}>+ Add Printer</button>
+                        </div>
                       </div>
 
                       {printers.length === 0 && (
