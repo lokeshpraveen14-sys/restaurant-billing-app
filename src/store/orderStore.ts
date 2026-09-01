@@ -10,6 +10,7 @@ interface OrderState {
   ordersLoaded: boolean;
 
   createOrder: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount?: number) => Order;
+  recreateOrderWithItems: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount: number | undefined, items: Omit<OrderItem, 'id' | 'status'>[]) => Order;
   setActiveOrder: (order: Order | null) => void;
   addItemToOrder: (orderId: string, item: Omit<OrderItem, 'id' | 'status'>) => void;
   removeItemFromOrder: (orderId: string, itemId: string) => void;
@@ -90,6 +91,33 @@ export const useOrderStore = create<OrderState>()(
           tableNumber,
           orderType,
           items: [],
+          status: 'open',
+          syncStatus: 'local',
+          staffId,
+          staffName,
+          guestCount,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        set((state) => ({ orders: [...state.orders, newOrder], activeOrder: newOrder }));
+        syncOrderToDB(newOrder);
+        return newOrder;
+      },
+
+      recreateOrderWithItems: (tableId, tableNumber, orderType, staffId, staffName, guestCount, items) => {
+        const populatedItems: OrderItem[] = items.map(item => ({
+          ...item,
+          id: crypto.randomUUID(),
+          status: 'pending'
+        }));
+
+        const newOrder: Order = {
+          id: crypto.randomUUID(),
+          localId: crypto.randomUUID(),
+          tableId,
+          tableNumber,
+          orderType,
+          items: populatedItems,
           status: 'open',
           syncStatus: 'local',
           staffId,

@@ -14,7 +14,7 @@ import { useTableStore } from '../store/tableStore';
 export default function BillHistory() {
   const { fetchBillsByDateRange, voidBill, bills: localBills } = useBillStore();
   const { settings } = useSettingsStore();
-  const { createOrder, addItemToOrder, setActiveOrder } = useOrderStore();
+  const { recreateOrderWithItems, setActiveOrder } = useOrderStore();
   const { updateTableStatus } = useTableStore();
   const toast = useToast();
   const navigate = useNavigate();
@@ -91,30 +91,29 @@ export default function BillHistory() {
     // 1. Void the existing bill
     await voidBill(bill.id);
 
-    // 2. Re-create the order
-    const newOrder = createOrder(
+    // 2. Map items for re-creation
+    const mappedItems = bill.items.map(item => ({
+      menuItemId: item.menuItemId,
+      menuItemName: item.menuItemName,
+      unitPrice: item.unitPrice || 0, // Fallback if missing
+      quantity: item.quantity,
+      totalPrice: item.totalPrice,
+      variantName: item.variantName,
+      addons: item.addons || [],
+      isVeg: item.isVeg ?? true,
+      gstRate: item.gstRate || 0,
+    }));
+
+    // 3. Re-create the order WITH items to avoid sync race condition
+    const newOrder = recreateOrderWithItems(
       bill.tableId,
       bill.tableNumber,
       bill.orderType,
       'staff-id-revised', // fallback, actual staff id not in bill currently
       bill.staffName,
-      bill.guestCount
+      bill.guestCount,
+      mappedItems
     );
-
-    // 3. Add items back
-    bill.items.forEach(item => {
-      addItemToOrder(newOrder.id, {
-        menuItemId: item.menuItemId,
-        menuItemName: item.menuItemName,
-        unitPrice: item.unitPrice || 0, // Fallback if missing
-        quantity: item.quantity,
-        totalPrice: item.totalPrice,
-        variantName: item.variantName,
-        addons: item.addons || [],
-        isVeg: item.isVeg || true,
-        gstRate: item.gstRate || 0,
-      });
-    });
 
     // 4. Update table status if dine-in
     if (bill.tableId && bill.orderType === 'dine-in') {
@@ -122,7 +121,7 @@ export default function BillHistory() {
     }
 
     // 5. Navigate to order screen
-    setActiveOrder(useOrderStore.getState().orders.find(o => o.id === newOrder.id) || newOrder);
+    // recreateOrderWithItems automatically sets it as activeOrder
     toast.success('Bill Revised', 'Order reopened for editing');
     navigate(bill.tableId ? `/order?table=${bill.tableId}&orderId=${newOrder.id}` : `/order?orderId=${newOrder.id}`);
   };
