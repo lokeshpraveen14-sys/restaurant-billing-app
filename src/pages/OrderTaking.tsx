@@ -18,11 +18,12 @@ export default function OrderTaking() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const tableId = searchParams.get('table') || undefined;
+  const orderIdParam = searchParams.get('orderId') || undefined;
   const guestsParam = searchParams.get('guests');
   const initialGuestCount = guestsParam ? parseInt(guestsParam) : undefined;
 
   const { categories, items, searchQuery, selectedCategoryId, setSearch, setCategory, getFilteredItems } = useMenuStore();
-  const { createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrderByTable, activeOrder, setActiveOrder, ordersLoaded } = useOrderStore();
+  const { orders, createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrderByTable, activeOrder, setActiveOrder, ordersLoaded } = useOrderStore();
   const { tables, updateTableStatus } = useTableStore();
   const { currentUser } = useAuthStore();
   const { ingredients } = useInventoryStore();
@@ -39,6 +40,16 @@ export default function OrderTaking() {
   // Then sync with DB once loaded
   useEffect(() => {
     if (!currentUser) return;
+    
+    // If navigating from Revise Bill, we pass the specific orderId
+    if (orderIdParam) {
+      const existingRevise = orders.find(o => o.id === orderIdParam);
+      if (existingRevise) {
+        setActiveOrder(existingRevise);
+        return;
+      }
+    }
+
     const existing = tableId ? getOrderByTable(tableId) : null;
     if (existing) {
       // Found in cache immediately — no waiting
@@ -49,7 +60,7 @@ export default function OrderTaking() {
       setActiveOrder(newOrder);
     }
     // If not loaded yet, the next render after ordersLoaded=true will re-run this
-  }, [tableId, ordersLoaded]);
+  }, [tableId, orderIdParam, ordersLoaded]);
 
   const filteredItems = getFilteredItems();
 

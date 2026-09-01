@@ -124,7 +124,7 @@ export default function BillHistory() {
     // 5. Navigate to order screen
     setActiveOrder(useOrderStore.getState().orders.find(o => o.id === newOrder.id) || newOrder);
     toast.success('Bill Revised', 'Order reopened for editing');
-    navigate(bill.tableId ? `/order?table=${bill.tableId}` : '/order');
+    navigate(bill.tableId ? `/order?table=${bill.tableId}&orderId=${newOrder.id}` : `/order?orderId=${newOrder.id}`);
   };
 
   const handleReprint = async (bill: Bill, printerId: string) => {
