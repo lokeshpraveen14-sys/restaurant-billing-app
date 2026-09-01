@@ -109,15 +109,17 @@ export const useBillStore = create<BillState>()(
   },
 
   initBillSync: async () => {
-    // Fetch last 30 days of bills initially so history and dashboard populate after cache clear
+    // Fetch recent bills initially so dashboard populates correctly
+    // Limit to 3 days to prevent massive payloads and 1000 row limits cutting off today's bills
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(startDate.getDate() - 3);
     startDate.setHours(0, 0, 0, 0);
 
     const { data, error } = await supabase
       .from('bills')
       .select('*')
-      .gte('created_at', startDate.toISOString());
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: false });
 
     if (!error && data) {
       const dbBills = data.map(b => ({
