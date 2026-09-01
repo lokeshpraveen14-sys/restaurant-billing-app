@@ -45,7 +45,7 @@ export default function OrderTaking() {
       setActiveOrder(existing);
     } else if (ordersLoaded) {
       // DB loaded and no order found — create a new one
-      const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount, table?.extraChargePerPerson);
+      const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount);
       setActiveOrder(newOrder);
     }
     // If not loaded yet, the next render after ordersLoaded=true will re-run this
@@ -59,7 +59,7 @@ export default function OrderTaking() {
         toast.error('No table selected', 'Please select a table first');
         return;
       }
-      const newOrder = createOrder(tableId, table?.number, orderType, currentUser?.id || '', currentUser?.name || '', initialGuestCount, table?.extraChargePerPerson);
+      const newOrder = createOrder(tableId, table?.number, orderType, currentUser?.id || '', currentUser?.name || '', initialGuestCount);
       setActiveOrder(newOrder);
     }
 

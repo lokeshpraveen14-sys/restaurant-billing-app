@@ -36,7 +36,7 @@ export default function TableManagement() {
   const [guestsCount, setGuestsCount] = useState('');
   const [reservationDetails, setReservationDetails] = useState('');
   const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit'>('seat');
-  const [editTableData, setEditTableData] = useState({ number: '', capacity: '4', section: '', extraChargePerPerson: '' });
+  const [editTableData, setEditTableData] = useState({ number: '', capacity: '4', section: '' });
 
   const handleAddTable = () => {
     if (!newTable.number) {
@@ -82,7 +82,6 @@ export default function TableManagement() {
         number: table.number,
         capacity: table.capacity.toString(),
         section: table.section,
-        extraChargePerPerson: table.extraChargePerPerson?.toString() || ''
       });
     } else if (status === 'occupied' || status === 'billing') {
       navigate(`/order?table=${tableId}`);
@@ -108,7 +107,6 @@ export default function TableManagement() {
         number: editTableData.number,
         capacity: parseInt(editTableData.capacity) || 4,
         section: editTableData.section,
-        extraChargePerPerson: editTableData.extraChargePerPerson ? parseFloat(editTableData.extraChargePerPerson) : undefined
       });
       toast.success('Table Updated', `Table ${editTableData.number} updated successfully.`);
       setActionModal(null);
@@ -361,10 +359,6 @@ export default function TableManagement() {
                       <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Section *</label>
                       <input className="input" value={editTableData.section} onChange={(e) => setEditTableData({ ...editTableData, section: e.target.value })} />
                     </div>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Cover Charge / Person (₹)</label>
-                    <input className="input" type="number" placeholder="Optional" value={editTableData.extraChargePerPerson} onChange={(e) => setEditTableData({ ...editTableData, extraChargePerPerson: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleActionSubmit()} />
                   </div>
                 </div>
               )}

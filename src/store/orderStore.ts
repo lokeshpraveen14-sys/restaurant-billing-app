@@ -9,7 +9,7 @@ interface OrderState {
   activeOrder: Order | null;
   ordersLoaded: boolean;
 
-  createOrder: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount?: number, coverCharge?: number) => Order;
+  createOrder: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount?: number) => Order;
   setActiveOrder: (order: Order | null) => void;
   addItemToOrder: (orderId: string, item: Omit<OrderItem, 'id' | 'status'>) => void;
   removeItemFromOrder: (orderId: string, itemId: string) => void;
@@ -39,7 +39,6 @@ function mapDbOrder(o: any): Order {
     items: (o.items || []) as OrderItem[],
     syncStatus: 'synced' as const,
     guestCount: o.guest_count || undefined,
-    coverCharge: o.cover_charge || undefined,
     createdAt: new Date(o.created_at),
     updatedAt: new Date(o.updated_at),
     kotPrintedAt: o.kot_printed_at ? new Date(o.kot_printed_at) : undefined,
@@ -83,7 +82,7 @@ export const useOrderStore = create<OrderState>()(
       activeOrder: null,
       ordersLoaded: false,
 
-      createOrder: (tableId, tableNumber, orderType, staffId, staffName, guestCount, coverCharge) => {
+      createOrder: (tableId, tableNumber, orderType, staffId, staffName, guestCount) => {
         const newOrder: Order = {
           id: crypto.randomUUID(),
           localId: crypto.randomUUID(),
@@ -96,7 +95,6 @@ export const useOrderStore = create<OrderState>()(
           staffId,
           staffName,
           guestCount,
-          coverCharge,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -259,7 +257,6 @@ export const useOrderStore = create<OrderState>()(
                 return {
                   ...dbO,
                   guestCount: dbO.guestCount ?? localO.guestCount,
-                  coverCharge: dbO.coverCharge ?? localO.coverCharge,
                 };
               }
               return dbO;
@@ -329,12 +326,11 @@ export const useOrderStore = create<OrderState>()(
                   }
 
                   if (idx >= 0) {
-                    // Merge with existing local order to preserve coverCharge and guestCount
+                    // Merge with existing local order to preserve guestCount
                     const existingLocal = newOrders[idx];
                     newOrders[idx] = {
                       ...mappedOrder,
                       guestCount: mappedOrder.guestCount ?? existingLocal.guestCount,
-                      coverCharge: mappedOrder.coverCharge ?? existingLocal.coverCharge,
                     };
                   } else {
                     newOrders.push(mappedOrder);

@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useBillStore } from '../store/billStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useToast } from '../store/uiStore';
 import { Bill } from '../types';
 import { formatAmount } from '../lib/gst';
-import { Receipt, Eye, XCircle, Calendar, WarningCircle } from '@phosphor-icons/react';
+import { printReceipt, buildBillReceipt } from '../lib/printer';
+import { Receipt, Eye, XCircle, Calendar, WarningCircle, Printer } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 
 export default function BillHistory() {
   const { fetchBillsByDateRange, voidBill, bills: localBills } = useBillStore();
+  const { settings } = useSettingsStore();
   const toast = useToast();
   
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today');
@@ -73,6 +76,37 @@ export default function BillHistory() {
     setSelectedBill(null);
     loadBills();
   };
+
+  const handleReprint = async (bill: Bill, printerId: string) => {
+    const lines = buildBillReceipt({
+      restaurantName: settings.restaurantName,
+      address:        settings.address,
+      gstin:          settings.gstin,
+      invoiceNumber:  bill.invoiceNumber,
+      tableNumber:    bill.tableNumber,
+      orderType:      bill.orderType,
+      staffName:      bill.staffName,
+      items:          bill.items,
+      subtotal:       bill.subtotal,
+      totalGST:       bill.totalGST,
+      serviceCharge:  bill.serviceCharge,
+      parcelCharge:   bill.parcelCharge,
+      discountAmount: bill.discountAmount,
+      roundOff:       bill.roundOff,
+      totalAmount:    bill.totalAmount,
+      paymentMode:    bill.payments?.[0]?.mode || 'cash',
+      amountPaid:     bill.amountPaid,
+      changeDue:      bill.changeDue,
+    });
+    const result = await printReceipt(lines, printerId);
+    if (result.success) {
+      toast.success('Reprint Sent', `Bill ${bill.invoiceNumber} sent to printer`);
+    } else {
+      toast.error('Print Error', result.error || 'Failed to print');
+    }
+  };
+
+  const enabledPrinters = (settings.printers || []).filter(p => p.enabled !== false);
 
   return (
     <>
@@ -223,6 +257,11 @@ export default function BillHistory() {
                     <span>Service Charge</span><span>{formatAmount(selectedBill.serviceCharge)}</span>
                   </div>
                 )}
+                {(selectedBill.parcelCharge || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Parcel Charge</span><span>{formatAmount(selectedBill.parcelCharge || 0)}</span>
+                  </div>
+                )}
                 {selectedBill.discountAmount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--status-free)' }}>
                     <span>Discount</span><span>-{formatAmount(selectedBill.discountAmount)}</span>
@@ -237,17 +276,38 @@ export default function BillHistory() {
               </div>
             </div>
             
-            {selectedBill.status !== 'void' && (
-              <div className="card-footer" style={{ borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', padding: '16px' }}>
-                <button
-                  className="btn btn-secondary"
-                  style={{ color: 'var(--status-void)' }}
-                  onClick={() => handleVoidBill(selectedBill.id)}
-                >
-                  <WarningCircle size={18} /> Void Bill
-                </button>
-              </div>
-            )}
+            <div className="card-footer" style={{ borderTop: '1px solid var(--border)', padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Reprint Section */}
+              {enabledPrinters.length > 0 && selectedBill.status !== 'void' && (
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>Reprint to:</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {enabledPrinters.map(p => (
+                      <button
+                        key={p.id}
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleReprint(selectedBill, p.id)}
+                      >
+                        <Printer size={14} /> {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Void Button */}
+              {selectedBill.status !== 'void' && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ color: 'var(--status-void)' }}
+                    onClick={() => handleVoidBill(selectedBill.id)}
+                  >
+                    <WarningCircle size={18} /> Void Bill
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

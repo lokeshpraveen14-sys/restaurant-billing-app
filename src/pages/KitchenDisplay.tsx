@@ -19,7 +19,6 @@ function mapDbOrder(o: any): Order {
     items: (o.items || []) as OrderItem[],
     syncStatus: 'synced',
     guestCount: o.guest_count || undefined,
-    coverCharge: o.cover_charge || undefined,
     createdAt: new Date(o.created_at),
     updatedAt: new Date(o.updated_at),
     kotPrintedAt: o.kot_printed_at ? new Date(o.kot_printed_at) : undefined,

@@ -149,7 +149,13 @@ export const useBillStore = create<BillState>()(
         outletAddress: '',
         outletGSTIN: '',
       }));
-      set({ bills: dbBills });
+
+      // Merge: DB is authoritative. Keep any local bills not in DB (e.g. just created).
+      set((state) => {
+        const dbIds = new Set(dbBills.map(b => b.id));
+        const localOnly = state.bills.filter(b => !dbIds.has(b.id));
+        return { bills: [...dbBills, ...localOnly] };
+      });
     }
 
     // Real-time subscription for bills

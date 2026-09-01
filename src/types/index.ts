@@ -28,7 +28,6 @@ export interface Table {
   occupiedSince?: Date;
   reservedFor?: string;
   mergedWith?: string[];
-  extraChargePerPerson?: number; // e.g. AC dining cover charge
 }
 
 export type ItemCategory = 'food' | 'bakery' | 'beverage' | 'dessert' | 'juice' | 'other';
@@ -117,7 +116,6 @@ export interface Order {
   notes?: string;
   kotNumber?: number;
   guestCount?: number;
-  coverCharge?: number;
 }
 
 export interface GSTBreakdown {
@@ -165,7 +163,6 @@ export interface Bill {
   staffName: string;
   status?: 'paid' | 'void';
   guestCount?: number;
-  coverCharge?: number;
   createdAt: Date;
   outletName: string;
   outletAddress: string;

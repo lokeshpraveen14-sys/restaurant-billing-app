@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase';
 const GST_RATES = [0, 5, 12, 18, 28] as const;
 
 export default function Settings() {
-  const { settings, updateSettings } = useSettingsStore();
+  const { settings, updateSettings, syncPrintersToCloud } = useSettingsStore();
   const { categories } = useMenuStore();
   const toast = useToast();
   const [form, setForm] = useState({ ...settings });
@@ -18,6 +18,8 @@ export default function Settings() {
 
   const handleSave = () => {
     updateSettings(form);
+    // Sync printer config to cloud so all devices get the same printers
+    syncPrintersToCloud();
     toast.success('Settings saved', 'All changes have been applied');
   };
 

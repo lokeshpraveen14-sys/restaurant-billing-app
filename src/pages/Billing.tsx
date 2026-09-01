@@ -68,12 +68,11 @@ export default function Billing() {
   };
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.totalPrice, 0);
-  const totalCoverCharge = (order?.coverCharge || 0) * (order?.guestCount || 0);
   const parcelCharge = applyParcelCharge ? settings.parcelCharge : 0;
-  const subtotalWithCover = subtotal + totalCoverCharge + parcelCharge;
-  const serviceCharge = serviceChargeEnabled ? calculateServiceCharge(subtotalWithCover, settings.serviceChargePercent) : 0;
-  const discountAmount = calculateDiscount(subtotalWithCover, discountType, discountValue);
-  const taxableBase = subtotalWithCover + serviceCharge - discountAmount;
+  const subtotalWithCharges = subtotal + parcelCharge;
+  const serviceCharge = serviceChargeEnabled ? calculateServiceCharge(subtotalWithCharges, settings.serviceChargePercent) : 0;
+  const discountAmount = calculateDiscount(subtotalWithCharges, discountType, discountValue);
+  const taxableBase = subtotalWithCharges + serviceCharge - discountAmount;
 
   // GST: only compute when enabled
   const gstBreakdown = settings.gstEnabled ? calculateGSTBreakdown(cartItems) : [];
@@ -100,8 +99,7 @@ export default function Billing() {
       orderType: order.orderType,
       items: cartItems,
       guestCount: order.guestCount,
-      coverCharge: order.coverCharge,
-      subtotal: subtotalWithCover,
+      subtotal: subtotalWithCharges,
       gstBreakdown,
       totalGST,
       serviceCharge,
@@ -240,7 +238,7 @@ export default function Billing() {
                       className="input"
                       type="number"
                       min={0}
-                      max={discountType === 'percent' ? 100 : subtotalWithCover}
+                      max={discountType === 'percent' ? 100 : subtotalWithCharges}
                       value={discountValue || ''}
                       onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
                       placeholder={discountType === 'flat' ? '0.00' : '0'}
@@ -301,12 +299,6 @@ export default function Billing() {
                 <div className="bill-row">
                   <span>Items Subtotal</span><span className="amount">{formatAmount(subtotal)}</span>
                 </div>
-                {totalCoverCharge > 0 && (
-                  <div className="bill-row">
-                    <span>Cover Charge (₹{order?.coverCharge} × {order?.guestCount})</span>
-                    <span className="amount">{formatAmount(totalCoverCharge)}</span>
-                  </div>
-                )}
                 {parcelCharge > 0 && (
                   <div className="bill-row">
                     <span>Parcel Charge</span>
