@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Bill } from '../types';
 import { supabase } from '../lib/supabase';
+import { useSettingsStore } from './settingsStore';
 
 interface BillState {
   bills: Bill[];
@@ -158,6 +159,9 @@ export const useBillStore = create<BillState>()(
         const localOnly = state.bills.filter(b => !dbIds.has(b.id));
         return { bills: [...dbBills, ...localOnly] };
       });
+
+      // Sync the invoice counter based on the bills we just fetched
+      dbBills.forEach(b => useSettingsStore.getState().syncInvoiceCounter(b.invoiceNumber));
     }
 
     // Real-time subscription for bills
@@ -199,6 +203,15 @@ export const useBillStore = create<BillState>()(
           };
           return { bills: [...state.bills, mappedBill] };
         });
+
+        // Sync invoice counter for new incoming bills
+        useSettingsStore.getState().syncInvoiceCounter(b.invoice_number);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bills' }, payload => {
+        const b = payload.new;
+        set((state) => ({
+          bills: state.bills.map((bill) => bill.id === b.id ? { ...bill, status: b.status } : bill)
+        }));
       })
       .subscribe();
   }

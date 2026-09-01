@@ -34,6 +34,7 @@ interface SettingsState {
   settings: Settings;
   updateSettings: (updates: Partial<Settings>) => void;
   incrementInvoiceCounter: () => number;
+  syncInvoiceCounter: (invoiceNumber: string) => void;
   syncPrintersToCloud: () => Promise<void>;
   fetchPrintersFromCloud: () => Promise<void>;
   initSettingsSync: () => void;
@@ -53,6 +54,23 @@ export const useSettingsStore = create<SettingsState>()(
           settings: { ...state.settings, invoiceCounter: state.settings.invoiceCounter + 1 },
         }));
         return current;
+      },
+
+      syncInvoiceCounter: (invoiceNumber: string) => {
+        const match = invoiceNumber.match(/(\d+)$/);
+        if (match) {
+          const counter = parseInt(match[1], 10);
+          if (!isNaN(counter)) {
+            set((state) => {
+              // If the db counter is greater than or equal to our local next counter,
+              // we need to advance our local counter to prevent duplicates.
+              if (counter >= state.settings.invoiceCounter) {
+                return { settings: { ...state.settings, invoiceCounter: counter + 1 } };
+              }
+              return state;
+            });
+          }
+        }
       },
 
       syncPrintersToCloud: async () => {
