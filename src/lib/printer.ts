@@ -88,7 +88,7 @@ export interface BillPrintData {
   tableNumber?:   string;
   orderType:      string;
   staffName?:     string;
-  items:          Array<{ menuItemName: string; quantity: number; totalPrice: number }>;
+  items:          Array<{ menuItemName: string; quantity: number; totalPrice: number; gstRate?: number }>;
   subtotal:       number;
   totalGST:       number;
   serviceCharge:  number;
@@ -99,6 +99,7 @@ export interface BillPrintData {
   amountPaid?:    number;
   changeDue?:     number;
   parcelCharge?:  number;
+  gstBreakdown?:  Array<{ rate: number; taxableAmount: number; cgst: number; sgst: number; igst: number }>;
 }
 
 export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
@@ -107,6 +108,34 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  // Build GST footnote lines if breakdown is provided
+  const gstFootnoteLines: ReceiptLine[] = [];
+  if (data.gstBreakdown && data.gstBreakdown.length > 0 && data.totalGST > 0) {
+    gstFootnoteLines.push({ type: 'divider' });
+    gstFootnoteLines.push({ type: 'text', bold: true, text: 'GST BREAKUP (Inclusive in Price)' });
+    gstFootnoteLines.push({ type: 'item', left: 'Rate', leftVal: 'Taxable | CGST | SGST' });
+    data.gstBreakdown
+      .filter(g => g.rate > 0)
+      .forEach(g => {
+        gstFootnoteLines.push({
+          type: 'item',
+          left: `${g.rate}% GST`,
+          leftVal: `${fmt(g.taxableAmount)}`
+        });
+        gstFootnoteLines.push({
+          type: 'item',
+          left: `  CGST ${g.rate/2}%`,
+          leftVal: fmt(g.cgst)
+        });
+        gstFootnoteLines.push({
+          type: 'item',
+          left: `  SGST ${g.rate/2}%`,
+          leftVal: fmt(g.sgst)
+        });
+      });
+    gstFootnoteLines.push({ type: 'item', bold: true, left: 'Total GST', leftVal: fmt(data.totalGST) });
+  }
 
   return [
     { type: 'text', bold: true, center: true, size: 'double' as const, text: data.restaurantName },
@@ -121,6 +150,7 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
     ...(data.staffName ? [{ type: 'item' as const, left: 'Waiter', leftVal: data.staffName }] : []),
     { type: 'divider' },
     { type: 'item', bold: true, left: 'Item', leftVal: 'Amount' },
+    ...(data.totalGST > 0 ? [{ type: 'text' as const, center: true, text: '* Prices are inclusive of GST *' }] : []),
     { type: 'divider' },
     ...data.items.map(i => ({ type: 'item' as const, left: `${i.menuItemName} x${i.quantity}`, leftVal: fmt(i.totalPrice) })),
     { type: 'divider' },
@@ -128,14 +158,14 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
     ...(data.parcelCharge   ? [{ type: 'item' as const, left: 'Parcel Charge',  leftVal: fmt(data.parcelCharge) }] : []),
     ...(data.serviceCharge  ? [{ type: 'item' as const, left: 'Service Charge', leftVal: fmt(data.serviceCharge)  }] : []),
     ...(data.discountAmount ? [{ type: 'item' as const, left: 'Discount',       leftVal: `-${fmt(data.discountAmount)}` }] : []),
-    ...(data.totalGST       ? [{ type: 'item' as const, left: 'GST',            leftVal: fmt(data.totalGST) }] : []),
     ...(data.roundOff       ? [{ type: 'item' as const, left: 'Round Off',      leftVal: fmt(data.roundOff) }] : []),
     { type: 'divider' },
-    { type: 'item', bold: true, left: 'TOTAL', leftVal: fmt(data.totalAmount) },
+    { type: 'item', bold: true, left: 'TOTAL (Incl. GST)', leftVal: fmt(data.totalAmount) },
     { type: 'divider' },
     { type: 'item', left: 'Payment', leftVal: data.paymentMode.toUpperCase() },
     ...(data.amountPaid ? [{ type: 'item' as const, left: 'Cash Tendered', leftVal: fmt(data.amountPaid) }] : []),
     ...(data.changeDue  ? [{ type: 'item' as const, left: 'Change Due',    leftVal: fmt(data.changeDue)  }] : []),
+    ...gstFootnoteLines,
     { type: 'divider' },
     { type: 'text', center: true, bold: true, text: 'Thank you! Visit again.' },
     { type: 'spacer' },

@@ -58,6 +58,7 @@ export default function Billing() {
       paymentMode:    b.payments?.[0]?.mode || 'cash',
       amountPaid:     b.amountPaid,
       changeDue:      b.changeDue,
+      gstBreakdown:   b.gstBreakdown,
     });
     const result = await printReceipt(lines, printerId);
     if (!result.success) {
@@ -157,8 +158,13 @@ export default function Billing() {
                     <tr>
                       <th>Item</th>
                       <th>Qty</th>
-                      <th>Rate</th>
-                      {settings.gstEnabled && <th>GST</th>}
+                      <th>
+                        Rate
+                        {settings.gstEnabled && (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 400, color: 'var(--accent)', marginLeft: 4, verticalAlign: 'middle' }}>(Incl. GST)</span>
+                        )}
+                      </th>
+                      {settings.gstEnabled && <th>GST%</th>}
                       <th style={{ textAlign: 'right' }}>Amount</th>
                     </tr>
                   </thead>
@@ -297,7 +303,13 @@ export default function Billing() {
               </div>
               <div className="card-body">
                 <div className="bill-row">
-                  <span>Items Subtotal</span><span className="amount">{formatAmount(subtotal)}</span>
+                  <span>
+                    Items Subtotal
+                    {settings.gstEnabled && (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--accent)', marginLeft: 6, fontWeight: 500 }}>incl. GST</span>
+                    )}
+                  </span>
+                  <span className="amount">{formatAmount(subtotal)}</span>
                 </div>
                 {parcelCharge > 0 && (
                   <div className="bill-row">
@@ -318,8 +330,8 @@ export default function Billing() {
                   </div>
                 )}
                 {settings.gstEnabled && (
-                <div className="bill-row">
-                  <span>Total GST</span><span className="amount">{formatAmount(totalGST)}</span>
+                <div className="bill-row" style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                  <span>GST Included in Price</span><span className="amount">{formatAmount(totalGST)}</span>
                 </div>
                 )}
 
@@ -331,6 +343,11 @@ export default function Billing() {
                 <div className="bill-row total">
                   <span>Total</span><span className="amount">{formatAmount(totalAmount)}</span>
                 </div>
+                {settings.gstEnabled && (
+                  <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(var(--accent-rgb, 230,168,23), 0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(var(--accent-rgb, 230,168,23), 0.2)', textAlign: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>✓ All prices are inclusive of GST (GSTIN: {settings.gstin})</span>
+                  </div>
+                )}
               </div>
             </div>
 

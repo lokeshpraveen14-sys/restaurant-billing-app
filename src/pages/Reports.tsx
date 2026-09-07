@@ -1,10 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { formatAmount } from '../lib/gst';
-import { ChartBar, Download, Calendar, ArrowUp } from '@phosphor-icons/react';
+import { ChartBar, Download, Calendar, TrendUp, Package } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useBillStore } from '../store/billStore';
+import { useAuthStore } from '../store/authStore';
+import { useMenuStore } from '../store/menuStore';
 import { Bill } from '../types';
+
+type ReportTab = 'overview' | 'items';
+type DatePreset = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom';
+
+function getDateRange(preset: DatePreset, customFrom: string, customTo: string): { start: Date; end: Date } {
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date();
+  if (preset === 'today') { start.setHours(0, 0, 0, 0); }
+  else if (preset === 'yesterday') { start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0); end.setDate(end.getDate() - 1); end.setHours(23, 59, 59, 999); }
+  else if (preset === 'week') { start.setDate(start.getDate() - 7); start.setHours(0, 0, 0, 0); }
+  else if (preset === 'month') { start.setMonth(start.getMonth() - 1); start.setHours(0, 0, 0, 0); }
+  else if (preset === 'year') { start.setFullYear(start.getFullYear() - 1); start.setHours(0, 0, 0, 0); }
+  else if (preset === 'custom') { const f = new Date(customFrom); const t = new Date(customTo); f.setHours(0, 0, 0, 0); t.setHours(23, 59, 59, 999); return { start: f, end: t }; }
+  return { start, end };
+}
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -23,421 +41,254 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function Reports() {
-  const [dateRange, setDateRange] = useState<'week' | 'month' | 'year'>('week');
+  const [activeTab, setActiveTab] = useState<ReportTab>('overview');
+  const [datePreset, setDatePreset] = useState<DatePreset>('week');
+  const [customFrom, setCustomFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); });
+  const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [itemDatePreset, setItemDatePreset] = useState<DatePreset>('week');
+  const [itemCustomFrom, setItemCustomFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); });
+  const [itemCustomTo, setItemCustomTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [itemCategoryFilter, setItemCategoryFilter] = useState<string>('all');
+  const [itemSearch, setItemSearch] = useState('');
+  const [itemSortBy, setItemSortBy] = useState<'qty' | 'gross' | 'net' | 'gst' | 'name'>('qty');
+
   const { fetchBillsByDateRange, bills: localBills } = useBillStore();
+  const { categories, items: menuItems } = useMenuStore();
+  const currentUser = useAuthStore(s => s.currentUser);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [itemBills, setItemBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [itemLoading, setItemLoading] = useState(true);
 
-  useEffect(() => {
-    loadBills();
-  }, [dateRange]);
+  const isAdminOrManager = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
-  const loadBills = async () => {
-    setLoading(true);
-    const end = new Date();
-    const start = new Date();
-    
-    if (dateRange === 'week') {
-      start.setDate(start.getDate() - 7);
-    } else if (dateRange === 'month') {
-      start.setMonth(start.getMonth() - 1);
-    } else if (dateRange === 'year') {
-      start.setFullYear(start.getFullYear() - 1);
-    }
-    start.setHours(0, 0, 0, 0);
+  useEffect(() => { loadBills(); }, [datePreset, customFrom, customTo]);
+  useEffect(() => { if (activeTab === 'items') loadItemBills(); }, [activeTab, itemDatePreset, itemCustomFrom, itemCustomTo]);
 
-    let fetchedBills: Bill[] = [];
+  const fetchFiltered = async (start: Date, end: Date): Promise<Bill[]> => {
+    let result: Bill[] = [];
     try {
       const supabaseBills = await fetchBillsByDateRange(start, end);
-      const localFiltered = localBills.filter((b) => {
-        const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-        return d >= start && d <= end;
-      });
+      const localFiltered = localBills.filter(b => { const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt); return d >= start && d <= end; });
       const allById: Record<string, Bill> = {};
-      localFiltered.forEach((b) => { allById[b.id] = b; });
-      supabaseBills.forEach((b) => { allById[b.id] = b; });
-      fetchedBills = Object.values(allById);
+      localFiltered.forEach(b => { allById[b.id] = b; });
+      supabaseBills.forEach(b => { allById[b.id] = b; });
+      result = Object.values(allById);
     } catch {
-      fetchedBills = localBills.filter((b) => {
-        const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-        return d >= start && d <= end;
-      });
+      result = localBills.filter(b => { const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt); return d >= start && d <= end; });
     }
-    // Exclude voided bills
-    setBills(fetchedBills.filter(b => b.status !== 'void'));
-    setLoading(false);
+    return result.filter(b => b.status !== 'void');
   };
 
+  const loadBills = async () => { setLoading(true); const { start, end } = getDateRange(datePreset, customFrom, customTo); setBills(await fetchFiltered(start, end)); setLoading(false); };
+  const loadItemBills = async () => { setItemLoading(true); const { start, end } = getDateRange(itemDatePreset, itemCustomFrom, itemCustomTo); setItemBills(await fetchFiltered(start, end)); setItemLoading(false); };
 
-  // Compute metrics
+  // Overview
   const totalRevenue = bills.reduce((s, b) => s + b.totalAmount, 0);
   const totalOrders = bills.length;
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-  // Group by date for Daily Data (Last 7 days logic works best for week/month, we adapt slightly)
-  const dailyDataMap = new Map<string, { date: string, revenue: number, orders: number, covers: number }>();
-  bills.forEach(b => {
-    const dString = b.createdAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    if (!dailyDataMap.has(dString)) {
-      dailyDataMap.set(dString, { date: dString, revenue: 0, orders: 0, covers: 0 });
-    }
-    const d = dailyDataMap.get(dString)!;
-    d.revenue += b.totalAmount;
-    d.orders += 1;
-    // Covers approximation if not explicitly stored
-    d.covers += b.items.reduce((sum, item) => sum + item.quantity, 0);
-  });
-  const DAILY_DATA = Array.from(dailyDataMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  // Payment Data
-  const paymentMap = new Map<string, number>();
-  let totalPayments = 0;
-  bills.forEach(b => {
-    b.payments.forEach(p => {
-      const current = paymentMap.get(p.mode) || 0;
-      paymentMap.set(p.mode, current + p.amount);
-      totalPayments += p.amount;
-    });
-  });
-  
-  const paymentColors: Record<string, string> = {
-    'cash': '#22c55e',
-    'upi': '#e6a817',
-    'card': '#3b82f6',
-    'split': '#8b5cf6'
-  };
-  
-  const PAYMENT_DATA = Array.from(paymentMap.entries()).map(([mode, amount]) => ({
-    name: mode.charAt(0).toUpperCase() + mode.slice(1),
-    value: totalPayments > 0 ? Math.round((amount / totalPayments) * 100) : 0,
-    color: paymentColors[mode] || '#64748b'
-  }));
-
-  // Top Staff
-  const staffMap = new Map<string, { name: string, orders: number, revenue: number, tables: Set<string> }>();
-  bills.forEach(b => {
-    if (!staffMap.has(b.staffName)) {
-      staffMap.set(b.staffName, { name: b.staffName, orders: 0, revenue: 0, tables: new Set() });
-    }
-    const s = staffMap.get(b.staffName)!;
-    s.orders += 1;
-    s.revenue += b.totalAmount;
-    if (b.tableId) s.tables.add(b.tableId);
-  });
-  const TOP_STAFF = Array.from(staffMap.values())
-    .map(s => ({ ...s, tables: s.tables.size }))
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-
-  // GST Data
-  const gstMap = new Map<number, { rate: number, taxable: number, cgst: number, sgst: number, total: number }>();
-  bills.forEach(b => {
-    if (b.gstBreakdown) {
-      b.gstBreakdown.forEach(g => {
-        if (!gstMap.has(g.rate)) {
-          gstMap.set(g.rate, { rate: g.rate, taxable: 0, cgst: 0, sgst: 0, total: 0 });
-        }
-        const gm = gstMap.get(g.rate)!;
-        gm.taxable += g.taxableAmount;
-        gm.cgst += g.cgst;
-        gm.sgst += g.sgst;
-        gm.total += (g.cgst + g.sgst + g.igst);
-      });
-    }
-  });
-  
-  const GST_DATA = Array.from(gstMap.values()).map(g => ({
-    ...g,
-    rate: `${g.rate}%`
-  })).sort((a, b) => parseFloat(a.rate) - parseFloat(b.rate));
-
-  // Top selling dishes
-  const itemMap = new Map<string, { name: string, qty: number, revenue: number }>();
-  bills.forEach(b => {
-    b.items?.forEach(item => {
-      if (!itemMap.has(item.menuItemId)) {
-        itemMap.set(item.menuItemId, { name: item.menuItemName, qty: 0, revenue: 0 });
-      }
-      const im = itemMap.get(item.menuItemId)!;
-      im.qty += item.quantity;
-      im.revenue += item.totalPrice;
-    });
-  });
-  const TOP_DISHES = Array.from(itemMap.values()).sort((a, b) => b.qty - a.qty).slice(0, 10);
-
-  // Total covers
   const totalCovers = bills.reduce((s, b) => s + (b.guestCount || 0), 0);
+  const dailyDataMap = new Map<string, { date: string; revenue: number; orders: number; covers: number }>();
+  bills.forEach(b => {
+    const dString = (b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    if (!dailyDataMap.has(dString)) dailyDataMap.set(dString, { date: dString, revenue: 0, orders: 0, covers: 0 });
+    const d = dailyDataMap.get(dString)!; d.revenue += b.totalAmount; d.orders += 1; d.covers += b.items.reduce((sum, item) => sum + item.quantity, 0);
+  });
+  const DAILY_DATA = Array.from(dailyDataMap.values());
+  const paymentMap = new Map<string, number>(); let totalPayments = 0;
+  bills.forEach(b => { b.payments.forEach(p => { paymentMap.set(p.mode, (paymentMap.get(p.mode) || 0) + p.amount); totalPayments += p.amount; }); });
+  const paymentColors: Record<string, string> = { cash: '#22c55e', upi: '#e6a817', card: '#3b82f6', split: '#8b5cf6' };
+  const PAYMENT_DATA = Array.from(paymentMap.entries()).map(([mode, amount]) => ({ name: mode.charAt(0).toUpperCase() + mode.slice(1), value: totalPayments > 0 ? Math.round((amount / totalPayments) * 100) : 0, color: paymentColors[mode] || '#64748b' }));
+  const staffMap = new Map<string, { name: string; orders: number; revenue: number; tables: Set<string> }>();
+  bills.forEach(b => { if (!staffMap.has(b.staffName)) staffMap.set(b.staffName, { name: b.staffName, orders: 0, revenue: 0, tables: new Set() }); const s = staffMap.get(b.staffName)!; s.orders += 1; s.revenue += b.totalAmount; if (b.tableId) s.tables.add(b.tableId); });
+  const TOP_STAFF = Array.from(staffMap.values()).map(s => ({ ...s, tables: s.tables.size })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  const gstMap = new Map<number, { rate: number; taxable: number; cgst: number; sgst: number; total: number }>();
+  bills.forEach(b => { if (b.gstBreakdown) b.gstBreakdown.forEach(g => { if (!gstMap.has(g.rate)) gstMap.set(g.rate, { rate: g.rate, taxable: 0, cgst: 0, sgst: 0, total: 0 }); const gm = gstMap.get(g.rate)!; gm.taxable += g.taxableAmount; gm.cgst += g.cgst; gm.sgst += g.sgst; gm.total += (g.cgst + g.sgst + g.igst); }); });
+  const GST_DATA = Array.from(gstMap.values()).map(g => ({ ...g, rate: `${g.rate}%` })).sort((a, b) => parseFloat(a.rate) - parseFloat(b.rate));
+  const itemMapOv = new Map<string, { name: string; qty: number; revenue: number }>();
+  bills.forEach(b => { b.items?.forEach(item => { if (!itemMapOv.has(item.menuItemId)) itemMapOv.set(item.menuItemId, { name: item.menuItemName, qty: 0, revenue: 0 }); const im = itemMapOv.get(item.menuItemId)!; im.qty += item.quantity; im.revenue += item.totalPrice; }); });
+  const TOP_DISHES = Array.from(itemMapOv.values()).sort((a, b) => b.qty - a.qty).slice(0, 10);
 
-  const handleExportCSV = () => {
-    const lines: string[] = [];
-    // Summary
-    lines.push('RESTAURANT SALES REPORT');
-    lines.push(`Period: ${dateRange}`);
-    lines.push(`Total Revenue,${totalRevenue.toFixed(2)}`);
-    lines.push(`Total Orders,${totalOrders}`);
-    lines.push(`Total Covers,${totalCovers}`);
-    lines.push(`Avg Order Value,${avgOrderValue.toFixed(2)}`);
-    lines.push('');
-    // Daily Data
-    lines.push('DAILY BREAKDOWN');
-    lines.push('Date,Revenue,Orders,Covers');
-    DAILY_DATA.forEach(d => lines.push(`${d.date},${d.revenue.toFixed(2)},${d.orders},${d.covers}`));
-    lines.push('');
-    // Top Dishes
-    lines.push('TOP SELLING DISHES');
-    lines.push('Dish,Qty Sold,Revenue');
-    TOP_DISHES.forEach(d => lines.push(`${d.name},${d.qty},${d.revenue.toFixed(2)}`));
-    lines.push('');
-    // GST Summary
-    lines.push('GST SUMMARY');
-    lines.push('Rate,Taxable Amount,CGST,SGST,Total Tax');
-    GST_DATA.forEach(g => lines.push(`${g.rate},${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`));
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sales-report-${dateRange}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  // Item stats
+  interface ItemStat { id: string; name: string; categoryId: string; qty: number; gross: number; gst: number; net: number; }
+  const itemStatsMap = new Map<string, Omit<ItemStat, 'id'>>();
+  itemBills.forEach(b => { b.items?.forEach(item => { if (!itemStatsMap.has(item.menuItemId)) itemStatsMap.set(item.menuItemId, { name: item.menuItemName, categoryId: '', qty: 0, gross: 0, gst: 0, net: 0 }); const stat = itemStatsMap.get(item.menuItemId)!; stat.qty += item.quantity; stat.gross += item.totalPrice; const rate = item.gstRate || 0; const itemGst = rate > 0 ? item.totalPrice - item.totalPrice / (1 + rate / 100) : 0; stat.gst += itemGst; stat.net += item.totalPrice - itemGst; }); });
+  let ITEM_STATS: ItemStat[] = Array.from(itemStatsMap.entries()).map(([id, stat]) => { const menuItem = menuItems.find(m => m.id === id); return { id, ...stat, categoryId: menuItem?.categoryId || '' }; });
+  if (itemCategoryFilter !== 'all') ITEM_STATS = ITEM_STATS.filter(s => s.categoryId === itemCategoryFilter);
+  if (itemSearch.trim()) ITEM_STATS = ITEM_STATS.filter(s => s.name.toLowerCase().includes(itemSearch.toLowerCase()));
+  ITEM_STATS = ITEM_STATS.sort((a, b) => itemSortBy === 'qty' ? b.qty - a.qty : itemSortBy === 'gross' ? b.gross - a.gross : itemSortBy === 'net' ? b.net - a.net : itemSortBy === 'gst' ? b.gst - a.gst : a.name.localeCompare(b.name));
+  const itemTotalQty = ITEM_STATS.reduce((s, i) => s + i.qty, 0);
+  const itemTotalGross = ITEM_STATS.reduce((s, i) => s + i.gross, 0);
+  const itemTotalGST = ITEM_STATS.reduce((s, i) => s + i.gst, 0);
+  const itemTotalNet = ITEM_STATS.reduce((s, i) => s + i.net, 0);
 
+  const downloadCSV = (lines: string[], name: string) => { const blob = new Blob([lines.join('\n')], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${name}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`; a.click(); URL.revokeObjectURL(url); };
+  const handleExportOverviewCSV = () => { const lines = ['RESTAURANT SALES REPORT', `Total Revenue,${totalRevenue.toFixed(2)}`, `Total Orders,${totalOrders}`, `Total Covers,${totalCovers}`, '', 'DAILY BREAKDOWN', 'Date,Revenue,Orders', ...DAILY_DATA.map(d => `${d.date},${d.revenue.toFixed(2)},${d.orders}`), '', 'GST SUMMARY', 'Rate,Taxable,CGST,SGST,Total', ...GST_DATA.map(g => `${g.rate},${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`)]; downloadCSV(lines, `sales-report-${datePreset}`); };
+
+  const handleExportItemCSV = () => { const lines = ['ITEM-WISE SALES REPORT', `Period: ${itemDatePreset}`, '', 'Item Name,Category,Qty Sold,Gross Revenue,Net Revenue,GST Amount', ...ITEM_STATS.map(s => { const cat = categories.find(c => c.id === s.categoryId)?.name || 'Unknown'; return `${s.name},${cat},${s.qty},${s.gross.toFixed(2)},${s.net.toFixed(2)},${s.gst.toFixed(2)}`; }), `TOTAL,,${itemTotalQty},${itemTotalGross.toFixed(2)},${itemTotalNet.toFixed(2)},${itemTotalGST.toFixed(2)}`]; downloadCSV(lines, `item-report-${itemDatePreset}`); };
+
+  const PRESETS: { label: string; value: DatePreset }[] = [{ label: 'Today', value: 'today' }, { label: 'Yesterday', value: 'yesterday' }, { label: 'This Week', value: 'week' }, { label: 'This Month', value: 'month' }, { label: 'This Year', value: 'year' }, { label: 'Custom', value: 'custom' }];
+  const tabs: { id: ReportTab; label: string; icon: React.ReactNode }[] = [{ id: 'items', label: 'Item-wise Report', icon: <Package size={16} /> }];
 
   return (
     <>
       <TopBar
         title="Reports & Analytics"
         actions={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div className="tabs" style={{ padding: 3 }}>
-              {['week', 'month', 'year'].map((r) => (
-                <button key={r} className={`tab-item ${dateRange === r ? 'active' : ''}`} onClick={() => setDateRange(r as any)} style={{ padding: '6px 12px', fontSize: '0.8125rem', textTransform: 'capitalize' }}>{r}</button>
-              ))}
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}><Download size={16} /> Export CSV</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {activeTab === 'overview' && (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div className="tabs" style={{ padding: 3 }}>
+                  {(['week', 'month', 'year'] as DatePreset[]).map(r => (
+                    <button key={r} className={`tab-item ${datePreset === r ? 'active' : ''}`} onClick={() => setDatePreset(r)} style={{ padding: '6px 12px', fontSize: '0.8125rem', textTransform: 'capitalize' }}>{r}</button>
+                  ))}
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportOverviewCSV}><Download size={16} /> Export CSV</button>
+              </div>
+            )}
 
           </div>
         }
       />
       <div className="page-body">
-        {loading ? (
-           <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>
-             Loading reports...
-           </div>
-        ) : (
-        <>
-          {/* Stats */}
-          <div className="grid grid-4" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
-            {[
-              { label: 'Total Revenue', value: formatAmount(totalRevenue), change: null, up: true },
-              { label: 'Total Orders', value: totalOrders.toString(), change: null, up: true },
-              { label: 'Total Covers', value: totalCovers.toString(), change: null, up: true },
-              { label: 'Avg Order Value', value: formatAmount(avgOrderValue), change: null, up: true },
-              { label: 'Total GST', value: formatAmount(GST_DATA.reduce((s,g) => s + g.total, 0)), change: null, up: null },
-            ].map((s) => (
-              <div key={s.label} className="stat-card accent">
-                <div className="stat-value" style={{ fontSize: '1.5rem' }}>{s.value}</div>
-                <div className="stat-label">{s.label}</div>
-                {s.change && (
-                  <div className={`stat-change ${s.up ? 'up' : 'down'}`}>
-                    <ArrowUp size={12} style={{ display: 'inline' }} /> {s.change}
-                  </div>
-                )}
+        <div className="tabs" style={{ padding: 3, marginBottom: 'var(--space-5)', display: 'inline-flex' }}>
+          {tabs.map(t => (
+            <button key={t.id} className={`tab-item ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}
+              style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.875rem' }}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* OVERVIEW TAB */}
+
+
+        {/* ITEM-WISE REPORT TAB */}
+        {activeTab === 'items' && (
+          <>
+            <div className="card" style={{ marginBottom: 'var(--space-4)', padding: '16px' }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                <Calendar size={16} style={{ color: 'var(--text-muted)', marginRight: 4 }} />
+                {PRESETS.map(p => (
+                  <button key={p.value} className={`btn btn-sm ${itemDatePreset === p.value ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setItemDatePreset(p.value)}>{p.label}</button>
+                ))}
+                <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} onClick={handleExportItemCSV}><Download size={16} /> Export CSV</button>
               </div>
-            ))}
-          </div>
-
-
-          {/* Revenue Chart */}
-          <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
-            <div className="card-header">
-              <div className="card-title">Revenue Trend</div>
-            </div>
-            <div className="card-body" style={{ paddingTop: 0 }}>
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={DAILY_DATA} margin={{ top: 8, right: 8, left: -15, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="revGrad2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="revenue" stroke="var(--accent)" fill="url(#revGrad2)" strokeWidth={2.5} dot={{ fill: 'var(--accent)', r: 4, strokeWidth: 2, stroke: 'var(--bg-card)' }} name="revenue" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="grid grid-2" style={{ gap: 'var(--space-5)', marginBottom: 'var(--space-5)' }}>
-            {/* Orders Bar */}
-            <div className="card">
-              <div className="card-header"><div className="card-title">Daily Orders</div></div>
-              <div className="card-body" style={{ paddingTop: 0 }}>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={DAILY_DATA} margin={{ top: 8, right: 0, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="orders" fill="var(--status-billing)" radius={[4, 4, 0, 0]} name="orders" />
-                  </BarChart>
-                </ResponsiveContainer>
+              {itemDatePreset === 'custom' && (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>From</span>
+                  <input type="date" className="input" style={{ width: 160 }} value={itemCustomFrom} onChange={e => setItemCustomFrom(e.target.value)} />
+                  <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>To</span>
+                  <input type="date" className="input" style={{ width: 160 }} value={itemCustomTo} onChange={e => setItemCustomTo(e.target.value)} />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select className="input" style={{ width: 180 }} value={itemCategoryFilter} onChange={e => setItemCategoryFilter(e.target.value)}>
+                  <option value="all">All Categories</option>
+                  {categories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <input className="input" style={{ flex: 1, minWidth: 180 }} placeholder="Search item name..." value={itemSearch} onChange={e => setItemSearch(e.target.value)} />
+                <select className="input" style={{ width: 180 }} value={itemSortBy} onChange={e => setItemSortBy(e.target.value as any)}>
+                  <option value="qty">Sort: Qty Sold</option>
+                  <option value="gross">Sort: Gross Revenue</option>
+                  <option value="net">Sort: Net Revenue</option>
+                  <option value="gst">Sort: GST Amount</option>
+                  <option value="name">Sort: Name A-Z</option>
+                </select>
               </div>
             </div>
-
-            {/* Payment Mode Pie */}
+            <div className="grid grid-4" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+              {[
+                { label: 'Unique Items Sold', value: ITEM_STATS.length.toString(), color: 'var(--accent)' },
+                { label: 'Total Qty Sold', value: itemTotalQty.toString(), color: 'var(--status-free)' },
+                { label: 'Gross Revenue (Incl. GST)', value: formatAmount(itemTotalGross), color: 'var(--accent)' },
+                { label: 'Net Revenue (Ex-GST)', value: formatAmount(itemTotalNet), color: 'var(--status-free)' },
+                { label: 'Total GST in Revenue', value: formatAmount(itemTotalGST), color: 'var(--status-billing)' },
+              ].map(s => (
+                <div key={s.label} className="stat-card" style={{ borderLeft: `3px solid ${s.color}` }}>
+                  <div className="stat-value" style={{ fontSize: '1.35rem', color: s.color }}>{s.value}</div>
+                  <div className="stat-label">{s.label}</div>
+                </div>
+              ))}
+            </div>
             <div className="card">
-              <div className="card-header"><div className="card-title">Payment Split</div></div>
-              <div className="card-body" style={{ paddingTop: 0, display: 'flex', alignItems: 'center', gap: 24 }}>
-                <ResponsiveContainer width={160} height={160}>
-                  <PieChart>
-                    <Pie data={PAYMENT_DATA} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3}>
-                      {PAYMENT_DATA.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div style={{ flex: 1 }}>
-                  {PAYMENT_DATA.map((p) => (
-                    <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <div style={{ width: 12, height: 12, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{p.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{p.value}%</div>
-                      </div>
-                    </div>
-                  ))}
+              <div className="card-header">
+                <div className="card-title">
+                  <Package size={16} style={{ display: 'inline', marginRight: 6 }} />
+                  Item-wise Sales Report
+                  <span className="badge badge-muted" style={{ marginLeft: 10 }}>{ITEM_STATS.length} items</span>
                 </div>
               </div>
+              {itemLoading ? (
+                <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th style={{ cursor: 'pointer' }} onClick={() => setItemSortBy('name')}>Item Name {itemSortBy === 'name' ? '↑' : ''}</th>
+                        <th>Category</th>
+                        <th style={{ cursor: 'pointer', textAlign: 'right' }} onClick={() => setItemSortBy('qty')}>
+                          Qty Sold {itemSortBy === 'qty' ? '↓' : ''}
+                        </th>
+                        <th style={{ cursor: 'pointer', textAlign: 'right' }} onClick={() => setItemSortBy('gross')}>
+                          Gross Revenue {itemSortBy === 'gross' ? '↓' : ''}
+                          <div style={{ fontSize: '0.62rem', color: 'var(--accent)', fontWeight: 400 }}>(Incl. GST)</div>
+                        </th>
+                        <th style={{ cursor: 'pointer', textAlign: 'right' }} onClick={() => setItemSortBy('gst')}>
+                          GST Amount {itemSortBy === 'gst' ? '↓' : ''}
+                          <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 400 }}>(extracted)</div>
+                        </th>
+                        <th style={{ cursor: 'pointer', textAlign: 'right' }} onClick={() => setItemSortBy('net')}>
+                          Net Revenue {itemSortBy === 'net' ? '↓' : ''}
+                          <div style={{ fontSize: '0.62rem', color: 'var(--status-free)', fontWeight: 400 }}>(Ex-GST)</div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ITEM_STATS.map((item, i) => {
+                        const cat = categories.find(c => c.id === item.categoryId);
+                        return (
+                          <tr key={item.id}>
+                            <td style={{ color: 'var(--text-muted)', fontWeight: 600 }}>#{i + 1}</td>
+                            <td style={{ fontWeight: 600 }}>{item.name}</td>
+                            <td><span className="badge badge-muted" style={{ fontSize: '0.7rem' }}>{cat?.name || '—'}</span></td>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                                <div style={{ width: 50, height: 5, background: 'var(--border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                                  <div style={{ width: `${Math.min(100, (item.qty / (ITEM_STATS[0]?.qty || 1)) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: 'inherit' }} />
+                                </div>
+                                <span style={{ fontWeight: 700 }}>{item.qty}</span>
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.gross)}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--status-billing)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.gst)}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--status-free)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.net)}</td>
+                          </tr>
+                        );
+                      })}
+                      {ITEM_STATS.length === 0 && (
+                        <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>No sales data for selected filters</td></tr>
+                      )}
+                      {ITEM_STATS.length > 0 && (
+                        <tr style={{ borderTop: '2px solid var(--border-strong)', background: 'var(--bg-elevated)' }}>
+                          <td colSpan={3} style={{ fontWeight: 700, fontSize: '0.9rem' }}>TOTALS</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800 }}>{itemTotalQty}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent)' }}>{formatAmount(itemTotalGross)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--status-billing)' }}>{formatAmount(itemTotalGST)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--status-free)' }}>{formatAmount(itemTotalNet)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          </div>
-
-          {/* GST Summary Table */}
-          <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
-            <div className="card-header">
-              <div className="card-title">GST Summary (GSTR-1 Ready)</div>
-              <button className="btn btn-secondary btn-sm"><Download size={14} /> Export</button>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>GST Rate</th>
-                    <th>Taxable Amount</th>
-                    <th>CGST</th>
-                    <th>SGST</th>
-                    <th style={{ textAlign: 'right' }}>Total Tax</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {GST_DATA.map((g) => (
-                    <tr key={g.rate}>
-                      <td><span className="badge badge-accent">{g.rate}</span></td>
-                      <td style={{ fontWeight: 600 }}>{formatAmount(g.taxable)}</td>
-                      <td>{formatAmount(g.cgst)}</td>
-                      <td>{formatAmount(g.sgst)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent)' }}>{formatAmount(g.total)}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ borderTop: '2px solid var(--border-strong)' }}>
-                    <td style={{ fontWeight: 700 }}>Total</td>
-                    <td style={{ fontWeight: 700 }}>{formatAmount(GST_DATA.reduce((s,g) => s + g.taxable, 0))}</td>
-                    <td style={{ fontWeight: 700 }}>{formatAmount(GST_DATA.reduce((s,g) => s + g.cgst, 0))}</td>
-                    <td style={{ fontWeight: 700 }}>{formatAmount(GST_DATA.reduce((s,g) => s + g.sgst, 0))}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent)', fontSize: '1rem' }}>{formatAmount(GST_DATA.reduce((s,g) => s + g.total, 0))}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Top Selling Dishes */}
-          <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
-            <div className="card-header">
-              <div className="card-title">🏆 Top Selling Dishes</div>
-              <span className="badge badge-accent">{TOP_DISHES.length} items</span>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Dish Name</th>
-                    <th>Qty Sold</th>
-                    <th style={{ textAlign: 'right' }}>Revenue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {TOP_DISHES.map((d, i) => (
-                    <tr key={d.name}>
-                      <td style={{ fontWeight: 700, color: i < 3 ? 'var(--accent)' : 'var(--text-muted)' }}>
-                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-                      </td>
-                      <td style={{ fontWeight: 600 }}>{d.name}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 80, height: 6, background: 'var(--border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                            <div style={{ width: `${Math.min(100, (d.qty / (TOP_DISHES[0]?.qty || 1)) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: 'inherit' }} />
-                          </div>
-                          <span style={{ fontWeight: 700 }}>{d.qty}</span>
-                        </div>
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>{formatAmount(d.revenue)}</td>
-                    </tr>
-                  ))}
-                  {TOP_DISHES.length === 0 && (
-                    <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>No sales data yet</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Staff Performance */}
-          <div className="card">
-            <div className="card-header"><div className="card-title">Staff Performance</div></div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Staff Member</th>
-                    <th>Orders Handled</th>
-                    <th>Revenue Generated</th>
-                    <th>Tables Served</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {TOP_STAFF.map((s, i) => (
-                    <tr key={s.name}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{
-                            width: 32, height: 32, borderRadius: '50%',
-                            background: `hsl(${i * 80 + 200}, 60%, 45%)`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '0.875rem', fontWeight: 700, color: 'white',
-                          }}>
-                            {s.name.charAt(0)}
-                          </div>
-                          <span style={{ fontWeight: 600 }}>{s.name}</span>
-                        </div>
-                      </td>
-                      <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{s.orders}</td>
-                      <td style={{ fontWeight: 700, color: 'var(--accent)' }}>{formatAmount(s.revenue)}</td>
-                      <td style={{ color: 'var(--text-muted)' }}>{s.tables}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
+          </>
         )}
+
       </div>
     </>
   );

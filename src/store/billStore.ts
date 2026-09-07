@@ -71,7 +71,9 @@ export const useBillStore = create<BillState>()(
       .from('bills')
       .select('*')
       .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
+      .lte('created_at', endDate.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(10000);
 
     if (error || !data) {
       console.error('Failed to fetch bills:', error);
