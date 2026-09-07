@@ -20,6 +20,7 @@ interface AuthState {
   addUser: (user: Omit<User, 'id' | 'createdAt'>) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   deactivateUser: (id: string) => void;
+  deleteUser: (id: string) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -58,6 +59,12 @@ export const useAuthStore = create<AuthState>()(
       deactivateUser: (id) => {
         set((state) => ({
           allUsers: state.allUsers.map((u) => (u.id === id ? { ...u, active: false } : u)),
+        }));
+      },
+
+      deleteUser: (id) => {
+        set((state) => ({
+          allUsers: state.allUsers.filter((u) => u.id !== id),
         }));
       },
     }),

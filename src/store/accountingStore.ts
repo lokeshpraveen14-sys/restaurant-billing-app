@@ -11,12 +11,15 @@ interface AccountingState {
 
   addVendor: (vendor: Omit<Vendor, 'id' | 'createdAt'>) => Promise<void>;
   updateVendor: (id: string, updates: Partial<Vendor>) => Promise<void>;
-  
+  deleteVendor: (id: string) => void;
+
   addBankAccount: (account: Omit<BankAccount, 'id' | 'createdAt'>) => Promise<void>;
   updateBankAccount: (id: string, updates: Partial<BankAccount>) => Promise<void>;
+  deleteBankAccount: (id: string) => void;
 
   addLedgerTransaction: (transaction: Omit<LedgerTransaction, 'id' | 'createdAt'>) => Promise<void>;
-  
+  deleteLedgerTransaction: (id: string) => void;
+
   initAccountingSync: () => void;
 }
 
@@ -33,9 +36,7 @@ export const useAccountingStore = create<AccountingState>()(
           id: uuidv4(),
           createdAt: new Date(),
         };
-        
         set((state) => ({ vendors: [...state.vendors, newVendor] }));
-
         const { error } = await supabase.from('vendors').insert({
           id: newVendor.id,
           name: newVendor.name,
@@ -54,17 +55,23 @@ export const useAccountingStore = create<AccountingState>()(
         set((state) => ({
           vendors: state.vendors.map(v => v.id === id ? { ...v, ...updates } : v)
         }));
-
-        const dbUpdates: any = {};
+        const dbUpdates: Record<string, unknown> = {};
         if (updates.name !== undefined) dbUpdates.name = updates.name;
         if (updates.contactPerson !== undefined) dbUpdates.contact_person = updates.contactPerson;
         if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
         if (updates.email !== undefined) dbUpdates.email = updates.email;
         if (updates.address !== undefined) dbUpdates.address = updates.address;
         if (updates.gstNumber !== undefined) dbUpdates.gst_number = updates.gstNumber;
-
+        if (updates.openingBalance !== undefined) dbUpdates.opening_balance = updates.openingBalance;
         const { error } = await supabase.from('vendors').update(dbUpdates).eq('id', id);
         if (error) console.error('Failed to update vendor:', error);
+      },
+
+      deleteVendor: (id) => {
+        set((state) => ({ vendors: state.vendors.filter(v => v.id !== id) }));
+        supabase.from('vendors').delete().eq('id', id).then(({ error }) => {
+          if (error) console.error('Failed to delete vendor:', error);
+        });
       },
 
       addBankAccount: async (accountData) => {
@@ -73,9 +80,7 @@ export const useAccountingStore = create<AccountingState>()(
           id: uuidv4(),
           createdAt: new Date(),
         };
-
         set((state) => ({ bankAccounts: [...state.bankAccounts, newAccount] }));
-
         const { error } = await supabase.from('bank_accounts').insert({
           id: newAccount.id,
           account_name: newAccount.accountName,
@@ -92,15 +97,21 @@ export const useAccountingStore = create<AccountingState>()(
         set((state) => ({
           bankAccounts: state.bankAccounts.map(b => b.id === id ? { ...b, ...updates } : b)
         }));
-
-        const dbUpdates: any = {};
+        const dbUpdates: Record<string, unknown> = {};
         if (updates.accountName !== undefined) dbUpdates.account_name = updates.accountName;
         if (updates.accountNumber !== undefined) dbUpdates.account_number = updates.accountNumber;
         if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
         if (updates.currentBalance !== undefined) dbUpdates.current_balance = updates.currentBalance;
-
+        if (updates.openingBalance !== undefined) dbUpdates.opening_balance = updates.openingBalance;
         const { error } = await supabase.from('bank_accounts').update(dbUpdates).eq('id', id);
         if (error) console.error('Failed to update bank account:', error);
+      },
+
+      deleteBankAccount: (id) => {
+        set((state) => ({ bankAccounts: state.bankAccounts.filter(b => b.id !== id) }));
+        supabase.from('bank_accounts').delete().eq('id', id).then(({ error }) => {
+          if (error) console.error('Failed to delete bank account:', error);
+        });
       },
 
       addLedgerTransaction: async (txData) => {
@@ -109,9 +120,7 @@ export const useAccountingStore = create<AccountingState>()(
           id: uuidv4(),
           createdAt: new Date(),
         };
-
-        set((state) => ({ ledgerTransactions: [...state.ledgerTransactions, newTx] }));
-
+        set((state) => ({ ledgerTransactions: [newTx, ...state.ledgerTransactions] }));
         const { error } = await supabase.from('ledger_transactions').insert({
           id: newTx.id,
           date: newTx.date.toISOString(),
@@ -124,8 +133,8 @@ export const useAccountingStore = create<AccountingState>()(
           created_at: newTx.createdAt.toISOString()
         });
         if (error) console.error('Failed to insert ledger tx:', error);
-        
-        // Also update bank balance if applicable
+
+        // Update bank balance if applicable
         if (newTx.accountType === 'bank' && newTx.accountId) {
           const bank = get().bankAccounts.find(b => b.id === newTx.accountId);
           if (bank) {
@@ -135,8 +144,14 @@ export const useAccountingStore = create<AccountingState>()(
         }
       },
 
+      deleteLedgerTransaction: (id) => {
+        set((state) => ({ ledgerTransactions: state.ledgerTransactions.filter(t => t.id !== id) }));
+        supabase.from('ledger_transactions').delete().eq('id', id).then(({ error }) => {
+          if (error) console.error('Failed to delete ledger transaction:', error);
+        });
+      },
+
       initAccountingSync: async () => {
-        // Fetch vendors
         const { data: vendorsData, error: vendorsError } = await supabase.from('vendors').select('*');
         if (!vendorsError && vendorsData) {
           set({
@@ -154,7 +169,6 @@ export const useAccountingStore = create<AccountingState>()(
           });
         }
 
-        // Fetch bank accounts
         const { data: banksData, error: banksError } = await supabase.from('bank_accounts').select('*');
         if (!banksError && banksData) {
           set({
@@ -170,13 +184,11 @@ export const useAccountingStore = create<AccountingState>()(
           });
         }
 
-        // Fetch transactions (limit to last 1000 for memory)
         const { data: txData, error: txError } = await supabase
           .from('ledger_transactions')
           .select('*')
           .order('date', { ascending: false })
           .limit(1000);
-          
         if (!txError && txData) {
           set({
             ledgerTransactions: txData.map(t => ({
@@ -194,8 +206,6 @@ export const useAccountingStore = create<AccountingState>()(
         }
       }
     }),
-    {
-      name: 'accounting-storage',
-    }
+    { name: 'accounting-storage' }
   )
 );

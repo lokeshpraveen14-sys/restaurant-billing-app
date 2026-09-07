@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useStaffStore } from '../store/staffStore';
 import { useToast } from '../store/uiStore';
-import { Users, Plus, PencilSimple, ToggleRight, ToggleLeft, Money, Bank } from '@phosphor-icons/react';
+import { Users, Plus, PencilSimple, ToggleRight, ToggleLeft, Money, Bank, Trash } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { User, UserRole } from '../types';
 import { formatAmount } from '../lib/gst';
@@ -16,11 +16,12 @@ const ROLE_COLORS: Record<UserRole, string> = {
 };
 
 export default function StaffManagement() {
-  const { allUsers, updateUser, deactivateUser, addUser } = useAuthStore();
+  const { allUsers, updateUser, deactivateUser, addUser, deleteUser } = useAuthStore();
   const { staffDetails, salaryRecords, updateStaffDetails, addSalaryRecord, initStaffSync } = useStaffStore();
   const toast = useToast();
 
   const [activeTab, setActiveTab] = useState<'staff' | 'salaries'>('staff');
+  const [deleteConfirm, setDeleteConfirm] = useState<User | null>(null);
   
   const [showAdd, setShowAdd] = useState(false);
   const [newStaff, setNewStaff] = useState({ name: '', email: '', role: 'waiter' as UserRole, pin: '' });
@@ -216,6 +217,9 @@ export default function StaffManagement() {
                                 ? <ToggleRight size={20} color="var(--status-free)" />
                                 : <ToggleLeft size={20} color="var(--text-muted)" />
                               }
+                            </button>
+                            <button className="btn btn-ghost btn-icon btn-sm" title="Delete staff" onClick={() => setDeleteConfirm(user)}>
+                              <Trash size={16} color="var(--status-occupied)" />
                             </button>
                           </div>
                         </td>
@@ -423,6 +427,33 @@ export default function StaffManagement() {
             <div className="modal-footer">
               <button className="btn btn-ghost btn-sm" onClick={() => setShowSalaryModal(false)}>Cancel</button>
               <button className="btn btn-primary btn-sm" onClick={handleAddSalary}>Save Payment</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Staff Confirm */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 380, maxWidth: '90%' }}>
+            <div className="modal-header">
+              <span className="modal-title" style={{ color: 'var(--status-occupied)' }}>
+                <Trash size={18} style={{ display: 'inline', marginRight: 8 }} />Delete Staff Member
+              </span>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)' }}>
+                Are you sure you want to permanently delete <strong>{deleteConfirm.name}</strong>? All their data will be removed.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost btn-sm" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className="btn btn-sm" style={{ background: 'var(--status-occupied)', color: '#fff' }} onClick={() => {
+                deleteUser(deleteConfirm.id);
+                toast.success('Deleted', deleteConfirm.name + ' has been removed');
+                setDeleteConfirm(null);
+              }}>
+                <Trash size={14} /> Delete
+              </button>
             </div>
           </div>
         </div>

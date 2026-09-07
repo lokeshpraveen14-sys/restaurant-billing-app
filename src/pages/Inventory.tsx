@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatAmount } from '../lib/gst';
-import { Package, Warning, Plus, ArrowDown, ArrowUp, PencilSimple, X } from '@phosphor-icons/react';
+import { Package, Warning, Plus, ArrowDown, ArrowUp, PencilSimple, X, Trash } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { Ingredient, PurchaseEntry } from '../types';
 import { useInventoryStore } from '../store/inventoryStore';
@@ -23,10 +23,11 @@ const emptyIngredient = (): Omit<IngredientWithCat, 'id'> => ({
 });
 
 export default function Inventory() {
-  const { ingredients, purchaseEntries, addIngredient, updateIngredient, addPurchaseEntry } = useInventoryStore();
+  const { ingredients, purchaseEntries, addIngredient, updateIngredient, addPurchaseEntry, deleteIngredient } = useInventoryStore();
   const toast = useToast();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeTab, setActiveTab] = useState<'stock' | 'purchases'>('stock');
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null); // ingredient id
 
   // Edit ingredient modal
   const [editingIngredient, setEditingIngredient] = useState<Partial<IngredientWithCat> | null>(null);
@@ -228,9 +229,14 @@ export default function Inventory() {
                             </span>
                           </td>
                           <td>
-                            <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={() => openEdit(ing)}>
-                              <PencilSimple size={16} />
-                            </button>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={() => openEdit(ing)}>
+                                <PencilSimple size={16} />
+                              </button>
+                              <button className="btn btn-ghost btn-icon btn-sm" title="Delete ingredient" onClick={() => setDeleteConfirm(ing.id)}>
+                                <Trash size={16} color="var(--status-occupied)" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -403,6 +409,36 @@ export default function Inventory() {
           </div>
         </div>
       )}
+      {/* Delete Ingredient Confirm */}
+      {deleteConfirm && (() => {
+        const ing = ingredients.find(i => i.id === deleteConfirm);
+        return (
+          <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 380, maxWidth: '90%' }}>
+              <div className="modal-header">
+                <span className="modal-title" style={{ color: 'var(--status-occupied)' }}>
+                  <Trash size={18} style={{ display: 'inline', marginRight: 8 }} />Delete Ingredient
+                </span>
+              </div>
+              <div className="modal-body">
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  Are you sure you want to delete <strong>{ing?.name}</strong>? This cannot be undone.
+                </p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-ghost btn-sm" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+                <button className="btn btn-sm" style={{ background: 'var(--status-occupied)', color: '#fff' }} onClick={() => {
+                  deleteIngredient(deleteConfirm);
+                  toast.success('Deleted', ing?.name + ' removed');
+                  setDeleteConfirm(null);
+                }}>
+                  <Trash size={14} /> Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }

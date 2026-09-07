@@ -114,8 +114,10 @@ interface MenuState {
 
   addCategory: (cat: Omit<MenuCategory, 'id'>) => void;
   updateCategory: (id: string, updates: Partial<MenuCategory>) => void;
+  deleteCategory: (id: string) => void;
   addItem: (item: Omit<MenuItem, 'id'>) => void;
   updateItem: (id: string, updates: Partial<MenuItem>) => void;
+  deleteItem: (id: string) => Promise<void>;
   toggleAvailability: (id: string) => void;
   setSearch: (q: string) => void;
   setCategory: (id: string | null) => void;
@@ -140,6 +142,13 @@ export const useMenuStore = create<MenuState>()(
       updateCategory: (id, updates) => {
         set((state) => ({
           categories: state.categories.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+        }));
+      },
+
+      deleteCategory: (id) => {
+        set((state) => ({
+          categories: state.categories.filter((c) => c.id !== id),
+          items: state.items.filter((i) => i.categoryId !== id),
         }));
       },
 
@@ -184,6 +193,13 @@ export const useMenuStore = create<MenuState>()(
             updated_at: new Date().toISOString()
           }).eq('id', id);
         }
+      },
+
+      deleteItem: async (id) => {
+        set((state) => ({
+          items: state.items.filter((i) => i.id !== id),
+        }));
+        await supabase.from('menu_items').delete().eq('id', id);
       },
 
       toggleAvailability: async (id) => {

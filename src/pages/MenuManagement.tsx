@@ -2,16 +2,16 @@ import React, { useState } from 'react';
 import { useMenuStore } from '../store/menuStore';
 import { useToast } from '../store/uiStore';
 import { MenuItem } from '../types';
-import { Plus, ToggleLeft, ToggleRight, PencilSimple, MagnifyingGlass, ForkKnife } from '@phosphor-icons/react';
+import { Plus, ToggleLeft, ToggleRight, PencilSimple, MagnifyingGlass, ForkKnife, Trash } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { formatAmount } from '../lib/gst';
 
 export default function MenuManagement() {
-  const { categories, items, toggleAvailability, updateItem, addItem } = useMenuStore();
+  const { categories, items, toggleAvailability, updateItem, addItem, deleteItem } = useMenuStore();
   const toast = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  
+  const [deleteConfirm, setDeleteConfirm] = useState<MenuItem | null>(null);
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
 
   const openAddModal = () => {
@@ -68,6 +68,12 @@ export default function MenuManagement() {
   const handleToggle = (item: MenuItem) => {
     toggleAvailability(item.id);
     toast.success(item.available ? 'Item disabled' : 'Item enabled', `${item.name} is now ${item.available ? 'unavailable' : 'available'}`);
+  };
+
+  const handleDeleteItem = async (item: MenuItem) => {
+    await deleteItem(item.id);
+    toast.success('Item Deleted', `${item.name} has been removed from the menu`);
+    setDeleteConfirm(null);
   };
 
   return (
@@ -190,6 +196,9 @@ export default function MenuManagement() {
                                   ? <ToggleRight size={20} color="var(--status-free)" />
                                   : <ToggleLeft size={20} color="var(--text-muted)" />
                                 }
+                              </button>
+                              <button className="btn btn-ghost btn-icon btn-sm" title="Delete item" onClick={() => setDeleteConfirm(item)}>
+                                <Trash size={16} color="var(--status-occupied)" />
                               </button>
                             </div>
                           </td>
@@ -328,6 +337,29 @@ export default function MenuManagement() {
             <div style={{ padding: 'var(--space-4)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button className="btn btn-ghost" onClick={() => setEditingItem(null)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSaveItem}>Save Item</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 380, maxWidth: '90%' }}>
+            <div className="modal-header">
+              <span className="modal-title" style={{ color: 'var(--status-occupied)' }}>
+                <Trash size={18} style={{ display: 'inline', marginRight: 8 }} />Delete Menu Item
+              </span>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)' }}>
+                Are you sure you want to permanently delete <strong>"{deleteConfirm.name}"</strong>? This cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost btn-sm" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className="btn btn-sm" style={{ background: 'var(--status-occupied)', color: '#fff' }} onClick={() => handleDeleteItem(deleteConfirm)}>
+                <Trash size={14} /> Delete
+              </button>
             </div>
           </div>
         </div>

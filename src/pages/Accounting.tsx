@@ -1,120 +1,645 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAccountingStore } from '../store/accountingStore';
 import { useToast } from '../store/uiStore';
-import { Bank, Wallet, Storefront, ChartLineUp, Plus, FileText, Buildings, UserCircle, CurrencyInr } from '@phosphor-icons/react';
+import {
+  Bank, Wallet, Buildings, FileText, Plus, Trash, PencilSimple,
+  CurrencyInr, X, ArrowUp, ArrowDown, BookOpen, Receipt, HandCoins,
+  ChartPie, Funnel, CaretDown, CaretUp, CheckCircle
+} from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { formatAmount } from '../lib/gst';
-import { LedgerAccountType, LedgerTransactionType } from '../types';
+import { LedgerAccountType, LedgerTransactionType, Vendor, BankAccount } from '../types';
+
+// ─── SECTION NAV ─────────────────────────────────────────────────────────────
+type Section = 'dashboard' | 'bank' | 'vendors' | 'ledger' | 'payables' | 'journal';
+
+// ─── Voucher types (Tally-style) ─────────────────────────────────────────────
+const VOUCHER_TYPES = [
+  { id: 'payment',  label: 'Payment',   icon: '💸', help: 'Cash/Bank going OUT of business (paying vendor, expenses, salary, etc.)' },
+  { id: 'receipt',  label: 'Receipt',   icon: '💰', help: 'Cash/Bank coming IN to business (customer payment, refund received, etc.)' },
+  { id: 'purchase', label: 'Purchase',  icon: '🛒', help: 'Goods/Services purchased on credit from vendor (payable increases)' },
+  { id: 'contra',   label: 'Contra',    icon: '🔄', help: 'Transfer between Cash and Bank accounts' },
+  { id: 'journal',  label: 'Journal',   icon: '📓', help: 'All other entries — adjustments, depreciation, etc.' },
+];
+
+const EXPENSE_HEADS = [
+  'Salaries & Wages', 'Rent', 'Electricity', 'Gas / LPG', 'Water Charges',
+  'Raw Material Purchase', 'Packaging Material', 'Repairs & Maintenance',
+  'Cleaning Supplies', 'Advertisement', 'Staff Welfare', 'Transportation',
+  'Bank Charges', 'Petty Cash Expense', 'Other Expenses'
+];
 
 export default function Accounting() {
-  const { vendors, bankAccounts, ledgerTransactions, addVendor, updateVendor, addBankAccount, addLedgerTransaction, initAccountingSync } = useAccountingStore();
+  const {
+    vendors, bankAccounts, ledgerTransactions,
+    addVendor, updateVendor, deleteVendor,
+    addBankAccount, updateBankAccount, deleteBankAccount,
+    addLedgerTransaction, deleteLedgerTransaction,
+    initAccountingSync
+  } = useAccountingStore();
   const toast = useToast();
 
-  const [activeTab, setActiveTab] = useState<'bank' | 'vendors' | 'ledger'>('bank');
-  
+  const [section, setSection] = useState<Section>('dashboard');
+
   // Modals
   const [showAddBank, setShowAddBank] = useState(false);
   const [showAddVendor, setShowAddVendor] = useState(false);
-  const [showAddTx, setShowAddTx] = useState(false);
+  const [showVoucher, setShowVoucher] = useState(false);
+  const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: string; id: string; name: string } | null>(null);
+
+  // Date filter
+  const [filterFrom, setFilterFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [filterTo, setFilterTo] = useState(new Date().toISOString().slice(0, 10));
+  const [filterType, setFilterType] = useState<string>('all');
+  const [filterAccount, setFilterAccount] = useState<string>('all');
 
   // Forms
-  const [bankForm, setBankForm] = useState({ accountName: '', accountNumber: '', bankName: '', openingBalance: 0 });
-  const [vendorForm, setVendorForm] = useState({ name: '', contactPerson: '', phone: '', address: '', gstNumber: '', openingBalance: 0 });
-  const [txForm, setTxForm] = useState({ 
-    accountType: 'bank' as LedgerAccountType, 
-    accountId: '', 
-    transactionType: 'credit' as LedgerTransactionType, 
-    amount: 0, 
-    description: '', 
-    date: new Date().toISOString().slice(0, 10) 
+  const [bankForm, setBankForm] = useState({ accountName: '', accountNumber: '', bankName: '', openingBalance: 0, accountType: 'current' as 'current' | 'savings' | 'cash' });
+  const [vendorForm, setVendorForm] = useState({ name: '', contactPerson: '', phone: '', email: '', address: '', gstNumber: '', openingBalance: 0 });
+
+  // Voucher Form (Tally-style)
+  const [voucherForm, setVoucherForm] = useState({
+    voucherType: 'payment',
+    date: new Date().toISOString().slice(0, 10),
+    // For Payment/Receipt: which bank/cash account
+    bankAccountId: '',
+    // Party (vendor) for Purchase/Payment to vendor
+    vendorId: '',
+    // Expense head for Payments
+    expenseHead: EXPENSE_HEADS[0],
+    // Contra: from account to account
+    fromAccountId: '',
+    toAccountId: '',
+    amount: 0,
+    narration: '',
+    referenceNo: '',
   });
 
-  useEffect(() => {
-    initAccountingSync();
-  }, []);
+  useEffect(() => { initAccountingSync(); }, []);
+
+  // ─── Calculations ────────────────────────────────────────────────────────────
+  const totalBankBalance = useMemo(
+    () => bankAccounts.reduce((s, b) => s + b.currentBalance, 0),
+    [bankAccounts]
+  );
+
+  const vendorBalances = useMemo(() => {
+    return vendors.map(v => {
+      const txs = ledgerTransactions.filter(t => t.accountType === 'vendor' && t.accountId === v.id);
+      const purchased = txs.filter(t => t.transactionType === 'credit').reduce((s, t) => s + t.amount, 0);
+      const paid = txs.filter(t => t.transactionType === 'debit').reduce((s, t) => s + t.amount, 0);
+      const balance = v.openingBalance + purchased - paid;
+      return { vendor: v, balance, purchased, paid };
+    });
+  }, [vendors, ledgerTransactions]);
+
+  const totalPayables = useMemo(() => vendorBalances.reduce((s, v) => s + v.balance, 0), [vendorBalances]);
+
+  // Monthly income & expense from ledger
+  const thisMonthTxs = useMemo(() => {
+    const now = new Date();
+    return ledgerTransactions.filter(t => {
+      const d = new Date(t.date);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+  }, [ledgerTransactions]);
+
+  const monthlyPayments = useMemo(
+    () => thisMonthTxs.filter(t => t.transactionType === 'debit' && t.accountType === 'bank').reduce((s, t) => s + t.amount, 0),
+    [thisMonthTxs]
+  );
+  const monthlyReceipts = useMemo(
+    () => thisMonthTxs.filter(t => t.transactionType === 'credit' && t.accountType === 'bank').reduce((s, t) => s + t.amount, 0),
+    [thisMonthTxs]
+  );
+
+  // Filtered ledger
+  const filteredLedger = useMemo(() => {
+    return ledgerTransactions.filter(t => {
+      const tDate = new Date(t.date).toISOString().slice(0, 10);
+      const inRange = (!filterFrom || tDate >= filterFrom) && (!filterTo || tDate <= filterTo);
+      const typeMatch = filterType === 'all' || t.transactionType === filterType;
+      const acMatch = filterAccount === 'all' || t.accountType === filterAccount;
+      return inRange && typeMatch && acMatch;
+    });
+  }, [ledgerTransactions, filterFrom, filterTo, filterType, filterAccount]);
+
+  // ─── Voucher Submission ──────────────────────────────────────────────────────
+  const handleSubmitVoucher = async () => {
+    const { voucherType, date, bankAccountId, vendorId, expenseHead, fromAccountId, toAccountId, amount, narration, referenceNo } = voucherForm;
+    if (!amount || amount <= 0) { toast.error('Required', 'Amount must be greater than 0'); return; }
+    if (!date) { toast.error('Required', 'Date is required'); return; }
+
+    try {
+      if (voucherType === 'payment') {
+        if (!bankAccountId) { toast.error('Required', 'Select Cash/Bank account'); return; }
+        // Debit bank (money out)
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'bank',
+          accountId: bankAccountId,
+          transactionType: 'debit',
+          amount,
+          description: vendorId
+            ? `Payment to ${vendors.find(v => v.id === vendorId)?.name || 'Vendor'} — ${expenseHead}`
+            : `${expenseHead} — ${narration || 'Payment'}`,
+          referenceId: referenceNo || undefined,
+        });
+        // If paying a vendor, reduce their payable
+        if (vendorId) {
+          await addLedgerTransaction({
+            date: new Date(date),
+            accountType: 'vendor',
+            accountId: vendorId,
+            transactionType: 'debit',
+            amount,
+            description: `Payment received — ${narration || ''}`,
+            referenceId: referenceNo || undefined,
+          });
+        }
+      } else if (voucherType === 'receipt') {
+        if (!bankAccountId) { toast.error('Required', 'Select Cash/Bank account'); return; }
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'bank',
+          accountId: bankAccountId,
+          transactionType: 'credit',
+          amount,
+          description: `Receipt — ${narration || 'Money received'}`,
+          referenceId: referenceNo || undefined,
+        });
+      } else if (voucherType === 'purchase') {
+        if (!vendorId) { toast.error('Required', 'Select a vendor for purchase voucher'); return; }
+        // Credit vendor account (payable increases)
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'vendor',
+          accountId: vendorId,
+          transactionType: 'credit',
+          amount,
+          description: `Purchase — ${narration || expenseHead}`,
+          referenceId: referenceNo || undefined,
+        });
+      } else if (voucherType === 'contra') {
+        if (!fromAccountId || !toAccountId) { toast.error('Required', 'Select both accounts for contra entry'); return; }
+        if (fromAccountId === toAccountId) { toast.error('Invalid', 'From and To accounts must be different'); return; }
+        // Debit from, credit to
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'bank',
+          accountId: fromAccountId,
+          transactionType: 'debit',
+          amount,
+          description: `Contra — Transfer to ${bankAccounts.find(b => b.id === toAccountId)?.accountName || ''}`,
+          referenceId: referenceNo || undefined,
+        });
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'bank',
+          accountId: toAccountId,
+          transactionType: 'credit',
+          amount,
+          description: `Contra — Transfer from ${bankAccounts.find(b => b.id === fromAccountId)?.accountName || ''}`,
+          referenceId: referenceNo || undefined,
+        });
+      } else {
+        // Journal
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'cash',
+          transactionType: 'debit',
+          amount,
+          description: narration || 'Journal Entry',
+          referenceId: referenceNo || undefined,
+        });
+      }
+
+      toast.success('Voucher Saved', `${VOUCHER_TYPES.find(v => v.id === voucherType)?.label} entry recorded successfully`);
+      setShowVoucher(false);
+      setVoucherForm({
+        voucherType: 'payment', date: new Date().toISOString().slice(0, 10),
+        bankAccountId: '', vendorId: '', expenseHead: EXPENSE_HEADS[0],
+        fromAccountId: '', toAccountId: '', amount: 0, narration: '', referenceNo: '',
+      });
+    } catch (e) {
+      toast.error('Error', 'Failed to save voucher');
+    }
+  };
 
   const handleAddBank = () => {
-    if (!bankForm.accountName) return toast.error('Required', 'Account Name is required');
-    addBankAccount({ ...bankForm, currentBalance: bankForm.openingBalance });
-    toast.success('Added', 'Bank account added successfully');
+    if (!bankForm.accountName) return toast.error('Required', 'Account name is required');
+    if (editingBank) {
+      updateBankAccount(editingBank.id, {
+        accountName: bankForm.accountName,
+        accountNumber: bankForm.accountNumber,
+        bankName: bankForm.bankName,
+        openingBalance: bankForm.openingBalance,
+      });
+      toast.success('Updated', 'Bank account updated');
+    } else {
+      addBankAccount({ ...bankForm, currentBalance: bankForm.openingBalance });
+      toast.success('Added', 'Bank account added');
+    }
     setShowAddBank(false);
-    setBankForm({ accountName: '', accountNumber: '', bankName: '', openingBalance: 0 });
+    setEditingBank(null);
+    setBankForm({ accountName: '', accountNumber: '', bankName: '', openingBalance: 0, accountType: 'current' });
   };
 
   const handleAddVendor = () => {
-    if (!vendorForm.name) return toast.error('Required', 'Vendor Name is required');
-    addVendor(vendorForm);
-    toast.success('Added', 'Vendor added successfully');
+    if (!vendorForm.name) return toast.error('Required', 'Vendor name is required');
+    if (editingVendor) {
+      updateVendor(editingVendor.id, vendorForm);
+      toast.success('Updated', 'Vendor updated');
+    } else {
+      addVendor(vendorForm);
+      toast.success('Added', 'Vendor added');
+    }
     setShowAddVendor(false);
-    setVendorForm({ name: '', contactPerson: '', phone: '', address: '', gstNumber: '', openingBalance: 0 });
+    setEditingVendor(null);
+    setVendorForm({ name: '', contactPerson: '', phone: '', email: '', address: '', gstNumber: '', openingBalance: 0 });
   };
 
-  const handleAddTx = () => {
-    if (!txForm.amount) return toast.error('Required', 'Amount is required');
-    if (txForm.accountType !== 'cash' && !txForm.accountId) return toast.error('Required', 'Please select an account');
-    
-    addLedgerTransaction({
-      ...txForm,
-      accountId: txForm.accountId || undefined,
-      date: new Date(txForm.date)
+  const confirmDelete = (type: string, id: string, name: string) => setDeleteConfirm({ type, id, name });
+
+  const executeDelete = () => {
+    if (!deleteConfirm) return;
+    if (deleteConfirm.type === 'vendor') { deleteVendor(deleteConfirm.id); toast.success('Deleted', deleteConfirm.name + ' deleted'); }
+    if (deleteConfirm.type === 'bank') { deleteBankAccount(deleteConfirm.id); toast.success('Deleted', deleteConfirm.name + ' deleted'); }
+    if (deleteConfirm.type === 'ledger') { deleteLedgerTransaction(deleteConfirm.id); toast.success('Deleted', 'Ledger entry deleted'); }
+    setDeleteConfirm(null);
+  };
+
+  const openEditBank = (bank: BankAccount) => {
+    setEditingBank(bank);
+    setBankForm({
+      accountName: bank.accountName,
+      accountNumber: bank.accountNumber || '',
+      bankName: bank.bankName || '',
+      openingBalance: bank.openingBalance,
+      accountType: 'current'
     });
-    toast.success('Recorded', 'Transaction recorded successfully');
-    setShowAddTx(false);
+    setShowAddBank(true);
   };
 
-  // Calculations
-  const totalCashAndBank = bankAccounts.reduce((sum, b) => sum + b.currentBalance, 0); // Simplified, not factoring pure cash yet
-  const totalPayables = vendors.reduce((sum, v) => {
-    // Current payable logic: Opening + purchases(credits to vendor) - payments(debits to vendor)
-    const vendorTxs = ledgerTransactions.filter(t => t.accountType === 'vendor' && t.accountId === v.id);
-    const credits = vendorTxs.filter(t => t.transactionType === 'credit').reduce((s, t) => s + t.amount, 0);
-    const debits = vendorTxs.filter(t => t.transactionType === 'debit').reduce((s, t) => s + t.amount, 0);
-    return sum + v.openingBalance + credits - debits;
-  }, 0);
+  const openEditVendor = (vendor: Vendor) => {
+    setEditingVendor(vendor);
+    setVendorForm({
+      name: vendor.name,
+      contactPerson: vendor.contactPerson || '',
+      phone: vendor.phone || '',
+      email: vendor.email || '',
+      address: vendor.address || '',
+      gstNumber: vendor.gstNumber || '',
+      openingBalance: vendor.openingBalance,
+    });
+    setShowAddVendor(true);
+  };
 
+  // ─── NAV ─────────────────────────────────────────────────────────────────────
+  const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <ChartPie size={16} /> },
+    { id: 'journal', label: 'Voucher Entry', icon: <Receipt size={16} /> },
+    { id: 'ledger', label: 'Day Book', icon: <BookOpen size={16} /> },
+    { id: 'bank', label: 'Bank & Cash', icon: <Bank size={16} /> },
+    { id: 'vendors', label: 'Vendors / Party', icon: <Buildings size={16} /> },
+    { id: 'payables', label: 'Payables', icon: <HandCoins size={16} /> },
+  ];
+
+  // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <>
-      <TopBar title="Accounting & Ledgers" actions={
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddTx(true)}>
-            <Plus size={16} /> Record Transaction
-          </button>
-        </div>
-      } />
-      
+      <TopBar title="Accounting & Books" />
       <div className="page-body">
-        
-        {/* Top Stats */}
-        <div className="grid grid-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
-          <div className="stat-card" style={{ borderLeft: `3px solid var(--status-free)` }}>
-            <div className="stat-label">Total Cash & Bank Balance</div>
-            <div className="stat-value" style={{ color: 'var(--status-free)' }}>{formatAmount(totalCashAndBank)}</div>
-          </div>
-          <div className="stat-card" style={{ borderLeft: `3px solid var(--status-billing)` }}>
-            <div className="stat-label">Total Vendor Payables</div>
-            <div className="stat-value" style={{ color: 'var(--status-billing)' }}>{formatAmount(totalPayables)}</div>
-          </div>
+
+        {/* Section nav */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
+          {NAV.map(n => (
+            <button
+              key={n.id}
+              onClick={() => setSection(n.id)}
+              className={`btn btn-sm ${section === n.id ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ gap: 6 }}
+            >
+              {n.icon} {n.label}
+            </button>
+          ))}
         </div>
 
-        {/* Tabs */}
-        <div className="tabs" style={{ padding: 3, marginBottom: 'var(--space-5)', display: 'inline-flex' }}>
-          <button className={`tab-item ${activeTab === 'bank' ? 'active' : ''}`} onClick={() => setActiveTab('bank')} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Bank size={16} /> Bank Accounts
-          </button>
-          <button className={`tab-item ${activeTab === 'vendors' ? 'active' : ''}`} onClick={() => setActiveTab('vendors')} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Buildings size={16} /> Vendors / Wholesalers
-          </button>
-          <button className={`tab-item ${activeTab === 'ledger' ? 'active' : ''}`} onClick={() => setActiveTab('ledger')} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FileText size={16} /> Ledger Book
-          </button>
-        </div>
+        {/* ── DASHBOARD ─────────────────────────────────────────────────────── */}
+        {section === 'dashboard' && (
+          <>
+            {/* Top tiles */}
+            <div className="grid grid-4" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+              <div className="stat-card" style={{ borderTop: '3px solid var(--status-free)' }}>
+                <div className="stat-label">Total Cash & Bank Balance</div>
+                <div className="stat-value" style={{ color: 'var(--status-free)', fontSize: '1.5rem' }}>{formatAmount(totalBankBalance)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{bankAccounts.length} accounts</div>
+              </div>
+              <div className="stat-card" style={{ borderTop: '3px solid var(--status-billing)' }}>
+                <div className="stat-label">Total Payables (Creditors)</div>
+                <div className="stat-value" style={{ color: 'var(--status-billing)', fontSize: '1.5rem' }}>{formatAmount(totalPayables)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{vendors.length} vendors</div>
+              </div>
+              <div className="stat-card" style={{ borderTop: '3px solid var(--accent)' }}>
+                <div className="stat-label">This Month Receipts</div>
+                <div className="stat-value" style={{ color: 'var(--accent)', fontSize: '1.5rem' }}>{formatAmount(monthlyReceipts)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>Money IN</div>
+              </div>
+              <div className="stat-card" style={{ borderTop: '3px solid var(--status-occupied)' }}>
+                <div className="stat-label">This Month Payments</div>
+                <div className="stat-value" style={{ color: 'var(--status-occupied)', fontSize: '1.5rem' }}>{formatAmount(monthlyPayments)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>Money OUT</div>
+              </div>
+            </div>
 
-        {/* Bank Accounts Tab */}
-        {activeTab === 'bank' && (
+            {/* Quick actions */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={() => { setSection('journal'); }}>
+                <Plus size={16} /> New Voucher Entry
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowAddVendor(true)}>
+                <Buildings size={16} /> Add Vendor / Party
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowAddBank(true)}>
+                <Bank size={16} /> Add Bank Account
+              </button>
+            </div>
+
+            {/* Recent transactions */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">Recent Transactions (Last 10)</div>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th>Account</th>
+                      <th style={{ textAlign: 'right' }}>Debit (Dr)</th>
+                      <th style={{ textAlign: 'right' }}>Credit (Cr)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledgerTransactions.slice(0, 10).map(tx => {
+                      const entityName = tx.accountType === 'vendor'
+                        ? vendors.find(v => v.id === tx.accountId)?.name
+                        : tx.accountType === 'bank'
+                          ? bankAccounts.find(b => b.id === tx.accountId)?.accountName
+                          : 'Cash';
+                      return (
+                        <tr key={tx.id}>
+                          <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString('en-IN')}</td>
+                          <td style={{ maxWidth: 260, fontSize: '0.875rem' }}>{tx.description || '—'}</td>
+                          <td>
+                            <span className="badge badge-muted" style={{ textTransform: 'capitalize' }}>{entityName || tx.accountType}</span>
+                          </td>
+                          <td style={{ textAlign: 'right', color: 'var(--status-billing)', fontWeight: tx.transactionType === 'debit' ? 700 : 400 }}>
+                            {tx.transactionType === 'debit' ? formatAmount(tx.amount) : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', color: 'var(--status-free)', fontWeight: tx.transactionType === 'credit' ? 700 : 400 }}>
+                            {tx.transactionType === 'credit' ? formatAmount(tx.amount) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {ledgerTransactions.length === 0 && (
+                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No transactions yet. Start by creating a Voucher Entry.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── VOUCHER ENTRY (Tally-style) ───────────────────────────────────── */}
+        {section === 'journal' && (
+          <div className="card" style={{ maxWidth: 640 }}>
+            <div className="card-header">
+              <div className="card-title">Voucher Entry</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Select the voucher type that matches your transaction</div>
+            </div>
+            <div style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Voucher type selector */}
+              <div>
+                <label className="input-label" style={{ marginBottom: 10, display: 'block' }}>Voucher Type</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {VOUCHER_TYPES.map(vt => (
+                    <button
+                      key={vt.id}
+                      onClick={() => setVoucherForm(f => ({ ...f, voucherType: vt.id }))}
+                      className={`btn btn-sm ${voucherForm.voucherType === vt.id ? 'btn-primary' : 'btn-secondary'}`}
+                    >
+                      {vt.icon} {vt.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, padding: '8px 12px', background: 'var(--accent-dim)', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  ℹ️ {VOUCHER_TYPES.find(v => v.id === voucherForm.voucherType)?.help}
+                </div>
+              </div>
+
+              <div className="grid grid-2" style={{ gap: 16 }}>
+                <div className="input-group">
+                  <label className="input-label">Date</label>
+                  <input className="input" type="date" value={voucherForm.date} onChange={e => setVoucherForm(f => ({ ...f, date: e.target.value }))} />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Amount (₹)</label>
+                  <input className="input" type="number" min="0" value={voucherForm.amount || ''} placeholder="0.00"
+                    onChange={e => setVoucherForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+                </div>
+              </div>
+
+              {/* Payment fields */}
+              {(voucherForm.voucherType === 'payment' || voucherForm.voucherType === 'receipt') && (
+                <>
+                  <div className="input-group">
+                    <label className="input-label">
+                      {voucherForm.voucherType === 'payment' ? '💸 Paying From (Cash/Bank)' : '💰 Received In (Cash/Bank)'}
+                    </label>
+                    <select className="input select" value={voucherForm.bankAccountId} onChange={e => setVoucherForm(f => ({ ...f, bankAccountId: e.target.value }))}>
+                      <option value="">— Select Account —</option>
+                      {bankAccounts.map(b => (
+                        <option key={b.id} value={b.id}>{b.accountName} ({formatAmount(b.currentBalance)})</option>
+                      ))}
+                    </select>
+                  </div>
+                  {voucherForm.voucherType === 'payment' && (
+                    <>
+                      <div className="input-group">
+                        <label className="input-label">Expense Head / Category</label>
+                        <select className="input select" value={voucherForm.expenseHead} onChange={e => setVoucherForm(f => ({ ...f, expenseHead: e.target.value }))}>
+                          {EXPENSE_HEADS.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Paying to Vendor? (Optional)</label>
+                        <select className="input select" value={voucherForm.vendorId} onChange={e => setVoucherForm(f => ({ ...f, vendorId: e.target.value }))}>
+                          <option value="">— Not a vendor payment —</option>
+                          {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Purchase fields */}
+              {voucherForm.voucherType === 'purchase' && (
+                <div className="input-group">
+                  <label className="input-label">🛒 Purchase From (Vendor / Party)</label>
+                  <select className="input select" value={voucherForm.vendorId} onChange={e => setVoucherForm(f => ({ ...f, vendorId: e.target.value }))}>
+                    <option value="">— Select Vendor —</option>
+                    {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Contra fields */}
+              {voucherForm.voucherType === 'contra' && (
+                <div className="grid grid-2" style={{ gap: 16 }}>
+                  <div className="input-group">
+                    <label className="input-label">🔄 Transfer FROM</label>
+                    <select className="input select" value={voucherForm.fromAccountId} onChange={e => setVoucherForm(f => ({ ...f, fromAccountId: e.target.value }))}>
+                      <option value="">— Select Account —</option>
+                      {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.accountName}</option>)}
+                    </select>
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Transfer TO</label>
+                    <select className="input select" value={voucherForm.toAccountId} onChange={e => setVoucherForm(f => ({ ...f, toAccountId: e.target.value }))}>
+                      <option value="">— Select Account —</option>
+                      {bankAccounts.filter(b => b.id !== voucherForm.fromAccountId).map(b => <option key={b.id} value={b.id}>{b.accountName}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Narration & Ref */}
+              <div className="grid grid-2" style={{ gap: 16 }}>
+                <div className="input-group">
+                  <label className="input-label">Narration / Notes</label>
+                  <input className="input" value={voucherForm.narration} placeholder="Brief description..."
+                    onChange={e => setVoucherForm(f => ({ ...f, narration: e.target.value }))} />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Bill / Ref. No. (Optional)</label>
+                  <input className="input" value={voucherForm.referenceNo} placeholder="Invoice / Cheque no."
+                    onChange={e => setVoucherForm(f => ({ ...f, referenceNo: e.target.value }))} />
+                </div>
+              </div>
+
+              <button className="btn btn-primary" style={{ alignSelf: 'flex-start', paddingLeft: 24, paddingRight: 24 }} onClick={handleSubmitVoucher}>
+                <CheckCircle size={18} /> Save Voucher
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── DAY BOOK (Ledger) ─────────────────────────────────────────────── */}
+        {section === 'ledger' && (
           <div className="card">
-            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="card-header" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <div className="card-title">Day Book / Ledger</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginLeft: 'auto' }}>
+                <input className="input" type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} style={{ width: 150 }} />
+                <span style={{ color: 'var(--text-muted)' }}>to</span>
+                <input className="input" type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} style={{ width: 150 }} />
+                <select className="input select" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ width: 130 }}>
+                  <option value="all">All Types</option>
+                  <option value="debit">Debit (Dr)</option>
+                  <option value="credit">Credit (Cr)</option>
+                </select>
+                <select className="input select" value={filterAccount} onChange={e => setFilterAccount(e.target.value)} style={{ width: 140 }}>
+                  <option value="all">All Accounts</option>
+                  <option value="bank">Bank/Cash</option>
+                  <option value="vendor">Vendor</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Particulars</th>
+                    <th>Account</th>
+                    <th>Ref. No.</th>
+                    <th style={{ textAlign: 'right' }}>Debit (Dr)</th>
+                    <th style={{ textAlign: 'right' }}>Credit (Cr)</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLedger.map(tx => {
+                    const entityName = tx.accountType === 'vendor'
+                      ? vendors.find(v => v.id === tx.accountId)?.name
+                      : tx.accountType === 'bank'
+                        ? bankAccounts.find(b => b.id === tx.accountId)?.accountName
+                        : 'Cash';
+                    return (
+                      <tr key={tx.id}>
+                        <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString('en-IN')}</td>
+                        <td style={{ maxWidth: 260, fontSize: '0.875rem' }}>{tx.description || '—'}</td>
+                        <td>
+                          <span className={`badge badge-${tx.accountType === 'bank' ? 'free' : 'reserved'}`} style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
+                            {entityName || tx.accountType}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{tx.referenceId || '—'}</td>
+                        <td style={{ textAlign: 'right', fontWeight: tx.transactionType === 'debit' ? 700 : 400, color: tx.transactionType === 'debit' ? 'var(--status-billing)' : 'var(--text-muted)' }}>
+                          {tx.transactionType === 'debit' ? formatAmount(tx.amount) : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: tx.transactionType === 'credit' ? 700 : 400, color: tx.transactionType === 'credit' ? 'var(--status-free)' : 'var(--text-muted)' }}>
+                          {tx.transactionType === 'credit' ? formatAmount(tx.amount) : '—'}
+                        </td>
+                        <td>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Delete" onClick={() => confirmDelete('ledger', tx.id, tx.description || 'this entry')}>
+                            <Trash size={14} color="var(--status-occupied)" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredLedger.length === 0 && (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No entries in selected range</td></tr>
+                  )}
+                </tbody>
+                {filteredLedger.length > 0 && (
+                  <tfoot>
+                    <tr style={{ fontWeight: 800, background: 'var(--bg-secondary)' }}>
+                      <td colSpan={4} style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Total ({filteredLedger.length} entries)</td>
+                      <td style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--status-billing)' }}>
+                        {formatAmount(filteredLedger.filter(t => t.transactionType === 'debit').reduce((s, t) => s + t.amount, 0))}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--status-free)' }}>
+                        {formatAmount(filteredLedger.filter(t => t.transactionType === 'credit').reduce((s, t) => s + t.amount, 0))}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── BANK & CASH ───────────────────────────────────────────────────── */}
+        {section === 'bank' && (
+          <div className="card">
+            <div className="card-header">
               <div className="card-title">Bank & Cash Accounts</div>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAddBank(true)}>
+              <button className="btn btn-primary btn-sm" onClick={() => { setEditingBank(null); setBankForm({ accountName: '', accountNumber: '', bankName: '', openingBalance: 0, accountType: 'current' }); setShowAddBank(true); }}>
                 <Plus size={16} /> Add Account
               </button>
             </div>
@@ -123,38 +648,59 @@ export default function Accounting() {
                 <thead>
                   <tr>
                     <th>Account Name</th>
-                    <th>Bank Details</th>
-                    <th>Opening Balance</th>
+                    <th>Bank / Type</th>
+                    <th>Account No.</th>
+                    <th style={{ textAlign: 'right' }}>Opening Balance</th>
                     <th style={{ textAlign: 'right' }}>Current Balance</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bankAccounts.map(b => (
                     <tr key={b.id}>
-                      <td style={{ fontWeight: 600 }}>{b.accountName}</td>
-                      <td>
-                        <div style={{ fontSize: '0.8rem' }}>{b.bankName || '-'}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{b.accountNumber || '-'}</div>
+                      <td style={{ fontWeight: 700 }}>{b.accountName}</td>
+                      <td style={{ color: 'var(--text-muted)' }}>{b.bankName || 'Cash Account'}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{b.accountNumber || '—'}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(b.openingBalance)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: b.currentBalance >= 0 ? 'var(--status-free)' : 'var(--status-billing)' }}>
+                        {formatAmount(b.currentBalance)}
                       </td>
-                      <td>{formatAmount(b.openingBalance)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--status-free)' }}>{formatAmount(b.currentBalance)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={() => openEditBank(b)}>
+                            <PencilSimple size={15} />
+                          </button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Delete" onClick={() => confirmDelete('bank', b.id, b.accountName)}>
+                            <Trash size={15} color="var(--status-occupied)" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {bankAccounts.length === 0 && (
-                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No accounts found</td></tr>
+                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No bank/cash accounts added yet</td></tr>
                   )}
                 </tbody>
+                {bankAccounts.length > 0 && (
+                  <tfoot>
+                    <tr style={{ fontWeight: 800, background: 'var(--bg-secondary)' }}>
+                      <td colSpan={4} style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Total Balance</td>
+                      <td style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--status-free)' }}>{formatAmount(totalBankBalance)}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>
         )}
 
-        {/* Vendors Tab */}
-        {activeTab === 'vendors' && (
+        {/* ── VENDORS ───────────────────────────────────────────────────────── */}
+        {section === 'vendors' && (
           <div className="card">
-            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="card-title">Vendors & Wholesalers</div>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAddVendor(true)}>
+            <div className="card-header">
+              <div className="card-title">Vendor / Party Master</div>
+              <button className="btn btn-primary btn-sm" onClick={() => { setEditingVendor(null); setVendorForm({ name: '', contactPerson: '', phone: '', email: '', address: '', gstNumber: '', openingBalance: 0 }); setShowAddVendor(true); }}>
                 <Plus size={16} /> Add Vendor
               </button>
             </div>
@@ -162,35 +708,48 @@ export default function Accounting() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Vendor Name</th>
-                    <th>Contact Info</th>
+                    <th>Party Name</th>
+                    <th>Contact</th>
                     <th>GST No.</th>
-                    <th style={{ textAlign: 'right' }}>Outstanding Payable</th>
+                    <th style={{ textAlign: 'right' }}>Opening Balance</th>
+                    <th style={{ textAlign: 'right' }}>Purchases</th>
+                    <th style={{ textAlign: 'right' }}>Paid</th>
+                    <th style={{ textAlign: 'right' }}>Outstanding (Cr.)</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {vendors.map(v => {
-                    const vendorTxs = ledgerTransactions.filter(t => t.accountType === 'vendor' && t.accountId === v.id);
-                    const credits = vendorTxs.filter(t => t.transactionType === 'credit').reduce((s, t) => s + t.amount, 0);
-                    const debits = vendorTxs.filter(t => t.transactionType === 'debit').reduce((s, t) => s + t.amount, 0);
-                    const balance = v.openingBalance + credits - debits;
-                    
-                    return (
-                      <tr key={v.id}>
-                        <td style={{ fontWeight: 600 }}>{v.name}</td>
-                        <td>
-                          <div style={{ fontSize: '0.8rem' }}>{v.contactPerson || '-'}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{v.phone || v.email || '-'}</div>
-                        </td>
-                        <td>{v.gstNumber || '-'}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: balance > 0 ? 'var(--status-billing)' : 'var(--text-muted)' }}>
-                          {formatAmount(balance)}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {vendorBalances.map(({ vendor: v, balance, purchased, paid }) => (
+                    <tr key={v.id}>
+                      <td style={{ fontWeight: 700 }}>{v.name}</td>
+                      <td>
+                        <div style={{ fontSize: '0.8rem' }}>{v.contactPerson || '—'}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{v.phone || v.email || '—'}</div>
+                      </td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{v.gstNumber || '—'}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(v.openingBalance)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--status-billing)' }}>{formatAmount(purchased)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--status-free)' }}>{formatAmount(paid)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: balance > 0 ? 'var(--status-billing)' : 'var(--status-free)' }}>
+                        {formatAmount(balance)}
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                          {balance > 0 ? 'You owe them' : balance < 0 ? 'They owe you' : 'Settled'}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={() => openEditVendor(v)}>
+                            <PencilSimple size={15} />
+                          </button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Delete" onClick={() => confirmDelete('vendor', v.id, v.name)}>
+                            <Trash size={15} color="var(--status-occupied)" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                   {vendors.length === 0 && (
-                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No vendors found</td></tr>
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No vendors added yet</td></tr>
                   )}
                 </tbody>
               </table>
@@ -198,186 +757,201 @@ export default function Accounting() {
           </div>
         )}
 
-        {/* Ledger Tab */}
-        {activeTab === 'ledger' && (
-          <div className="card">
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Account Type</th>
-                    <th>Entity / Account</th>
-                    <th>Description</th>
-                    <th style={{ textAlign: 'right' }}>Debit (Out/Paid)</th>
-                    <th style={{ textAlign: 'right' }}>Credit (In/Received)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ledgerTransactions.map(tx => {
-                    let entityName = '-';
-                    if (tx.accountType === 'vendor') entityName = vendors.find(v => v.id === tx.accountId)?.name || 'Unknown Vendor';
-                    if (tx.accountType === 'bank') entityName = bankAccounts.find(b => b.id === tx.accountId)?.accountName || 'Unknown Bank';
-                    // Staff isn't fully linked here yet but could be via staffStore
-                    
-                    return (
-                      <tr key={tx.id}>
-                        <td>{new Date(tx.date).toLocaleDateString()}</td>
-                        <td style={{ textTransform: 'capitalize' }}>
-                          <span className={`badge badge-muted`}>{tx.accountType}</span>
-                        </td>
-                        <td style={{ fontWeight: 600 }}>{entityName}</td>
-                        <td style={{ color: 'var(--text-muted)' }}>{tx.description || '-'}</td>
-                        <td style={{ textAlign: 'right', color: tx.transactionType === 'debit' ? 'var(--status-billing)' : '' }}>
-                          {tx.transactionType === 'debit' ? formatAmount(tx.amount) : '-'}
-                        </td>
-                        <td style={{ textAlign: 'right', color: tx.transactionType === 'credit' ? 'var(--status-free)' : '' }}>
-                          {tx.transactionType === 'credit' ? formatAmount(tx.amount) : '-'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {ledgerTransactions.length === 0 && (
-                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No ledger entries found</td></tr>
-                  )}
-                </tbody>
-              </table>
+        {/* ── PAYABLES STATEMENT ────────────────────────────────────────────── */}
+        {section === 'payables' && (
+          <>
+            <div className="grid grid-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+              <div className="stat-card" style={{ borderTop: '3px solid var(--status-billing)' }}>
+                <div className="stat-label">Total Outstanding Payables</div>
+                <div className="stat-value" style={{ color: 'var(--status-billing)' }}>{formatAmount(totalPayables)}</div>
+              </div>
+              <div className="stat-card" style={{ borderTop: '3px solid var(--status-free)' }}>
+                <div className="stat-label">Fully Settled Vendors</div>
+                <div className="stat-value" style={{ color: 'var(--status-free)' }}>{vendorBalances.filter(v => v.balance <= 0).length}</div>
+              </div>
+              <div className="stat-card" style={{ borderTop: '3px solid var(--status-reserved)' }}>
+                <div className="stat-label">Vendors with Outstanding</div>
+                <div className="stat-value" style={{ color: 'var(--status-reserved)' }}>{vendorBalances.filter(v => v.balance > 0).length}</div>
+              </div>
             </div>
-          </div>
+
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">Creditors / Payables Ledger</div>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Party Name</th>
+                      <th>Phone</th>
+                      <th style={{ textAlign: 'right' }}>Opening (Dr.)</th>
+                      <th style={{ textAlign: 'right' }}>Purchases (Cr.)</th>
+                      <th style={{ textAlign: 'right' }}>Payments (Dr.)</th>
+                      <th style={{ textAlign: 'right' }}>Balance (Cr.)</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendorBalances
+                      .sort((a, b) => b.balance - a.balance)
+                      .map(({ vendor: v, balance, purchased, paid }, i) => (
+                        <tr key={v.id}>
+                          <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
+                          <td style={{ fontWeight: 700 }}>{v.name}</td>
+                          <td style={{ color: 'var(--text-muted)' }}>{v.phone || '—'}</td>
+                          <td style={{ textAlign: 'right' }}>{formatAmount(v.openingBalance)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--status-billing)' }}>{formatAmount(purchased)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--status-free)' }}>{formatAmount(paid)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: balance > 0 ? 'var(--status-billing)' : 'var(--status-free)' }}>
+                            {formatAmount(Math.abs(balance))} {balance > 0 ? 'Cr.' : balance < 0 ? 'Dr.' : ''}
+                          </td>
+                          <td>
+                            <span className={`badge badge-${balance <= 0 ? 'free' : balance > 5000 ? 'occupied' : 'reserved'}`}>
+                              {balance <= 0 ? 'Settled' : balance > 5000 ? 'High' : 'Pending'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    {vendors.length === 0 && (
+                      <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No vendor data</td></tr>
+                    )}
+                  </tbody>
+                  {vendors.length > 0 && (
+                    <tfoot>
+                      <tr style={{ fontWeight: 800, background: 'var(--bg-secondary)' }}>
+                        <td colSpan={3} style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Grand Total</td>
+                        <td style={{ textAlign: 'right', padding: '10px 16px' }}>
+                          {formatAmount(vendors.reduce((s, v) => s + v.openingBalance, 0))}
+                        </td>
+                        <td style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--status-billing)' }}>
+                          {formatAmount(vendorBalances.reduce((s, v) => s + v.purchased, 0))}
+                        </td>
+                        <td style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--status-free)' }}>
+                          {formatAmount(vendorBalances.reduce((s, v) => s + v.paid, 0))}
+                        </td>
+                        <td style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--status-billing)', fontWeight: 900 }}>
+                          {formatAmount(totalPayables)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
-      {/* Add Bank Modal */}
+      {/* ── ADD / EDIT BANK MODAL ─────────────────────────────────────────────── */}
       {showAddBank && (
-        <div className="modal-overlay" onClick={() => setShowAddBank(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => { setShowAddBank(false); setEditingBank(null); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 480, maxWidth: '95%' }}>
             <div className="modal-header">
-              <span className="modal-title"><Bank size={18} style={{ display: 'inline', marginRight: 8 }} />Add Bank Account</span>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowAddBank(false)}>×</button>
+              <span className="modal-title"><Bank size={18} style={{ display: 'inline', marginRight: 8 }} />{editingBank ? 'Edit' : 'Add'} Bank / Cash Account</span>
+              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setShowAddBank(false); setEditingBank(null); }}>×</button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="input-group">
-                <label className="input-label">Account Name / Nickname</label>
-                <input className="input" placeholder="e.g. HDFC Main" value={bankForm.accountName} onChange={e => setBankForm({...bankForm, accountName: e.target.value})} />
+                <label className="input-label">Account Nickname *</label>
+                <input className="input" placeholder="e.g. HDFC Current, Petty Cash" value={bankForm.accountName} onChange={e => setBankForm({ ...bankForm, accountName: e.target.value })} />
               </div>
-              <div className="input-group">
-                <label className="input-label">Bank Name</label>
-                <input className="input" value={bankForm.bankName} onChange={e => setBankForm({...bankForm, bankName: e.target.value})} />
+              <div className="grid grid-2" style={{ gap: 16 }}>
+                <div className="input-group">
+                  <label className="input-label">Bank Name</label>
+                  <input className="input" placeholder="e.g. HDFC Bank" value={bankForm.bankName} onChange={e => setBankForm({ ...bankForm, bankName: e.target.value })} />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Account Type</label>
+                  <select className="input select" value={bankForm.accountType} onChange={e => setBankForm({ ...bankForm, accountType: e.target.value as any })}>
+                    <option value="current">Current</option>
+                    <option value="savings">Savings</option>
+                    <option value="cash">Cash in Hand</option>
+                  </select>
+                </div>
               </div>
               <div className="input-group">
                 <label className="input-label">Account Number</label>
-                <input className="input" value={bankForm.accountNumber} onChange={e => setBankForm({...bankForm, accountNumber: e.target.value})} />
+                <input className="input" value={bankForm.accountNumber} onChange={e => setBankForm({ ...bankForm, accountNumber: e.target.value })} />
               </div>
               <div className="input-group">
-                <label className="input-label">Opening Balance</label>
-                <input className="input" type="number" value={bankForm.openingBalance} onChange={e => setBankForm({...bankForm, openingBalance: Number(e.target.value)})} />
+                <label className="input-label">Opening Balance (₹)</label>
+                <input className="input" type="number" value={bankForm.openingBalance} onChange={e => setBankForm({ ...bankForm, openingBalance: Number(e.target.value) })} />
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowAddBank(false)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleAddBank}>Save Account</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setShowAddBank(false); setEditingBank(null); }}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={handleAddBank}>{editingBank ? 'Update Account' : 'Save Account'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Vendor Modal */}
+      {/* ── ADD / EDIT VENDOR MODAL ───────────────────────────────────────────── */}
       {showAddVendor && (
-        <div className="modal-overlay" onClick={() => setShowAddVendor(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => { setShowAddVendor(false); setEditingVendor(null); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 520, maxWidth: '95%' }}>
             <div className="modal-header">
-              <span className="modal-title"><Buildings size={18} style={{ display: 'inline', marginRight: 8 }} />Add Vendor</span>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowAddVendor(false)}>×</button>
+              <span className="modal-title"><Buildings size={18} style={{ display: 'inline', marginRight: 8 }} />{editingVendor ? 'Edit' : 'Add'} Vendor / Party</span>
+              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setShowAddVendor(false); setEditingVendor(null); }}>×</button>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '60vh', overflowY: 'auto' }}>
               <div className="input-group">
-                <label className="input-label">Business Name</label>
-                <input className="input" value={vendorForm.name} onChange={e => setVendorForm({...vendorForm, name: e.target.value})} />
+                <label className="input-label">Business / Party Name *</label>
+                <input className="input" value={vendorForm.name} onChange={e => setVendorForm({ ...vendorForm, name: e.target.value })} />
               </div>
               <div className="grid grid-2" style={{ gap: 16 }}>
                 <div className="input-group">
                   <label className="input-label">Contact Person</label>
-                  <input className="input" value={vendorForm.contactPerson} onChange={e => setVendorForm({...vendorForm, contactPerson: e.target.value})} />
+                  <input className="input" value={vendorForm.contactPerson} onChange={e => setVendorForm({ ...vendorForm, contactPerson: e.target.value })} />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Phone</label>
-                  <input className="input" value={vendorForm.phone} onChange={e => setVendorForm({...vendorForm, phone: e.target.value})} />
+                  <input className="input" type="tel" value={vendorForm.phone} onChange={e => setVendorForm({ ...vendorForm, phone: e.target.value })} />
                 </div>
               </div>
               <div className="input-group">
                 <label className="input-label">GST Number</label>
-                <input className="input" value={vendorForm.gstNumber} onChange={e => setVendorForm({...vendorForm, gstNumber: e.target.value})} />
+                <input className="input" placeholder="22AAAAA0000A1Z5" value={vendorForm.gstNumber} onChange={e => setVendorForm({ ...vendorForm, gstNumber: e.target.value.toUpperCase() })} />
               </div>
               <div className="input-group">
-                <label className="input-label">Opening Balance (Owed to them)</label>
-                <input className="input" type="number" value={vendorForm.openingBalance} onChange={e => setVendorForm({...vendorForm, openingBalance: Number(e.target.value)})} />
+                <label className="input-label">Address</label>
+                <input className="input" value={vendorForm.address} onChange={e => setVendorForm({ ...vendorForm, address: e.target.value })} />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Opening Balance — Amount you already owe them (₹)</label>
+                <input className="input" type="number" min="0" value={vendorForm.openingBalance} onChange={e => setVendorForm({ ...vendorForm, openingBalance: Number(e.target.value) })} />
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowAddVendor(false)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleAddVendor}>Save Vendor</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setShowAddVendor(false); setEditingVendor(null); }}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={handleAddVendor}>{editingVendor ? 'Update Vendor' : 'Save Vendor'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Record Transaction Modal */}
-      {showAddTx && (
-        <div className="modal-overlay" onClick={() => setShowAddTx(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+      {/* ── DELETE CONFIRM ────────────────────────────────────────────────────── */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 400, maxWidth: '90%' }}>
             <div className="modal-header">
-              <span className="modal-title"><CurrencyInr size={18} style={{ display: 'inline', marginRight: 8 }} />Record Ledger Entry</span>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowAddTx(false)}>×</button>
+              <span className="modal-title" style={{ color: 'var(--status-occupied)' }}>
+                <Trash size={18} style={{ display: 'inline', marginRight: 8 }} />Confirm Delete
+              </span>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="grid grid-2" style={{ gap: 16 }}>
-                <div className="input-group">
-                  <label className="input-label">Account Type</label>
-                  <select className="input select" value={txForm.accountType} onChange={e => setTxForm({...txForm, accountType: e.target.value as any, accountId: ''})}>
-                    <option value="bank">Bank Account</option>
-                    <option value="vendor">Vendor</option>
-                    <option value="cash">General Cash</option>
-                  </select>
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Type</label>
-                  <select className="input select" value={txForm.transactionType} onChange={e => setTxForm({...txForm, transactionType: e.target.value as any})}>
-                    <option value="credit">Credit (Money In / Payable Increase)</option>
-                    <option value="debit">Debit (Money Out / Payable Decrease)</option>
-                  </select>
-                </div>
-              </div>
-              
-              {txForm.accountType !== 'cash' && (
-                <div className="input-group">
-                  <label className="input-label">Select Entity</label>
-                  <select className="input select" value={txForm.accountId} onChange={e => setTxForm({...txForm, accountId: e.target.value})}>
-                    <option value="">Select...</option>
-                    {txForm.accountType === 'bank' && bankAccounts.map(b => <option key={b.id} value={b.id}>{b.accountName}</option>)}
-                    {txForm.accountType === 'vendor' && vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
-                </div>
-              )}
-
-              <div className="grid grid-2" style={{ gap: 16 }}>
-                <div className="input-group">
-                  <label className="input-label">Amount</label>
-                  <input className="input" type="number" value={txForm.amount} onChange={e => setTxForm({...txForm, amount: Number(e.target.value)})} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Date</label>
-                  <input className="input" type="date" value={txForm.date} onChange={e => setTxForm({...txForm, date: e.target.value})} />
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label className="input-label">Description / Notes</label>
-                <input className="input" value={txForm.description} onChange={e => setTxForm({...txForm, description: e.target.value})} />
-              </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)' }}>
+                Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This action cannot be undone.
+              </p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowAddTx(false)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleAddTx}>Record Entry</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className="btn btn-sm" style={{ background: 'var(--status-occupied)', color: '#fff' }} onClick={executeDelete}>
+                <Trash size={14} /> Delete
+              </button>
             </div>
           </div>
         </div>
