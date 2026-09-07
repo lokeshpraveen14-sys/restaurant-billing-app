@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Railway Coach Kerala Restaurant - Complete Software User Guide</title>
+  <style>
+    /* ─── FONTS ─────────────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Georgia:ital,wght@0,400;0,700;1,400&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap');
+
+    /* ─── RESET ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ─── PAGE SETUP ────────────────────────────────────────────── */
+    html { font-size: 13pt; }
+    body {
+      font-family: 'Roboto', Georgia, serif;
+      color: #1a1a2e;
+      background: #ffffff;
+      line-height: 1.75;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    /* ─── PRINT ─────────────────────────────────────────────────── */
+    @media print {
+      html { font-size: 11pt; }
+      body { max-width: 100%; margin: 0; }
+      .cover-page { page-break-after: always; }
+      .chapter { page-break-before: always; }
+      .no-break { page-break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+      .print-hide { display: none; }
+    }
+
+    /* ─── COVER ─────────────────────────────────────────────────── */
+    .cover-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #0c0e16 0%, #1a1a2e 50%, #16213e 100%);
+      color: #ffffff;
+      text-align: center;
+      padding: 60px 40px;
+    }
+    .cover-logo {
+      width: 90px;
+      height: 90px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 32px;
+      font-size: 40px;
+    }
+    .cover-title {
+      font-family: 'Roboto', sans-serif;
+      font-size: 2.6rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+    .cover-subtitle {
+      font-size: 1.15rem;
+      color: #a0aec0;
+      margin-bottom: 48px;
+      font-weight: 300;
+    }
+    .cover-meta {
+      border-top: 1px solid rgba(255,255,255,0.15);
+      padding-top: 28px;
+      color: #718096;
+      font-size: 0.85rem;
+      line-height: 2;
+    }
+    .cover-badge {
+      display: inline-block;
+      background: rgba(245,158,11,0.2);
+      border: 1px solid rgba(245,158,11,0.4);
+      color: #f59e0b;
+      padding: 6px 20px;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    /* ─── TOC ───────────────────────────────────────────────────── */
+    .toc-page {
+      padding: 60px 60px;
+    }
+    .toc-section-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #718096;
+      margin-bottom: 24px;
+    }
+    .toc-list { list-style: none; }
+    .toc-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+      padding: 6px 0;
+      border-bottom: 1px dotted #e2e8f0;
+    }
+    .toc-list li .toc-num {
+      font-weight: 700;
+      color: #f59e0b;
+      min-width: 42px;
+      font-size: 0.85rem;
+    }
+    .toc-list li .toc-text {
+      flex: 1;
+      font-size: 0.95rem;
+      color: #2d3748;
+    }
+    .toc-list li.sub {
+      padding-left: 42px;
+      border-bottom: none;
+    }
+    .toc-list li.sub .toc-num { color: #a0aec0; font-weight: 400; }
+    .toc-list li.sub .toc-text { color: #718096; font-size: 0.88rem; }
+
+    /* ─── CHAPTER ───────────────────────────────────────────────── */
+    .chapter {
+      padding: 60px 60px;
+    }
+    .chapter-number {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #f59e0b;
+      margin-bottom: 8px;
+    }
+    h1.chapter-title {
+      font-family: 'Roboto', sans-serif;
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+    .chapter-desc {
+      color: #718096;
+      font-size: 0.95rem;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 2px solid #f7fafc;
+    }
+
+    /* ─── HEADINGS ──────────────────────────────────────────────── */
+    h2 {
+      font-family: 'Roboto', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin: 36px 0 12px;
+      padding-left: 14px;
+      border-left: 4px solid #f59e0b;
+    }
+    h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #2d3748;
+      margin: 24px 0 8px;
+    }
+    h4 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #4a5568;
+      margin: 16px 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── TEXT ──────────────────────────────────────────────────── */
+    p {
+      margin-bottom: 14px;
+      color: #2d3748;
+      font-size: 0.95rem;
+    }
+
+    /* ─── LISTS ─────────────────────────────────────────────────── */
+    ul, ol {
+      margin: 12px 0 16px 24px;
+      color: #2d3748;
+      font-size: 0.95rem;
+    }
+    li { margin-bottom: 6px; }
+    li strong { color: #1a1a2e; }
+
+    /* ─── STEPS ─────────────────────────────────────────────────── */
+    .steps {
+      counter-reset: step-counter;
+      list-style: none;
+      margin: 16px 0;
+      padding: 0;
+    }
+    .steps li {
+      counter-increment: step-counter;
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+    .steps li::before {
+      content: counter(step-counter);
+      min-width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #1a1a2e;
+      color: #f59e0b;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .steps li .step-body { flex: 1; }
+    .steps li .step-body strong { display: block; margin-bottom: 4px; color: #1a1a2e; }
+
+    /* ─── TABLE ─────────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 0.875rem;
+    }
+    th {
+      background: #1a1a2e;
+      color: #f59e0b;
+      font-weight: 700;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 0.8rem;
+      letter-spacing: 0.3px;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #edf2f7;
+      color: #2d3748;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #f8fafc; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ─── INFO BOXES ────────────────────────────────────────────── */
+    .info-box {
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 20px 0;
+      font-size: 0.9rem;
+    }
+    .info-box.note {
+      background: #ebf8ff;
+      border-left: 4px solid #3182ce;
+      color: #2c5282;
+    }
+    .info-box.warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #744210;
+    }
+    .info-box.important {
+      background: #fff5f5;
+      border-left: 4px solid #e53e3e;
+      color: #742a2a;
+    }
+    .info-box.tip {
+      background: #f0fff4;
+      border-left: 4px solid #38a169;
+      color: #276749;
+    }
+    .info-box strong { display: block; margin-bottom: 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+
+    /* ─── SHORTCUT KEY ──────────────────────────────────────────── */
+    kbd {
+      display: inline-block;
+      background: #edf2f7;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.8rem;
+      color: #2d3748;
+    }
+
+    /* ─── DIVIDER ───────────────────────────────────────────────── */
+    hr {
+      border: none;
+      border-top: 1px solid #edf2f7;
+      margin: 32px 0;
+    }
+
+    /* ─── SCREEN PATH ───────────────────────────────────────────── */
+    .path {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.8rem;
+      background: #2d3748;
+      color: #f59e0b;
+      padding: 3px 10px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    /* ─── ROLE BADGE ────────────────────────────────────────────── */
+    .role {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .role.admin { background: #f59e0b; color: #1a1a2e; }
+    .role.manager { background: #3182ce; color: white; }
+    .role.cashier { background: #38a169; color: white; }
+    .role.waiter { background: #805ad5; color: white; }
+    .role.kitchen { background: #e53e3e; color: white; }
+
+    /* ─── FEATURE GRID ──────────────────────────────────────────── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .feature-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .feature-card h4 { margin-top: 0; color: #1a1a2e; }
+    .feature-card p { margin: 0; font-size: 0.85rem; color: #718096; }
+
+    /* ─── WORKFLOW ──────────────────────────────────────────────── */
+    .workflow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 20px 0;
+      position: relative;
+    }
+    .workflow-step {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding-bottom: 24px;
+      position: relative;
+    }
+    .workflow-step:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      left: 19px;
+      top: 38px;
+      width: 2px;
+      height: calc(100% - 14px);
+      background: #e2e8f0;
+    }
+    .workflow-dot {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #1a1a2e;
+      color: #f59e0b;
+      font-weight: 700;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      z-index: 1;
+    }
+    .workflow-content { flex: 1; padding-top: 8px; }
+    .workflow-content strong { display: block; font-size: 0.95rem; margin-bottom: 4px; color: #1a1a2e; }
+    .workflow-content p { font-size: 0.875rem; color: #718096; margin: 0; }
+
+    /* ─── PRINT BUTTON ──────────────────────────────────────────── */
+    .print-btn {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #1a1a2e;
+      color: #f59e0b;
+      border: 2px solid #f59e0b;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-family: 'Roboto', sans-serif;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      z-index: 999;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .print-btn:hover { background: #f59e0b; color: #1a1a2e; }
+    @media print { .print-btn { display: none; } }
+  </style>
+</head>
+<body>
+
+<button class="print-btn print-hide" onclick="window.print()">Save as PDF</button>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- COVER PAGE                                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="cover-page">
+  <div class="cover-badge">User Guide and Reference Manual</div>
+  <div class="cover-logo">RC</div>
+  <div class="cover-title">Railway Coach Kerala Restaurant<br/>Restaurant Management System</div>
+  <div class="cover-subtitle">Complete Software Guide — All Modules Covered</div>
+  <div class="cover-meta">
+    <div>Document Type: End-User Operational Manual</div>
+    <div>Version: 2.0 — Including Accounting, Ledger, Salary, and Billing</div>
+    <div>Prepared for: Restaurant Owners, Managers, and Staff</div>
+    <div>Language: English</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- TABLE OF CONTENTS                                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="toc-page chapter">
+  <div class="toc-section-title">Table of Contents</div>
+  <ul class="toc-list">
+    <li><span class="toc-num">01</span><span class="toc-text">Introduction and System Overview</span></li>
+    <li><span class="toc-num">02</span><span class="toc-text">Login and User Roles</span></li>
+    <li class="sub"><span class="toc-num">2.1</span><span class="toc-text">Role-Based Permissions</span></li>
+    <li class="sub"><span class="toc-num">2.2</span><span class="toc-text">How to Log In</span></li>
+    <li><span class="toc-num">03</span><span class="toc-text">Dashboard</span></li>
+    <li><span class="toc-num">04</span><span class="toc-text">Table Management</span></li>
+    <li><span class="toc-num">05</span><span class="toc-text">Order Taking</span></li>
+    <li class="sub"><span class="toc-num">5.1</span><span class="toc-text">Creating a New Order</span></li>
+    <li class="sub"><span class="toc-num">5.2</span><span class="toc-text">Modifying and Splitting Orders</span></li>
+    <li><span class="toc-num">06</span><span class="toc-text">Kitchen Display System (KDS)</span></li>
+    <li><span class="toc-num">07</span><span class="toc-text">Billing and Payment</span></li>
+    <li class="sub"><span class="toc-num">7.1</span><span class="toc-text">Generating a Bill</span></li>
+    <li class="sub"><span class="toc-num">7.2</span><span class="toc-text">Discounts, GST, and Payment Modes</span></li>
+    <li class="sub"><span class="toc-num">7.3</span><span class="toc-text">Bill History</span></li>
+    <li><span class="toc-num">08</span><span class="toc-text">Menu Management</span></li>
+    <li class="sub"><span class="toc-num">8.1</span><span class="toc-text">Adding and Editing Items</span></li>
+    <li class="sub"><span class="toc-num">8.2</span><span class="toc-text">Managing Variants and Categories</span></li>
+    <li class="sub"><span class="toc-num">8.3</span><span class="toc-text">Deleting Menu Items</span></li>
+    <li><span class="toc-num">09</span><span class="toc-text">Inventory Management</span></li>
+    <li class="sub"><span class="toc-num">9.1</span><span class="toc-text">Stock Levels and Reorder</span></li>
+    <li class="sub"><span class="toc-num">9.2</span><span class="toc-text">Purchase Entry</span></li>
+    <li><span class="toc-num">10</span><span class="toc-text">Reports and Analytics</span></li>
+    <li><span class="toc-num">11</span><span class="toc-text">Staff Management and Salary</span></li>
+    <li class="sub"><span class="toc-num">11.1</span><span class="toc-text">Adding and Managing Staff</span></li>
+    <li class="sub"><span class="toc-num">11.2</span><span class="toc-text">Salary and Advance Payments</span></li>
+    <li><span class="toc-num">12</span><span class="toc-text">Accounting and Ledger (Indian Standard)</span></li>
+    <li class="sub"><span class="toc-num">12.1</span><span class="toc-text">Understanding the Voucher System</span></li>
+    <li class="sub"><span class="toc-num">12.2</span><span class="toc-text">Payment Voucher</span></li>
+    <li class="sub"><span class="toc-num">12.3</span><span class="toc-text">Receipt Voucher</span></li>
+    <li class="sub"><span class="toc-num">12.4</span><span class="toc-text">Purchase Voucher</span></li>
+    <li class="sub"><span class="toc-num">12.5</span><span class="toc-text">Contra Voucher</span></li>
+    <li class="sub"><span class="toc-num">12.6</span><span class="toc-text">Day Book (Ledger)</span></li>
+    <li class="sub"><span class="toc-num">12.7</span><span class="toc-text">Bank and Cash Accounts</span></li>
+    <li class="sub"><span class="toc-num">12.8</span><span class="toc-text">Vendor Party Master</span></li>
+    <li class="sub"><span class="toc-num">12.9</span><span class="toc-text">Payables Ledger</span></li>
+    <li><span class="toc-num">13</span><span class="toc-text">Counter Operations (Bakery and Juice)</span></li>
+    <li><span class="toc-num">14</span><span class="toc-text">Shift Management</span></li>
+    <li><span class="toc-num">15</span><span class="toc-text">Settings</span></li>
+    <li><span class="toc-num">16</span><span class="toc-text">Frequently Asked Questions</span></li>
+    <li><span class="toc-num">17</span><span class="toc-text">Glossary of Accounting Terms</span></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 1: INTRODUCTION                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 01</div>
+  <h1 class="chapter-title">Introduction and System Overview</h1>
+  <div class="chapter-desc">What this software does and how it is structured</div>
+
+  <p>The Railway Coach Kerala Restaurant Management System is a complete, end-to-end software solution built to handle all aspects of a restaurant business — from taking orders at the table to closing the books at the end of the month. This guide covers every single module in detail so that the owner, manager, cashier, waiter, and kitchen staff can all use the software with confidence.</p>
+
+  <p>The software runs in a web browser and is accessible from any device including tablets, computers, and smartphones. All data is saved to a central cloud database in real time, so every device at the restaurant sees the same up-to-date information simultaneously.</p>
+
+  <h2>What This System Covers</h2>
+  <div class="feature-grid">
+    <div class="feature-card no-break">
+      <h4>Front of House</h4>
+      <p>Table management, order taking, billing, bill history, head count tracking</p>
+    </div>
+    <div class="feature-card no-break">
+      <h4>Kitchen Operations</h4>
+      <p>Kitchen display system, order queuing, status updates, KOT management</p>
+    </div>
+    <div class="feature-card no-break">
+      <h4>Back Office</h4>
+      <p>Menu management, inventory, purchase entries, vendor management, reports</p>
+    </div>
+    <div class="feature-card no-break">
+      <h4>HR and Payroll</h4>
+      <p>Staff records, salary management, advance payments, bank account details</p>
+    </div>
+    <div class="feature-card no-break">
+      <h4>Accounting</h4>
+      <p>Voucher entries, day book, bank and cash accounts, payables, ledger reports</p>
+    </div>
+    <div class="feature-card no-break">
+      <h4>Counters</h4>
+      <p>Dedicated bakery counter and juice counter with their own billing flows</p>
+    </div>
+  </div>
+
+  <h2>Data and Synchronization</h2>
+  <p>All data is stored in Supabase, a cloud database. This means:</p>
+  <ul>
+    <li>Data entered on one device is immediately visible on all other devices at the restaurant.</li>
+    <li>If the internet goes down briefly, the system continues to work using local storage and will sync when connectivity is restored.</li>
+    <li>Data is never lost. Every bill, order, voucher, and salary record is permanently stored.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 2: LOGIN AND ROLES                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 02</div>
+  <h1 class="chapter-title">Login and User Roles</h1>
+  <div class="chapter-desc">How to access the system and what each role can do</div>
+
+  <h2>Logging In</h2>
+  <p>The login page is the first screen you see when you open the application. All staff members log in using a 4-digit PIN. There is no username to remember — only the PIN is required.</p>
+
+  <ol class="steps">
+    <li><div class="step-body"><strong>Open the application</strong>Go to the restaurant's web address in any browser on any device.</div></li>
+    <li><div class="step-body"><strong>Enter your 4-digit PIN</strong>Tap the numbered buttons on screen or type the PIN using the keyboard.</div></li>
+    <li><div class="step-body"><strong>Press Login</strong>The system will identify you by your PIN and load the dashboard appropriate to your role.</div></li>
+  </ol>
+
+  <div class="info-box warning">
+    <strong>Important</strong>
+    Each PIN must be unique. Two staff members cannot share the same PIN. If a PIN is entered incorrectly, the system will reject it without any message about who the PIN belongs to, for security reasons.
+  </div>
+
+  <h2>Role-Based Permissions</h2>
+  <p>The system has five roles. Each role has a specific set of pages and functions it can access. The Admin has full access to everything.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Role</th>
+        <th>What They Can Access</th>
+        <th>Typical Staff</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="role admin">Admin</span></td>
+        <td>All modules without restriction: billing, menu, inventory, reports, staff, accounting, settings</td>
+        <td>Owner, General Manager</td>
+      </tr>
+      <tr>
+        <td><span class="role manager">Manager</span></td>
+        <td>Tables, orders, billing, inventory, reports, menu, kitchen</td>
+        <td>Floor Manager, Supervisor</td>
+      </tr>
+      <tr>
+        <td><span class="role cashier">Cashier</span></td>
+        <td>Billing, orders, reports</td>
+        <td>Counter Staff, Billing Staff</td>
+      </tr>
+      <tr>
+        <td><span class="role waiter">Waiter</span></td>
+        <td>Tables, order taking, menu viewing</td>
+        <td>Servers, Stewards</td>
+      </tr>
+      <tr>
+        <td><span class="role kitchen">Kitchen</span></td>
+        <td>Kitchen Display System only</td>
+        <td>Cooks, Kitchen Staff</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Logging Out</h2>
+  <p>Click the logout button at the bottom of the left sidebar next to your name. You will be returned to the PIN login screen. Always log out when leaving the device unattended.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 3: DASHBOARD                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 03</div>
+  <h1 class="chapter-title">Dashboard</h1>
+  <div class="chapter-desc">The central control panel — your live view of the restaurant</div>
+
+  <p>The dashboard is the first screen after login. It gives a real-time snapshot of the restaurant's current status and today's financial performance at a glance.</p>
+
+  <h2>Dashboard Sections</h2>
+
+  <h3>Live Status Cards</h3>
+  <ul>
+    <li><strong>Open Tables:</strong> Number of tables currently occupied with active orders.</li>
+    <li><strong>Active Orders:</strong> Total number of orders currently in the kitchen queue.</li>
+    <li><strong>Today's Revenue:</strong> Total billed and collected amount for the current calendar day.</li>
+    <li><strong>Today's Covers:</strong> Total number of guests served today.</li>
+  </ul>
+
+  <h3>Revenue Summary</h3>
+  <p>Buttons allow you to switch the revenue view between Today, This Week, and This Month. The system fetches all bills in the selected period and calculates the total revenue, number of bills, and average bill value.</p>
+
+  <h3>Table Status Overview</h3>
+  <p>A miniature view of all tables in the restaurant showing their current status using color coding:</p>
+  <table>
+    <thead><tr><th>Color</th><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>Green</td><td>Free</td><td>Table is empty and ready for guests</td></tr>
+      <tr><td>Amber/Yellow</td><td>Reserved</td><td>Table is booked but guest has not arrived</td></tr>
+      <tr><td>Red</td><td>Occupied</td><td>Guests are seated with an active order</td></tr>
+      <tr><td>Blue</td><td>Billing</td><td>Bill has been generated, awaiting payment</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Recent Bills</h3>
+  <p>The last five bills generated are shown with the table number, time, and amount. Click any bill to view its details.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 4: TABLE MANAGEMENT                                     -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 04</div>
+  <h1 class="chapter-title">Table Management</h1>
+  <div class="chapter-desc">Managing the physical layout and status of your tables</div>
+
+  <p>Navigate to <span class="path">Sidebar - Tables</span> to access the table management page. This page displays all tables in the restaurant laid out visually.</p>
+
+  <h2>Understanding Table States</h2>
+  <p>Every table has one of four states. The color and icon on each table card shows its current status. You can also see how long a table has been in its current state.</p>
+
+  <h2>Seating Guests at a Table</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click on a Free table</strong>A panel will slide open on the right side of the screen.</div></li>
+    <li><div class="step-body"><strong>Set the guest count</strong>Enter the number of guests being seated at this table. This is important for the head count report.</div></li>
+    <li><div class="step-body"><strong>Click Seat Guests</strong>The table status changes to Occupied. You can now take their order.</div></li>
+  </ol>
+
+  <h2>Reserving a Table</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click on a Free table</strong>Open the table details panel.</div></li>
+    <li><div class="step-body"><strong>Click Mark as Reserved</strong>The table turns yellow and is marked reserved for an upcoming guest.</div></li>
+    <li><div class="step-body"><strong>When the guest arrives</strong>Click the reserved table and click Seat Guests to convert it to occupied.</div></li>
+  </ol>
+
+  <h2>Adding or Editing Tables</h2>
+  <p>Only the Admin can add, rename, or delete tables. To add a table, click the plus button at the top right. You can set the table number and capacity. Tables can also be reordered on screen to match the physical layout of the restaurant.</p>
+
+  <div class="info-box tip">
+    <strong>Tip</strong>
+    You can filter tables on this page by status using the filter buttons at the top. Use the Occupied filter to quickly see which tables need attention.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 5: ORDER TAKING                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 05</div>
+  <h1 class="chapter-title">Order Taking</h1>
+  <div class="chapter-desc">From seating to sending items to the kitchen</div>
+
+  <p>Navigate to <span class="path">Sidebar - New Order</span> or tap any occupied table and click New Order. The order taking screen is the main working screen for waiters.</p>
+
+  <h2>Screen Layout</h2>
+  <ul>
+    <li><strong>Left Panel:</strong> Menu categories and items. Scroll through or search for items.</li>
+    <li><strong>Right Panel:</strong> The current order (the KOT — Kitchen Order Ticket) showing items added, quantities, and running total.</li>
+  </ul>
+
+  <h2>Adding Items to an Order</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Select the table</strong>At the top of the order screen, choose which table this order is for.</div></li>
+    <li><div class="step-body"><strong>Browse or search the menu</strong>Click a category on the left to filter items. Use the search bar to find a specific item by name.</div></li>
+    <li><div class="step-body"><strong>Click an item to add it</strong>The item appears in the order panel on the right with a quantity of 1.</div></li>
+    <li><div class="step-body"><strong>Select a variant if required</strong>If an item has multiple variants (for example, Half or Full), a pop-up will appear asking you to select the correct variant.</div></li>
+    <li><div class="step-body"><strong>Adjust quantity</strong>Use the plus and minus buttons next to each item in the order panel to increase or decrease quantity.</div></li>
+    <li><div class="step-body"><strong>Add a note to an item</strong>Long-press or click the note icon next to any item to add a special instruction such as No Onion or Extra Spicy. This note will print on the kitchen ticket.</div></li>
+  </ol>
+
+  <h2>Sending the Order to the Kitchen</h2>
+  <p>When the order is complete, click the Send to Kitchen button at the bottom of the order panel. The system will:</p>
+  <ul>
+    <li>Create a KOT (Kitchen Order Ticket) and send it to the Kitchen Display System.</li>
+    <li>Mark the table as Occupied with an active order.</li>
+    <li>Lock sent items so they cannot be changed without a manager override.</li>
+  </ul>
+
+  <h2>Adding More Items (Second Round)</h2>
+  <p>If guests order more items after the first KOT has been sent, go back to the same table and click Add More Items. New items can be added and sent as a second KOT. The bill will combine all KOTs for that table.</p>
+
+  <h2>Cancelling an Item</h2>
+  <p>To remove an item from an already-sent order, a Manager or Admin must perform the cancellation. The system records who cancelled and at what time for audit purposes.</p>
+
+  <div class="info-box warning">
+    <strong>Important</strong>
+    Items that have already been sent to the kitchen cannot be silently removed. The system keeps a log of all cancellations to prevent loss of revenue.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 6: KITCHEN DISPLAY SYSTEM                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 06</div>
+  <h1 class="chapter-title">Kitchen Display System (KDS)</h1>
+  <div class="chapter-desc">Real-time order management for kitchen staff</div>
+
+  <p>Navigate to <span class="path">Sidebar - Kitchen Display</span>. This page is designed to be used on a tablet or screen mounted in the kitchen. Kitchen staff can see all incoming orders without needing a paper printout.</p>
+
+  <h2>Understanding the KDS Screen</h2>
+  <p>Each order appears as a card on the screen. The card shows:</p>
+  <ul>
+    <li>The table number the order is for</li>
+    <li>The time the order was placed (and how long ago)</li>
+    <li>All items in the order with quantities</li>
+    <li>Any special instructions written by the waiter</li>
+    <li>The current status of the order</li>
+  </ul>
+
+  <h2>Order Status Colors</h2>
+  <table>
+    <thead><tr><th>Color</th><th>Status</th><th>Action Required</th></tr></thead>
+    <tbody>
+      <tr><td>Red border</td><td>New / Pending</td><td>Start preparing immediately</td></tr>
+      <tr><td>Yellow border</td><td>In Progress</td><td>Being cooked — do not duplicate</td></tr>
+      <tr><td>Green border</td><td>Ready</td><td>Ready to be served — notify waiter</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Updating Order Status</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>When you start cooking</strong>Click the Mark In Progress button on the order card. The card border turns yellow.</div></li>
+    <li><div class="step-body"><strong>When food is ready to serve</strong>Click the Mark Ready button. The card turns green and the waiter will be notified on their device.</div></li>
+    <li><div class="step-body"><strong>When food has been served</strong>The waiter clicks Served, which removes the order from the kitchen display.</div></li>
+  </ol>
+
+  <div class="info-box tip">
+    <strong>Tip</strong>
+    The KDS automatically refreshes every 15 seconds. If the screen has not refreshed, check the internet connection. Orders will buffer locally and sync when connectivity is restored.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 7: BILLING AND PAYMENT                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 07</div>
+  <h1 class="chapter-title">Billing and Payment</h1>
+  <div class="chapter-desc">Generating bills, applying discounts, accepting payment, and printing</div>
+
+  <p>Navigate to <span class="path">Sidebar - Billing</span>. Billing can also be initiated directly from a table by clicking Generate Bill on an occupied table.</p>
+
+  <h2>Generating a Bill</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Select the table</strong>Choose the occupied table for which you want to generate a bill from the dropdown at the top.</div></li>
+    <li><div class="step-body"><strong>Review the bill</strong>All items from all KOTs for the selected table will be listed. Verify the items with the guest before proceeding.</div></li>
+    <li><div class="step-body"><strong>Apply discount if needed</strong>Enter a discount percentage or fixed amount in the discount field. The system will recalculate the total automatically.</div></li>
+    <li><div class="step-body"><strong>Select payment mode</strong>Choose how the guest is paying: Cash, Card, UPI, or Split (multiple modes).</div></li>
+    <li><div class="step-body"><strong>Enter amount received</strong>For cash payments, enter the amount given by the guest. The system will calculate and display the change to be returned.</div></li>
+    <li><div class="step-body"><strong>Click Generate Bill</strong>The bill is finalized and the table status changes to Billing, then Free.</div></li>
+  </ol>
+
+  <h2>GST Calculation</h2>
+  <p>GST is automatically calculated based on the rate assigned to each menu item. Restaurants typically apply:</p>
+  <table>
+    <thead><tr><th>GST Rate</th><th>When Applied</th></tr></thead>
+    <tbody>
+      <tr><td>5%</td><td>Most food items at standalone restaurants with turnover below Rs. 1.5 crore</td></tr>
+      <tr><td>12%</td><td>Restaurants with air conditioning, seafood, or items served in five-star properties</td></tr>
+      <tr><td>18%</td><td>Outdoor catering</td></tr>
+    </tbody>
+  </table>
+  <p>The bill shows both CGST and SGST breakup as required by Indian GST law. The total GST is split 50/50 between CGST (Central) and SGST (State).</p>
+
+  <div class="info-box note">
+    <strong>Note</strong>
+    The GST rate for each item is set in Menu Management. Make sure the correct rate is assigned when adding new menu items.
+  </div>
+
+  <h2>Split Payment</h2>
+  <p>If a guest wants to pay partly by cash and partly by card or UPI, select the Split payment option. Enter the amount for each mode separately. The total of all modes must equal the bill amount.</p>
+
+  <h2>Printing the Bill</h2>
+  <p>After generating a bill, a print-ready receipt appears on screen. Click the Print button to send it to the connected receipt printer. The receipt includes:</p>
+  <ul>
+    <li>Restaurant name, address, and GSTIN</li>
+    <li>Table number, bill number, date, and time</li>
+    <li>Itemized list with quantities and prices</li>
+    <li>Subtotal, GST breakup (CGST + SGST), discount applied, and final amount</li>
+    <li>Payment mode used and change returned</li>
+  </ul>
+
+  <h2>Bill History</h2>
+  <p>Navigate to <span class="path">Sidebar - Bill History</span>. All bills generated are stored here permanently. You can search by date, bill number, or table. You can also view and reprint any old bill from this screen.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 8: MENU MANAGEMENT                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 08</div>
+  <h1 class="chapter-title">Menu Management</h1>
+  <div class="chapter-desc">Adding, editing, disabling, and deleting menu items and categories</div>
+
+  <p>Navigate to <span class="path">Sidebar - Menu</span>. Only Admin and Manager roles can access this page.</p>
+
+  <h2>Page Layout</h2>
+  <ul>
+    <li><strong>Left Panel:</strong> Category list showing all categories with item count for each.</li>
+    <li><strong>Right Panel:</strong> Table listing all items in the selected category with their price, GST rate, and availability status.</li>
+  </ul>
+
+  <h2>Adding a New Menu Item</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Add Item</strong>Button at the top right of the page.</div></li>
+    <li><div class="step-body"><strong>Fill in the details</strong>Item name, category, base price, and GST rate are required. Description, spice level, and special flag are optional.</div></li>
+    <li><div class="step-body"><strong>Set Veg or Non-Veg</strong>Toggle the switch to indicate whether the item is vegetarian. The green dot (veg) or red dot (non-veg) will appear on the order screen.</div></li>
+    <li><div class="step-body"><strong>Add Variants if needed</strong>If the item has multiple sizes or options (for example, Half and Full, or Small, Medium, Large), add them in the Variants section. Each variant has its own name and price.</div></li>
+    <li><div class="step-body"><strong>Click Save</strong>The item appears in the menu immediately and is available for ordering.</div></li>
+  </ol>
+
+  <h2>Editing an Existing Item</h2>
+  <p>Click the edit (pencil) icon next to any item. The same form opens with the current details pre-filled. Make your changes and click Save.</p>
+
+  <h2>Enabling or Disabling an Item</h2>
+  <p>Click the toggle switch icon in the Actions column. A green toggle means the item is available and will show on the order screen. A grey toggle means the item is disabled (86'd) and will not appear when taking orders. This is useful when an item is temporarily out of stock.</p>
+
+  <h2>Deleting a Menu Item</h2>
+  <p>Click the red trash icon in the Actions column. A confirmation dialog will appear asking you to confirm the deletion. This action is permanent. The item will be removed from the menu and will no longer be available for ordering. Historical bills that included this item are not affected.</p>
+
+  <div class="info-box warning">
+    <strong>Warning</strong>
+    Deleting an item is irreversible. If the item is only temporarily unavailable, use the Disable toggle instead of deleting it. This way you can re-enable it later.
+  </div>
+
+  <h2>Managing Categories</h2>
+  <p>Categories appear in the left panel. The order in which categories appear on the order screen matches the sort order assigned to each category. Contact the Admin to add a new category or change the sort order.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 9: INVENTORY MANAGEMENT                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 09</div>
+  <h1 class="chapter-title">Inventory Management</h1>
+  <div class="chapter-desc">Tracking raw material stock and recording purchases</div>
+
+  <p>Navigate to <span class="path">Sidebar - Inventory</span>. This page is for tracking all raw materials and ingredients used in the kitchen.</p>
+
+  <h2>Stock Levels Tab</h2>
+  <p>The default view shows all ingredients with their current stock quantity, reorder level, and status. Items below reorder level show a yellow Low warning. Items at zero show a red Out warning.</p>
+
+  <h3>Adding an Ingredient</h3>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Add Ingredient</strong>at the top right of the page.</div></li>
+    <li><div class="step-body"><strong>Enter ingredient details</strong>Name, category (Meat, Dairy, Vegetables, etc.), unit of measurement (kg, L, pcs, etc.), current stock quantity, and the reorder level (minimum quantity before you need to reorder).</div></li>
+    <li><div class="step-body"><strong>Set cost per unit</strong>The cost you pay per kg, per litre, or per piece. This is used to calculate total inventory value.</div></li>
+    <li><div class="step-body"><strong>Click Save</strong>The ingredient is added to the inventory list.</div></li>
+  </ol>
+
+  <h3>Editing an Ingredient</h3>
+  <p>Click the pencil icon next to any ingredient to update its details, including adjusting the current stock if there is a physical count difference.</p>
+
+  <h3>Deleting an Ingredient</h3>
+  <p>Click the red trash icon. A confirmation prompt will appear. Deleting an ingredient removes it from the inventory list but does not affect past purchase records.</p>
+
+  <h2>Purchase Entry Tab</h2>
+  <p>Every time you receive stock from a supplier, record a purchase entry here. This updates the current stock quantity automatically.</p>
+
+  <h3>Recording a Purchase</h3>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Purchase Entry</strong>at the top of the page.</div></li>
+    <li><div class="step-body"><strong>Select the ingredient</strong>Choose from the dropdown of all registered ingredients.</div></li>
+    <li><div class="step-body"><strong>Enter quantity received</strong>The amount of stock being added.</div></li>
+    <li><div class="step-body"><strong>Enter cost per unit</strong>The price paid this time (may differ from the default if prices changed).</div></li>
+    <li><div class="step-body"><strong>Select vendor</strong>If the vendor is registered in the Accounting module, select them from the dropdown. This will automatically create a payable entry in the ledger showing that you now owe money to this vendor.</div></li>
+    <li><div class="step-body"><strong>Enter invoice reference number</strong>Optional — the vendor's invoice or bill number for cross-referencing.</div></li>
+    <li><div class="step-body"><strong>Click Record Purchase</strong>The stock quantity is updated immediately.</div></li>
+  </ol>
+
+  <div class="info-box note">
+    <strong>Integration with Accounting</strong>
+    When you select a registered vendor while recording a purchase, the system automatically creates a Purchase voucher entry in the Accounting module. This means your vendor's outstanding balance (payable) is updated without any separate manual entry.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 10: REPORTS AND ANALYTICS                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 10</div>
+  <h1 class="chapter-title">Reports and Analytics</h1>
+  <div class="chapter-desc">Understanding your business performance through data</div>
+
+  <p>Navigate to <span class="path">Sidebar - Reports</span> for financial summaries, and <span class="path">Sidebar - Analytics</span> for visual charts.</p>
+
+  <h2>Reports Page</h2>
+
+  <h3>Revenue Summary</h3>
+  <p>Switch between Today, This Week, and This Month to see total revenue for the period. The system fetches all bills in the selected period using complete pagination to ensure accuracy, even if there are thousands of bills.</p>
+  <ul>
+    <li><strong>Total Revenue:</strong> Sum of all bills generated</li>
+    <li><strong>Total Bills:</strong> Number of billing transactions</li>
+    <li><strong>Average Bill Value:</strong> Revenue divided by number of bills</li>
+    <li><strong>Total Covers:</strong> Total number of guests served</li>
+  </ul>
+
+  <h3>Payment Mode Breakdown</h3>
+  <p>How much revenue came from Cash, Card, and UPI. This helps verify the cash in hand against what the system shows.</p>
+
+  <h3>Top Selling Items</h3>
+  <p>A ranked list of the most ordered menu items for the selected period. Use this to understand which items are popular and which may need to be promoted or reconsidered.</p>
+
+  <h3>GST Summary</h3>
+  <p>Total GST collected in the period, split by rate (5%, 12%, 18%) and further split into CGST and SGST. This is directly usable for filing your GST returns.</p>
+
+  <h2>Analytics Page</h2>
+  <p>The analytics page provides visual graphs and trend charts. Key charts include:</p>
+  <ul>
+    <li>Daily revenue trend for the past 30 days</li>
+    <li>Peak hours chart showing which time of day is busiest</li>
+    <li>Category-wise sales breakdown (how much of total revenue comes from each menu category)</li>
+    <li>Week-over-week comparison</li>
+  </ul>
+
+  <div class="info-box tip">
+    <strong>Tip</strong>
+    Use the peak hours chart to decide staffing levels. If the restaurant is consistently busiest between 12 pm and 2 pm and again at 7 pm to 9 pm, ensure full staff is present during those windows.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 11: STAFF MANAGEMENT AND SALARY                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 11</div>
+  <h1 class="chapter-title">Staff Management and Salary</h1>
+  <div class="chapter-desc">Managing staff records, salaries, and advance payments</div>
+
+  <p>Navigate to <span class="path">Sidebar - Staff</span>. Only Admin can access staff management.</p>
+
+  <h2>Staff List Tab</h2>
+  <p>This tab shows all registered staff members with their role, monthly salary, and bank details.</p>
+
+  <h3>Adding a New Staff Member</h3>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Add Staff</strong>at the top right.</div></li>
+    <li><div class="step-body"><strong>Enter their full name</strong>This name appears throughout the system including on the KDS screen.</div></li>
+    <li><div class="step-body"><strong>Enter email (optional)</strong>Not required for system access, but useful for records.</div></li>
+    <li><div class="step-body"><strong>Select role</strong>Choose from Admin, Manager, Cashier, Waiter, or Kitchen. This determines what the staff member can see and do.</div></li>
+    <li><div class="step-body"><strong>Create a 4-digit PIN</strong>This is the staff member's login credential. Choose a PIN they can remember but that others will not guess.</div></li>
+    <li><div class="step-body"><strong>Click Add Staff</strong>The staff member can now log in immediately.</div></li>
+  </ol>
+
+  <h3>Editing Staff Details</h3>
+  <p>Click the pencil icon next to any staff member. In addition to changing name, role, and PIN, you can now also set:</p>
+  <ul>
+    <li><strong>Base Monthly Salary:</strong> The fixed monthly amount paid to this staff member.</li>
+    <li><strong>Joining Date:</strong> The date the staff member started working.</li>
+    <li><strong>Bank Account Number:</strong> For salary transfer records.</li>
+    <li><strong>IFSC Code:</strong> Bank branch code for salary transfer.</li>
+  </ul>
+
+  <h3>Deactivating or Deleting a Staff Member</h3>
+  <p>When a staff member leaves, you have two options:</p>
+  <ul>
+    <li><strong>Deactivate:</strong> Click the toggle switch. The staff member cannot log in anymore, but their records remain for historical reports. This is the recommended option.</li>
+    <li><strong>Delete:</strong> Click the red trash icon. This permanently removes the staff member from the system. Only do this if the record was added by mistake.</li>
+  </ul>
+
+  <h2>Salaries and Advances Tab</h2>
+  <p>This tab records all salary payments and advance payments made to staff. It is a permanent log that you can refer to in case of disputes.</p>
+
+  <h3>Recording a Salary Payment</h3>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Record Payment</strong>at the top right.</div></li>
+    <li><div class="step-body"><strong>Select the staff member</strong>from the dropdown. Only active staff are shown.</div></li>
+    <li><div class="step-body"><strong>Select type</strong>Choose Salary for the monthly salary or Advance for a mid-month advance payment.</div></li>
+    <li><div class="step-body"><strong>Enter the amount</strong>The actual amount being paid.</div></li>
+    <li><div class="step-body"><strong>Select Month and Year</strong>The month for which this salary is being paid.</div></li>
+    <li><div class="step-body"><strong>Add notes (optional)</strong>For example, "Minus Rs. 2000 advance already given on 10th Sep".</div></li>
+    <li><div class="step-body"><strong>Click Save Payment</strong>The record is stored permanently.</div></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 12: ACCOUNTING AND LEDGER                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 12</div>
+  <h1 class="chapter-title">Accounting and Ledger</h1>
+  <div class="chapter-desc">Indian standard double-entry bookkeeping for your restaurant</div>
+
+  <p>Navigate to <span class="path">Sidebar - Accounting</span>. This module follows the same principles used in Tally ERP — the most widely used accounting software in India. If you have ever used Tally, this section will feel familiar.</p>
+
+  <div class="info-box note">
+    <strong>Before You Begin</strong>
+    The Accounting module works best after you have set up two things: your Bank and Cash Accounts (so the system knows where money is held) and your Vendor Master (so the system knows who you owe money to). Both are covered in sections 12.7 and 12.8.
+  </div>
+
+  <h2>The Six Sections of Accounting</h2>
+  <p>The accounting module is divided into six sections, accessible via the button bar at the top of the page:</p>
+
+  <table>
+    <thead><tr><th>Section</th><th>What It Does</th></tr></thead>
+    <tbody>
+      <tr><td>Dashboard</td><td>Overview of bank balances, payables, and this month's receipts and payments</td></tr>
+      <tr><td>Voucher Entry</td><td>Record any financial transaction — payment, receipt, purchase, contra, or journal</td></tr>
+      <tr><td>Day Book</td><td>Chronological list of every transaction ever recorded — the complete ledger</td></tr>
+      <tr><td>Bank and Cash</td><td>All bank and cash accounts with opening and current balances</td></tr>
+      <tr><td>Vendors / Party</td><td>All vendor accounts with purchase history and outstanding payable</td></tr>
+      <tr><td>Payables</td><td>Summary of how much you owe to each vendor in Indian creditor format</td></tr>
+    </tbody>
+  </table>
+
+  <h2>12.1 Understanding the Voucher System</h2>
+  <p>In Indian accounting, every transaction is recorded as a voucher. A voucher is simply a record of one financial event — money received, money paid, goods purchased on credit, or a fund transfer. There are five voucher types:</p>
+
+  <table>
+    <thead><tr><th>Voucher Type</th><th>When to Use</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Payment</strong></td>
+        <td>Any time money goes OUT of your bank or cash account</td>
+        <td>Paying electricity bill, paying salary, paying a vendor for goods purchased earlier</td>
+      </tr>
+      <tr>
+        <td><strong>Receipt</strong></td>
+        <td>Any time money comes IN to your bank or cash account</td>
+        <td>Depositing cash sales to bank, receiving a refund from a supplier</td>
+      </tr>
+      <tr>
+        <td><strong>Purchase</strong></td>
+        <td>Buying goods from a vendor on credit (you will pay later)</td>
+        <td>Receiving 50 kg of chicken from a supplier with a 15-day payment term</td>
+      </tr>
+      <tr>
+        <td><strong>Contra</strong></td>
+        <td>Moving money between your own bank and cash accounts</td>
+        <td>Withdrawing Rs. 5,000 from the bank and putting it in petty cash, or depositing cash to the bank</td>
+      </tr>
+      <tr>
+        <td><strong>Journal</strong></td>
+        <td>Any other adjustment entry that does not involve cash or bank directly</td>
+        <td>Depreciation of equipment, writing off a bad debt</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="info-box tip">
+    <strong>The Golden Rule of Vouchers</strong>
+    Use a Payment voucher when actual money (cash or bank) changes hands going out. Use a Purchase voucher when goods arrive on credit and you have NOT yet paid. When you later pay the vendor, record a Payment voucher and select the vendor's name — this reduces the outstanding payable.
+  </div>
+
+  <h2>12.2 Payment Voucher — Step-by-Step</h2>
+  <p>Use a Payment voucher for all expenses where cash or bank is debited (reduced).</p>
+
+  <ol class="steps">
+    <li><div class="step-body"><strong>Go to Voucher Entry section</strong>Click the Voucher Entry button at the top of the Accounting page.</div></li>
+    <li><div class="step-body"><strong>Select Payment as the voucher type</strong>Click the Payment button in the voucher type row.</div></li>
+    <li><div class="step-body"><strong>Set the date</strong>The date the payment was made. Default is today.</div></li>
+    <li><div class="step-body"><strong>Select the paying account</strong>Under "Paying From", choose the bank or cash account from which the payment is made.</div></li>
+    <li><div class="step-body"><strong>Select the expense head</strong>Choose the appropriate category: Salaries and Wages, Rent, Electricity, Gas, Raw Material Purchase, etc.</div></li>
+    <li><div class="step-body"><strong>If paying a vendor, select them</strong>If this payment is to clear a vendor's outstanding balance, select the vendor from the "Paying to Vendor" dropdown. The system will reduce that vendor's payable balance automatically.</div></li>
+    <li><div class="step-body"><strong>Enter the amount</strong></div></li>
+    <li><div class="step-body"><strong>Add narration</strong>A brief description such as "October electricity bill" or "Salary paid to Mohan for September".</div></li>
+    <li><div class="step-body"><strong>Enter reference number (optional)</strong>The cheque number, UPI transaction ID, or invoice number.</div></li>
+    <li><div class="step-body"><strong>Click Save Voucher</strong>The bank account balance is reduced by the payment amount. If a vendor was selected, their outstanding is also reduced.</div></li>
+  </ol>
+
+  <h2>12.3 Receipt Voucher — Step-by-Step</h2>
+  <p>Use a Receipt voucher when money is coming INTO your bank or cash account from a source other than regular table billing (which is already tracked through the billing module).</p>
+
+  <ol class="steps">
+    <li><div class="step-body"><strong>Select Receipt as voucher type</strong></div></li>
+    <li><div class="step-body"><strong>Set date and enter amount</strong></div></li>
+    <li><div class="step-body"><strong>Select the account receiving the money</strong>Under "Received In", choose which bank or cash account is being credited.</div></li>
+    <li><div class="step-body"><strong>Add narration</strong>For example, "Cash deposit from Saturday sales" or "Refund received from LPG supplier".</div></li>
+    <li><div class="step-body"><strong>Click Save Voucher</strong>The selected bank/cash account balance increases by the entered amount.</div></li>
+  </ol>
+
+  <h2>12.4 Purchase Voucher — Step-by-Step</h2>
+  <p>Use a Purchase voucher when you receive goods from a vendor but do NOT pay at the time of delivery. This is a credit purchase — the money will be paid later.</p>
+
+  <div class="info-box important">
+    <strong>Critical Distinction</strong>
+    A Purchase voucher does NOT reduce your bank balance. It increases what you owe to the vendor. When you later pay the vendor, you record a Payment voucher and select the vendor name. That Payment will reduce both the bank and the vendor's outstanding balance.
+  </div>
+
+  <ol class="steps">
+    <li><div class="step-body"><strong>Select Purchase as voucher type</strong></div></li>
+    <li><div class="step-body"><strong>Set the date</strong>The date the goods were received.</div></li>
+    <li><div class="step-body"><strong>Select the vendor</strong>from the "Purchase From" dropdown.</div></li>
+    <li><div class="step-body"><strong>Enter the total invoice amount</strong></div></li>
+    <li><div class="step-body"><strong>Add narration</strong>For example, "50 kg chicken received from Fresh Farms" or "Monthly vegetable supply".</div></li>
+    <li><div class="step-body"><strong>Enter bill or invoice number</strong>The vendor's invoice number for cross-reference.</div></li>
+    <li><div class="step-body"><strong>Click Save Voucher</strong>The vendor's outstanding payable increases by the entered amount.</div></li>
+  </ol>
+
+  <div class="info-box tip">
+    <strong>Shortcut for Common Purchases</strong>
+    If you record a purchase through the Inventory module (Purchase Entry) and select a registered vendor, the system automatically creates the Purchase voucher for you. You do not need to create it again in the Accounting module.
+  </div>
+
+  <h2>12.5 Contra Voucher — Step-by-Step</h2>
+  <p>Use a Contra voucher only for transfers between your own accounts — from cash to bank, or from one bank account to another. This is neither an income nor an expense.</p>
+
+  <ol class="steps">
+    <li><div class="step-body"><strong>Select Contra as voucher type</strong></div></li>
+    <li><div class="step-body"><strong>Select Transfer FROM</strong>Choose the account being debited (reduced).</div></li>
+    <li><div class="step-body"><strong>Select Transfer TO</strong>Choose the account being credited (increased).</div></li>
+    <li><div class="step-body"><strong>Enter the amount and date</strong></div></li>
+    <li><div class="step-body"><strong>Click Save Voucher</strong>One account decreases, the other increases by the same amount. Total funds remain the same.</div></li>
+  </ol>
+
+  <h2>12.6 Day Book (Ledger)</h2>
+  <p>Navigate to the Day Book section. This is the complete chronological record of every voucher entered in the system — equivalent to the Day Book in Tally.</p>
+
+  <h3>Reading the Day Book</h3>
+  <table>
+    <thead><tr><th>Column</th><th>What It Shows</th></tr></thead>
+    <tbody>
+      <tr><td>Date</td><td>The date the transaction occurred</td></tr>
+      <tr><td>Particulars</td><td>Description or narration of the transaction</td></tr>
+      <tr><td>Account</td><td>Which bank, vendor, or cash account is involved</td></tr>
+      <tr><td>Ref. No.</td><td>Invoice number or reference entered when creating the voucher</td></tr>
+      <tr><td>Debit (Dr)</td><td>Amount that went OUT or that was used — shown in red</td></tr>
+      <tr><td>Credit (Cr)</td><td>Amount that came IN or that was added — shown in green</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Filtering the Day Book</h3>
+  <ul>
+    <li><strong>Date Range:</strong> Use the From and To date pickers to see only a specific period.</li>
+    <li><strong>Type:</strong> Filter by Debit (Dr) or Credit (Cr) only.</li>
+    <li><strong>Account:</strong> Filter to show only Bank/Cash transactions or only Vendor transactions.</li>
+  </ul>
+  <p>The footer row shows the total Debit and total Credit for the filtered period. These should be equal in a properly balanced ledger.</p>
+
+  <h3>Deleting a Ledger Entry</h3>
+  <p>If a voucher was entered incorrectly, click the red trash icon at the end of that row to delete it. A confirmation dialog will appear. Only Admin users should perform ledger deletions.</p>
+
+  <h2>12.7 Bank and Cash Accounts</h2>
+  <p>Navigate to the Bank and Cash section. Before you can record any Payment or Receipt voucher, you must set up at least one bank or cash account here.</p>
+
+  <h3>Adding a Bank Account</h3>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Add Account</strong></div></li>
+    <li><div class="step-body"><strong>Enter account nickname</strong>A short name you will recognize — for example, HDFC Current, SBI Savings, or Petty Cash.</div></li>
+    <li><div class="step-body"><strong>Select account type</strong>Current, Savings, or Cash in Hand.</div></li>
+    <li><div class="step-body"><strong>Enter bank name and account number</strong>Optional but recommended for reference.</div></li>
+    <li><div class="step-body"><strong>Enter opening balance</strong>The amount in this account as of the date you start using this system. This is your starting point. All subsequent transactions will be added to or subtracted from this balance.</div></li>
+    <li><div class="step-body"><strong>Click Save Account</strong></div></li>
+  </ol>
+
+  <div class="info-box warning">
+    <strong>Opening Balance is Critical</strong>
+    The opening balance is the foundation of all future account statements. Enter the exact balance in your actual bank account on the day you start using this software. Check your bank statement or passbook for this number.
+  </div>
+
+  <h2>12.8 Vendor and Party Master</h2>
+  <p>Navigate to the Vendors / Party section. This is the list of all your suppliers, wholesalers, and other parties from whom you purchase on credit.</p>
+
+  <h3>Adding a Vendor</h3>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Add Vendor</strong></div></li>
+    <li><div class="step-body"><strong>Enter business name</strong>The legal or trading name of the supplier.</div></li>
+    <li><div class="step-body"><strong>Enter contact person, phone, and email</strong>For communication and reference.</div></li>
+    <li><div class="step-body"><strong>Enter GST number</strong>The vendor's GSTIN in the format 22AAAAA0000A1Z5. Required if you plan to claim input tax credit.</div></li>
+    <li><div class="step-body"><strong>Enter opening balance</strong>If you already owe money to this vendor before you started using this system, enter that amount here. This is the amount they supplied on credit in the past that you have not yet paid.</div></li>
+    <li><div class="step-body"><strong>Click Save Vendor</strong></div></li>
+  </ol>
+
+  <h3>Vendor Account Statement</h3>
+  <p>For each vendor in the list, the system shows:</p>
+  <ul>
+    <li><strong>Opening Balance:</strong> What you owed them when you started</li>
+    <li><strong>Purchases:</strong> Total value of goods received on credit (Purchase vouchers)</li>
+    <li><strong>Paid:</strong> Total payments made to them (Payment vouchers)</li>
+    <li><strong>Outstanding:</strong> What you currently owe — Opening + Purchases minus Payments</li>
+  </ul>
+
+  <h2>12.9 Payables Ledger</h2>
+  <p>Navigate to the Payables section. This is the creditors statement — a summary of what you owe to every vendor, sorted by outstanding balance from highest to lowest.</p>
+
+  <h3>Reading the Payables Ledger</h3>
+  <table>
+    <thead><tr><th>Status Badge</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>Settled (Green)</td><td>You do not owe this vendor anything. Balance is zero or negative (meaning they owe you).</td></tr>
+      <tr><td>Pending (Yellow)</td><td>You owe this vendor a moderate amount — below Rs. 5,000.</td></tr>
+      <tr><td>High (Red)</td><td>You owe this vendor more than Rs. 5,000. Pay promptly to maintain good supplier relations.</td></tr>
+    </tbody>
+  </table>
+
+  <p>The Grand Total row at the bottom shows your total outstanding payable to all vendors combined. This is the figure you need to match against your cash and bank position to understand whether you can meet your obligations.</p>
+
+  <h3>Practical Monthly Workflow for Accounting</h3>
+  <div class="workflow">
+    <div class="workflow-step">
+      <div class="workflow-dot">1</div>
+      <div class="workflow-content">
+        <strong>Start of Month — Check Opening Balances</strong>
+        <p>Verify that the closing balance from the previous month matches what is in your bank passbook and petty cash box.</p>
+      </div>
+    </div>
+    <div class="workflow-step">
+      <div class="workflow-dot">2</div>
+      <div class="workflow-content">
+        <strong>Throughout the Month — Record Daily Transactions</strong>
+        <p>Each time you pay a vendor, pay salaries, pay a utility bill, or receive money, record a voucher immediately. Do not let entries accumulate.</p>
+      </div>
+    </div>
+    <div class="workflow-step">
+      <div class="workflow-dot">3</div>
+      <div class="workflow-content">
+        <strong>Whenever Goods Arrive — Record Purchase Vouchers</strong>
+        <p>Every time a vendor delivers goods and you sign a challan or receive an invoice, record a Purchase voucher immediately.</p>
+      </div>
+    </div>
+    <div class="workflow-step">
+      <div class="workflow-dot">4</div>
+      <div class="workflow-content">
+        <strong>End of Month — Verify the Payables Ledger</strong>
+        <p>Compare the payables shown in the system against the statements or reminders received from each vendor. Discrepancies indicate a missing entry.</p>
+      </div>
+    </div>
+    <div class="workflow-step">
+      <div class="workflow-dot">5</div>
+      <div class="workflow-content">
+        <strong>End of Month — Reconcile Bank Statement</strong>
+        <p>Compare the current balance shown in the Bank and Cash section against your actual bank statement. If they do not match, check the Day Book for missing or duplicate entries.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 13: COUNTERS                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 13</div>
+  <h1 class="chapter-title">Counter Operations</h1>
+  <div class="chapter-desc">Bakery Counter and Juice Counter — independent billing flows</div>
+
+  <h2>Bakery Counter</h2>
+  <p>Navigate to <span class="path">Sidebar - Bakery Counter</span>. The bakery counter has its own dedicated billing interface for over-the-counter sales of baked goods.</p>
+
+  <h3>Making a Bakery Sale</h3>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Browse bakery items</strong>All items tagged as Bakery type appear in the counter. Items are shown by category with current availability.</div></li>
+    <li><div class="step-body"><strong>Add items by tapping</strong>Each tap adds one unit to the current sale. Tap the minus button to reduce quantity.</div></li>
+    <li><div class="step-body"><strong>Enter weight for weight-based items</strong>Some items like cakes may be priced per kilogram. Enter the weight in kg and the system calculates the price automatically.</div></li>
+    <li><div class="step-body"><strong>Select payment mode</strong>Cash, Card, or UPI.</div></li>
+    <li><div class="step-body"><strong>Click Complete Sale</strong>A receipt is generated and the sale is recorded in the bill history.</div></li>
+  </ol>
+
+  <h2>Juice Counter</h2>
+  <p>Navigate to <span class="path">Sidebar - Juice Counter</span>. The juice counter operates identically to the bakery counter but shows items tagged as Juice type — fresh juices, milkshakes, and mocktails.</p>
+
+  <p>Both counter billing flows generate bills that appear in the main Bill History and are included in all revenue reports. Revenue from counter sales is separated from main restaurant revenue in the analytics view.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 14: SHIFT MANAGEMENT                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 14</div>
+  <h1 class="chapter-title">Shift Management</h1>
+  <div class="chapter-desc">Opening and closing shifts for cash reconciliation</div>
+
+  <p>Navigate to <span class="path">Sidebar - Shift</span>. Shift management is used to track cash at the start and end of each working day or each shift.</p>
+
+  <h2>Opening a Shift</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Open Shift</strong>at the start of the day or shift.</div></li>
+    <li><div class="step-body"><strong>Enter opening cash amount</strong>Count the cash in the till (cash drawer) and enter the exact amount.</div></li>
+    <li><div class="step-body"><strong>Click Start Shift</strong>The shift begins. All transactions from this point are tracked under this shift.</div></li>
+  </ol>
+
+  <h2>Closing a Shift</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Click Close Shift</strong>at the end of the day.</div></li>
+    <li><div class="step-body"><strong>Enter actual closing cash</strong>Count the cash physically in the till.</div></li>
+    <li><div class="step-body"><strong>System shows expected cash</strong>Opening cash plus all cash sales during the shift minus any cash payments made.</div></li>
+    <li><div class="step-body"><strong>Verify the difference</strong>If actual cash is less than expected, investigate missing cash. If it is more, check for recording errors.</div></li>
+    <li><div class="step-body"><strong>Click Close Shift</strong>The shift report is saved with both expected and actual amounts for the manager to review.</div></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 15: SETTINGS                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 15</div>
+  <h1 class="chapter-title">Settings</h1>
+  <div class="chapter-desc">Configuring the software for your restaurant</div>
+
+  <p>Navigate to <span class="path">Sidebar - Settings</span>. Only Admin has access to settings.</p>
+
+  <h2>Restaurant Profile</h2>
+  <ul>
+    <li>Restaurant name and address as it appears on printed bills</li>
+    <li>GSTIN (GST registration number) — printed on all receipts</li>
+    <li>Phone number and email</li>
+    <li>Restaurant logo (for bill header)</li>
+  </ul>
+
+  <h2>Billing Settings</h2>
+  <ul>
+    <li>Default GST rate for new items</li>
+    <li>Whether to show GST inclusive or exclusive prices on the menu</li>
+    <li>Bill footer text (such as a thank-you message)</li>
+    <li>Whether to auto-print bills after generation</li>
+  </ul>
+
+  <h2>Table Configuration</h2>
+  <p>Add, rename, or remove tables from the system. Set the seating capacity for each table. The layout on the Table Management page updates immediately when changes are saved here.</p>
+
+  <h2>Theme and Display</h2>
+  <ul>
+    <li>Switch between Dark mode and Light mode</li>
+    <li>Choose the display language</li>
+    <li>Adjust font size for readability on tablets</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 16: FAQ                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 16</div>
+  <h1 class="chapter-title">Frequently Asked Questions</h1>
+  <div class="chapter-desc">Common issues and their solutions</div>
+
+  <h2>Billing and Orders</h2>
+
+  <h3>Q: The order screen is not showing the latest menu items. What do I do?</h3>
+  <p>Refresh the browser page. If the issue persists, check the internet connection. The menu syncs from the cloud every time the page loads.</p>
+
+  <h3>Q: A bill was generated with the wrong items. Can I cancel it?</h3>
+  <p>Bills cannot be edited after generation. If the bill was generated in error, record a separate refund or adjustment. Contact the software support for void bill assistance.</p>
+
+  <h3>Q: The Reports page shows different revenue for "Today" and "This Month" even for today's date. Why?</h3>
+  <p>This was a known issue that has been fixed. The system now uses complete pagination to fetch all bills, so both figures should be consistent. If you still see a discrepancy, it may be a time zone difference. Ensure the device time is set correctly.</p>
+
+  <h3>Q: Can two waiters use the system at the same time?</h3>
+  <p>Yes. The system is designed for simultaneous multi-user access. Multiple devices can be logged in and taking orders at the same time. All data is synchronized in real time.</p>
+
+  <h2>Accounting</h2>
+
+  <h3>Q: I entered a Purchase voucher but the bank balance did not change. Is that correct?</h3>
+  <p>Yes, that is correct. A Purchase voucher represents a credit purchase — goods received but not yet paid for. Only when you record a Payment voucher (paying the vendor) will the bank balance decrease.</p>
+
+  <h3>Q: My Day Book total Debit and Credit are not equal. What does that mean?</h3>
+  <p>An unequal Day Book indicates either a missing entry or an incorrect entry. Review the filtered Day Book for the period in question. Common causes include a Payment voucher recorded without a corresponding vendor payable reduction, or a manually entered amount with a typo.</p>
+
+  <h3>Q: How do I record cash sales deposited to the bank?</h3>
+  <p>Record a Contra voucher. Transfer FROM the Cash in Hand account TO the Bank account for the deposit amount. This correctly reduces the cash in hand and increases the bank balance.</p>
+
+  <h3>Q: Can I delete a wrong ledger entry?</h3>
+  <p>Yes. In the Day Book, click the red trash icon next to the incorrect entry and confirm deletion. Then re-enter the correct entry using a new voucher. Only Admin users should delete ledger entries.</p>
+
+  <h2>Staff</h2>
+
+  <h3>Q: A staff member forgot their PIN. How do I reset it?</h3>
+  <p>Go to Staff Management, click the edit icon for that staff member, and enter a new 4-digit PIN. Click Save Changes. The new PIN is active immediately.</p>
+
+  <h3>Q: Can a staff member see their own salary records?</h3>
+  <p>No. The Salary tab in Staff Management is only visible to Admin role users. Regular staff cannot access payroll information.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- CHAPTER 17: GLOSSARY                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="chapter">
+  <div class="chapter-number">Chapter 17</div>
+  <h1 class="chapter-title">Glossary of Accounting Terms</h1>
+  <div class="chapter-desc">Key terms used in the Accounting module explained in simple language</div>
+
+  <table>
+    <thead><tr><th>Term</th><th>Plain Language Explanation</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Debit (Dr)</strong></td>
+        <td>An entry that reduces what the account holds. For a bank account, a Debit means money went out. For a vendor account, a Debit means you made a payment to them (reducing what you owe).</td>
+      </tr>
+      <tr>
+        <td><strong>Credit (Cr)</strong></td>
+        <td>An entry that increases what the account holds. For a bank account, a Credit means money came in. For a vendor account, a Credit means you received more goods on credit (increasing what you owe them).</td>
+      </tr>
+      <tr>
+        <td><strong>Payable</strong></td>
+        <td>Money you owe to a vendor or supplier. Also called a creditor or sundry creditor in Indian accounting.</td>
+      </tr>
+      <tr>
+        <td><strong>Receivable</strong></td>
+        <td>Money someone owes to you. Not currently tracked in this system as restaurant sales are immediate (no credit to customers).</td>
+      </tr>
+      <tr>
+        <td><strong>Opening Balance</strong></td>
+        <td>The amount in an account at the start of using the system. Think of it as the starting point from which all future transactions are measured.</td>
+      </tr>
+      <tr>
+        <td><strong>Narration</strong></td>
+        <td>The description or note you add to a voucher. Write narrations clearly so anyone reading the Day Book can understand what the entry is for without needing to ask.</td>
+      </tr>
+      <tr>
+        <td><strong>Ledger</strong></td>
+        <td>A permanent record of all financial transactions in chronological order. The Day Book in this system is the ledger.</td>
+      </tr>
+      <tr>
+        <td><strong>Voucher</strong></td>
+        <td>A document (or record) that authorizes and records a financial transaction. In this system, you create vouchers through the Voucher Entry screen.</td>
+      </tr>
+      <tr>
+        <td><strong>KOT</strong></td>
+        <td>Kitchen Order Ticket. The document (digital in this system) that communicates what the kitchen needs to prepare for a table.</td>
+      </tr>
+      <tr>
+        <td><strong>CGST</strong></td>
+        <td>Central Goods and Services Tax. Half of the total GST collected goes to the central government.</td>
+      </tr>
+      <tr>
+        <td><strong>SGST</strong></td>
+        <td>State Goods and Services Tax. The other half of GST collected goes to the state government.</td>
+      </tr>
+      <tr>
+        <td><strong>GSTIN</strong></td>
+        <td>Goods and Services Tax Identification Number. Your restaurant's unique GST registration number, which must appear on all tax invoices.</td>
+      </tr>
+      <tr>
+        <td><strong>Contra Entry</strong></td>
+        <td>A transaction that involves only your own accounts — for example, moving money from one bank account to another, or depositing cash to the bank. It is neither income nor expense.</td>
+      </tr>
+      <tr>
+        <td><strong>Creditor / Sundry Creditor</strong></td>
+        <td>A business or person you owe money to — typically a supplier. Listed in the Payables section of the Accounting module.</td>
+      </tr>
+      <tr>
+        <td><strong>Bank Reconciliation</strong></td>
+        <td>The process of comparing the bank balance in the system against the actual bank statement to confirm they match. Should be done at least monthly.</td>
+      </tr>
+      <tr>
+        <td><strong>Advance Payment</strong></td>
+        <td>Money paid to a staff member before their regular salary date. Tracked separately in the Salary module so it can be deducted from the next salary payment.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr/>
+
+  <div style="text-align: center; padding: 40px 0; color: #718096; font-size: 0.875rem; line-height: 2;">
+    <div style="font-weight: 700; color: #1a1a2e; font-size: 1rem; margin-bottom: 8px;">Railway Coach Kerala Restaurant</div>
+    <div>Restaurant Management System — Version 2.0</div>
+    <div>This document is intended for internal use by restaurant staff and management.</div>
+    <div>For technical support, contact your system administrator.</div>
+  </div>
+</div>
+
+</body>
+</html>
