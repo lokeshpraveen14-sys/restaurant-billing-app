@@ -287,3 +287,61 @@ export interface BatchProduction {
   wasteQty: number;
   expiryDate?: string;
 }
+
+// HR & Accounting
+export interface StaffDetails {
+  userId: string;
+  baseSalary: number;
+  joiningDate?: Date;
+  bankAccountNo?: string;
+  ifscCode?: string;
+}
+
+export interface SalaryRecord {
+  id: string;
+  staffId: string;
+  month: number;
+  year: number;
+  amount: number;
+  transactionType: 'salary' | 'advance';
+  paymentDate: Date;
+  notes?: string;
+  createdAt: Date;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  gstNumber?: string;
+  openingBalance: number;
+  createdAt: Date;
+}
+
+export interface BankAccount {
+  id: string;
+  accountName: string;
+  accountNumber?: string;
+  bankName?: string;
+  openingBalance: number;
+  currentBalance: number;
+  createdAt: Date;
+}
+
+export type LedgerAccountType = 'bank' | 'vendor' | 'staff' | 'cash';
+export type LedgerTransactionType = 'credit' | 'debit';
+
+export interface LedgerTransaction {
+  id: string;
+  date: Date;
+  accountType: LedgerAccountType;
+  accountId?: string; // id of bank, vendor, or staff. Null for general cash
+  transactionType: LedgerTransactionType;
+  amount: number;
+  description?: string;
+  referenceId?: string; // could link to a bill or purchase
+  createdAt: Date;
+}

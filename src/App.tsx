@@ -29,6 +29,7 @@ import BillHistory from './pages/BillHistory';
 import ShiftManagement from './pages/ShiftManagement';
 import Analytics from './pages/Analytics';
 import HeadCount from './pages/HeadCount';
+import Accounting from './pages/Accounting';
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, mobileSidebarOpen, setMobileSidebar } = useUIStore();
@@ -119,6 +120,7 @@ export default function App() {
                   <Route path="/shift" element={<ShiftManagement />} />
                   <Route path="/bills" element={<BillHistory />} />
                   <Route path="/staff" element={<StaffManagement />} />
+                  <Route path="/accounting" element={<Accounting />} />
                   <Route path="/headcount" element={<HeadCount />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

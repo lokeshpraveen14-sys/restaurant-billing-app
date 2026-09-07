@@ -4,6 +4,7 @@ import { Package, Warning, Plus, ArrowDown, ArrowUp, PencilSimple, X } from '@ph
 import TopBar from '../components/layout/TopBar';
 import { Ingredient, PurchaseEntry } from '../types';
 import { useInventoryStore } from '../store/inventoryStore';
+import { useAccountingStore } from '../store/accountingStore';
 import { useToast } from '../store/uiStore';
 
 type IngredientWithCat = Ingredient & { category: string };
@@ -75,6 +76,8 @@ export default function Inventory() {
     setEditingIngredient(null);
   };
 
+  const { vendors, addLedgerTransaction } = useAccountingStore();
+
   const handleAddPurchase = () => {
     if (!purchaseForm.ingredientId || !purchaseForm.quantity) {
       toast.error('Fill required fields', 'Select ingredient and quantity');
@@ -84,16 +87,35 @@ export default function Inventory() {
     if (!ing) return;
     const qty = parseFloat(purchaseForm.quantity);
     const cost = parseFloat(purchaseForm.costPerUnit) || ing.costPerUnit;
+    const totalCost = qty * cost;
+    
+    // Find if vendor is from accounting
+    const selectedVendor = vendors.find(v => v.id === purchaseForm.vendorName);
+    const vendorNameForRecord = selectedVendor ? selectedVendor.name : (purchaseForm.vendorName || ing.vendorName || '');
+
     addPurchaseEntry({
       ingredientId: ing.id,
       ingredientName: ing.name,
       quantity: qty,
       costPerUnit: cost,
-      totalCost: qty * cost,
-      vendorName: purchaseForm.vendorName || ing.vendorName || '',
+      totalCost: totalCost,
+      vendorName: vendorNameForRecord,
       date: new Date(purchaseForm.date),
       invoiceRef: purchaseForm.invoiceRef || undefined,
     });
+
+    if (selectedVendor) {
+      addLedgerTransaction({
+        date: new Date(purchaseForm.date),
+        accountType: 'vendor',
+        accountId: selectedVendor.id,
+        transactionType: 'credit', // Credit increases payable amount to vendor
+        amount: totalCost,
+        description: `Purchase: ${qty} ${ing.unit} ${ing.name}`,
+        referenceId: purchaseForm.invoiceRef || undefined
+      });
+    }
+
     toast.success('Purchase Recorded', `Added ${qty} ${ing.unit} of ${ing.name}`);
     setPurchaseForm({ ingredientId: '', quantity: '', costPerUnit: '', vendorName: '', invoiceRef: '', date: new Date().toISOString().split('T')[0] });
     setShowPurchaseModal(false);
@@ -355,8 +377,11 @@ export default function Inventory() {
               )}
 
               <div className="input-group">
-                <label className="input-label">Vendor Name</label>
-                <input className="input" value={purchaseForm.vendorName} onChange={(e) => setPurchaseForm({ ...purchaseForm, vendorName: e.target.value })} placeholder="Supplier name" />
+                <label className="input-label">Vendor</label>
+                <select className="input select" value={purchaseForm.vendorName} onChange={(e) => setPurchaseForm({ ...purchaseForm, vendorName: e.target.value })}>
+                  <option value="">— Walk-in / Unregistered Vendor —</option>
+                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="input-group">
