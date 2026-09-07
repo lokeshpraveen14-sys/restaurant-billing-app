@@ -67,20 +67,34 @@ export const useBillStore = create<BillState>()(
   },
 
   fetchBillsByDateRange: async (startDate: Date, endDate: Date) => {
-    const { data, error } = await supabase
-      .from('bills')
-      .select('*')
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(10000);
+    let allData: any[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
 
-    if (error || !data) {
-      console.error('Failed to fetch bills:', error);
-      return [];
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('bills')
+        .select('*')
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString())
+        .order('created_at', { ascending: false })
+        .range(from, from + limit - 1);
+
+      if (error || !data) {
+        console.error('Failed to fetch bills:', error);
+        break;
+      }
+
+      allData = [...allData, ...data];
+      if (data.length < limit) {
+        hasMore = false;
+      } else {
+        from += limit;
+      }
     }
 
-    return data.map((b) => ({
+    return allData.map((b) => ({
       id: b.id,
       invoiceNumber: b.invoice_number,
       orderId: b.order_id,
