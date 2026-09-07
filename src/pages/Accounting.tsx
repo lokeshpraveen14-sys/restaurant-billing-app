@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAccountingStore } from '../store/accountingStore';
+import { useBillStore } from '../store/billStore';
 import { useToast } from '../store/uiStore';
 import {
   Bank, Wallet, Buildings, FileText, Plus, Trash, PencilSimple,
   CurrencyInr, X, ArrowUp, ArrowDown, BookOpen, Receipt, HandCoins,
-  ChartPie, Funnel, CaretDown, CaretUp, CheckCircle
+  ChartPie, Funnel, CaretDown, CaretUp, CheckCircle, ShoppingCart, Info
 } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { formatAmount } from '../lib/gst';
-import { LedgerAccountType, LedgerTransactionType, Vendor, BankAccount } from '../types';
+import { LedgerAccountType, LedgerTransactionType, Vendor, BankAccount, Bill } from '../types';
 
 // ─── SECTION NAV ─────────────────────────────────────────────────────────────
 type Section = 'dashboard' | 'bank' | 'vendors' | 'ledger' | 'payables' | 'journal';
@@ -82,6 +83,75 @@ export default function Accounting() {
   });
 
   useEffect(() => { initAccountingSync(); }, []);
+
+  // ─── BILLING REVENUE (auto from bills DB) ───────────────────────────────────
+  const { fetchBillsByDateRange } = useBillStore();
+  const [revPeriod, setRevPeriod] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [customFrom, setCustomFrom] = useState('2025-08-17');
+  const [customTo, setCustomTo] = useState(new Date().toISOString().slice(0, 10));
+  const [billingData, setBillingData] = useState<{
+    bills: Bill[];
+    total: number;
+    cash: number;
+    card: number;
+    upi: number;
+    count: number;
+  }>({ bills: [], total: 0, cash: 0, card: 0, upi: 0, count: 0 });
+  const [loadingBills, setLoadingBills] = useState(false);
+
+  const getDateRange = () => {
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    let start = new Date(now);
+    if (revPeriod === 'today') {
+      start.setHours(0, 0, 0, 0);
+    } else if (revPeriod === 'week') {
+      start.setDate(now.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
+    } else if (revPeriod === 'month') {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+    } else {
+      start = new Date(customFrom + 'T00:00:00');
+      return { start, end: new Date(customTo + 'T23:59:59') };
+    }
+    return { start, end };
+  };
+
+  const loadBillingRevenue = async () => {
+    setLoadingBills(true);
+    try {
+      const { start, end } = getDateRange();
+      const bills = await fetchBillsByDateRange(start, end);
+      const activeBills = bills.filter(b => b.status !== 'void');
+      let cash = 0, card = 0, upi = 0, total = 0;
+      activeBills.forEach(b => {
+        total += b.totalAmount;
+        if (Array.isArray(b.payments)) {
+          b.payments.forEach((p: any) => {
+            const amt = Number(p.amount || 0);
+            const mode = (p.method || p.mode || '').toLowerCase();
+            if (mode === 'cash') cash += amt;
+            else if (mode === 'card') card += amt;
+            else if (mode === 'upi') upi += amt;
+            else cash += amt; // fallback
+          });
+        } else {
+          total += b.totalAmount;
+          cash += b.totalAmount;
+        }
+      });
+      setBillingData({ bills: activeBills, total, cash, card, upi, count: activeBills.length });
+    } catch (e) {
+      console.error('Failed to load billing revenue', e);
+    } finally {
+      setLoadingBills(false);
+    }
+  };
+
+  useEffect(() => { loadBillingRevenue(); }, [revPeriod]);
+  useEffect(() => { if (revPeriod === 'custom') loadBillingRevenue(); }, [customFrom, customTo]);
 
   // ─── Calculations ────────────────────────────────────────────────────────────
   const totalBankBalance = useMemo(
@@ -334,27 +404,111 @@ export default function Accounting() {
         {/* ── DASHBOARD ─────────────────────────────────────────────────────── */}
         {section === 'dashboard' && (
           <>
-            {/* Top tiles */}
+            {/* ── EXPLANATION BANNER ── */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(59,130,246,0.08))',
+              border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '16px 20px',
+              marginBottom: 'var(--space-5)',
+              display: 'flex',
+              gap: 12,
+              alignItems: 'flex-start'
+            }}>
+              <Info size={22} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>How this Accounting module works</div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                  <strong>Customer Sales Revenue</strong> is automatically fetched from your billing records — you can see all 22 lakh+ below with date filters. <br/>
+                  <strong>Voucher Entries</strong> (expenses like rent, salary, vendor payments) must be entered manually by you in the "Voucher Entry" section.<br/>
+                  <strong>Bank &amp; Cash Accounts</strong> track your actual bank balances — set these up first so the system knows where your money is held.
+                </div>
+              </div>
+            </div>
+
+            {/* ── SALES REVENUE SECTION (auto from bills) ── */}
+            <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
+              <div className="card-header" style={{ flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div className="card-title">Customer Sales Revenue</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Auto-fetched from all bills — no manual entry needed</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginLeft: 'auto' }}>
+                  {(['today', 'week', 'month', 'custom'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setRevPeriod(p)}
+                      className={`btn btn-sm ${revPeriod === p ? 'btn-primary' : 'btn-secondary'}`}
+                    >
+                      {p === 'today' ? 'Today' : p === 'week' ? 'Last 7 Days' : p === 'month' ? 'This Month' : 'Custom Range'}
+                    </button>
+                  ))}
+                  <button className="btn btn-ghost btn-sm" onClick={loadBillingRevenue} title="Refresh">
+                    {loadingBills ? '...' : '↻ Refresh'}
+                  </button>
+                </div>
+              </div>
+
+              {revPeriod === 'custom' && (
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>From:</span>
+                  <input className="input" type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} style={{ width: 160 }} />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>To:</span>
+                  <input className="input" type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} style={{ width: 160 }} />
+                </div>
+              )}
+
+              <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+                <div style={{ textAlign: 'center', padding: '20px 16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', borderTop: '3px solid var(--status-free)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Total Revenue</div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: 'var(--status-free)' }}>{loadingBills ? '...' : formatAmount(billingData.total)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{billingData.count} bills</div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '20px 16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', borderTop: '3px solid #22c55e' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Cash Received</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#22c55e' }}>{loadingBills ? '...' : formatAmount(billingData.cash)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                    {billingData.total > 0 ? ((billingData.cash / billingData.total) * 100).toFixed(1) + '%' : '0%'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '20px 16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', borderTop: '3px solid #3b82f6' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Card Received</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#3b82f6' }}>{loadingBills ? '...' : formatAmount(billingData.card)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                    {billingData.total > 0 ? ((billingData.card / billingData.total) * 100).toFixed(1) + '%' : '0%'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '20px 16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', borderTop: '3px solid #a855f7' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>UPI Received</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#a855f7' }}>{loadingBills ? '...' : formatAmount(billingData.upi)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                    {billingData.total > 0 ? ((billingData.upi / billingData.total) * 100).toFixed(1) + '%' : '0%'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── EXPENSE / VOUCHER SUMMARY ── */}
             <div className="grid grid-4" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
               <div className="stat-card" style={{ borderTop: '3px solid var(--status-free)' }}>
-                <div className="stat-label">Total Cash & Bank Balance</div>
-                <div className="stat-value" style={{ color: 'var(--status-free)', fontSize: '1.5rem' }}>{formatAmount(totalBankBalance)}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{bankAccounts.length} accounts</div>
+                <div className="stat-label">Cash &amp; Bank Balance</div>
+                <div className="stat-value" style={{ color: 'var(--status-free)', fontSize: '1.4rem' }}>{formatAmount(totalBankBalance)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{bankAccounts.length} accounts — set up in Bank &amp; Cash tab</div>
               </div>
               <div className="stat-card" style={{ borderTop: '3px solid var(--status-billing)' }}>
-                <div className="stat-label">Total Payables (Creditors)</div>
-                <div className="stat-value" style={{ color: 'var(--status-billing)', fontSize: '1.5rem' }}>{formatAmount(totalPayables)}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{vendors.length} vendors</div>
+                <div className="stat-label">Total Vendor Payables</div>
+                <div className="stat-value" style={{ color: 'var(--status-billing)', fontSize: '1.4rem' }}>{formatAmount(totalPayables)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{vendors.length} vendors registered</div>
               </div>
               <div className="stat-card" style={{ borderTop: '3px solid var(--accent)' }}>
-                <div className="stat-label">This Month Receipts</div>
-                <div className="stat-value" style={{ color: 'var(--accent)', fontSize: '1.5rem' }}>{formatAmount(monthlyReceipts)}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>Money IN</div>
+                <div className="stat-label">This Month — Manual Receipts</div>
+                <div className="stat-value" style={{ color: 'var(--accent)', fontSize: '1.4rem' }}>{formatAmount(monthlyReceipts)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>Via Voucher Entry only</div>
               </div>
               <div className="stat-card" style={{ borderTop: '3px solid var(--status-occupied)' }}>
-                <div className="stat-label">This Month Payments</div>
-                <div className="stat-value" style={{ color: 'var(--status-occupied)', fontSize: '1.5rem' }}>{formatAmount(monthlyPayments)}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>Money OUT</div>
+                <div className="stat-label">This Month — Expenses Paid</div>
+                <div className="stat-value" style={{ color: 'var(--status-occupied)', fontSize: '1.4rem' }}>{formatAmount(monthlyPayments)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>Via Voucher Entry only</div>
               </div>
             </div>
 
@@ -371,10 +525,10 @@ export default function Accounting() {
               </button>
             </div>
 
-            {/* Recent transactions */}
+            {/* Recent voucher transactions */}
             <div className="card">
               <div className="card-header">
-                <div className="card-title">Recent Transactions (Last 10)</div>
+                <div className="card-title">Recent Manual Voucher Entries (Last 10)</div>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table className="data-table">
@@ -411,7 +565,9 @@ export default function Accounting() {
                       );
                     })}
                     {ledgerTransactions.length === 0 && (
-                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No transactions yet. Start by creating a Voucher Entry.</td></tr>
+                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        No manual voucher entries yet. Customer sales revenue is shown above automatically.
+                      </td></tr>
                     )}
                   </tbody>
                 </table>
