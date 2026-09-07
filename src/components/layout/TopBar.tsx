@@ -89,8 +89,10 @@ function LiveClock() {
     return () => clearInterval(interval);
   }, []);
   return (
-    <div style={{ fontSize: '0.8125rem', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>
-      {time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>
+      <span>{time.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+      <span style={{ color: 'var(--border)' }}>|</span>
+      <span>{time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
     </div>
   );
 }
