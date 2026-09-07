@@ -87,7 +87,11 @@ export default function Accounting() {
   // ─── BILLING REVENUE (auto from bills DB) ───────────────────────────────────
   const { fetchBillsByDateRange } = useBillStore();
   const [revPeriod, setRevPeriod] = useState<'today' | 'week' | 'month' | 'custom'>('month');
-  const [customFrom, setCustomFrom] = useState('2025-08-17');
+  const [customFrom, setCustomFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
   const [customTo, setCustomTo] = useState(new Date().toISOString().slice(0, 10));
   const [billingData, setBillingData] = useState<{
     bills: Bill[];
