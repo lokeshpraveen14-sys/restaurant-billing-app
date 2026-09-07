@@ -16,11 +16,11 @@ type Section = 'dashboard' | 'bank' | 'vendors' | 'ledger' | 'payables' | 'journ
 
 // ─── Voucher types (Tally-style) ─────────────────────────────────────────────
 const VOUCHER_TYPES = [
-  { id: 'payment',  label: 'Payment',   icon: '💸', help: 'Cash/Bank going OUT of business (paying vendor, expenses, salary, etc.)' },
-  { id: 'receipt',  label: 'Receipt',   icon: '💰', help: 'Cash/Bank coming IN to business (customer payment, refund received, etc.)' },
-  { id: 'purchase', label: 'Purchase',  icon: '🛒', help: 'Goods/Services purchased on credit from vendor (payable increases)' },
-  { id: 'contra',   label: 'Contra',    icon: '🔄', help: 'Transfer between Cash and Bank accounts' },
-  { id: 'journal',  label: 'Journal',   icon: '📓', help: 'All other entries — adjustments, depreciation, etc.' },
+  { id: 'payment', label: 'Payment', icon: '💸', help: 'Cash/Bank going OUT of business (paying vendor, expenses, salary, etc.)' },
+  { id: 'receipt', label: 'Receipt', icon: '💰', help: 'Cash/Bank coming IN to business (customer payment, refund received, etc.)' },
+  { id: 'purchase', label: 'Purchase', icon: '🛒', help: 'Goods/Services purchased on credit from vendor (payable increases)' },
+  { id: 'contra', label: 'Contra', icon: '🔄', help: 'Transfer between Cash and Bank accounts' },
+  { id: 'journal', label: 'Journal', icon: '📓', help: 'All other entries — adjustments, depreciation, etc.' },
 ];
 
 const EXPENSE_HEADS = [
@@ -408,27 +408,7 @@ export default function Accounting() {
         {/* ── DASHBOARD ─────────────────────────────────────────────────────── */}
         {section === 'dashboard' && (
           <>
-            {/* ── EXPLANATION BANNER ── */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(59,130,246,0.08))',
-              border: '1px solid rgba(245,158,11,0.3)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '16px 20px',
-              marginBottom: 'var(--space-5)',
-              display: 'flex',
-              gap: 12,
-              alignItems: 'flex-start'
-            }}>
-              <Info size={22} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>How this Accounting module works</div>
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                  <strong>Customer Sales Revenue</strong> is automatically fetched from your billing records — you can see all 22 lakh+ below with date filters. <br/>
-                  <strong>Voucher Entries</strong> (expenses like rent, salary, vendor payments) must be entered manually by you in the "Voucher Entry" section.<br/>
-                  <strong>Bank &amp; Cash Accounts</strong> track your actual bank balances — set these up first so the system knows where your money is held.
-                </div>
-              </div>
-            </div>
+
 
             {/* ── SALES REVENUE SECTION (auto from bills) ── */}
             <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
