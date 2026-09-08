@@ -8,6 +8,8 @@ import { useOrderStore } from './store/orderStore';
 import { useBillStore } from './store/billStore';
 import { useShiftStore } from './store/shiftStore';
 import { useSettingsStore } from './store/settingsStore';
+import { useAccountingStore } from './store/accountingStore';
+import { useStaffStore } from './store/staffStore';
 
 import Sidebar from './components/layout/Sidebar';
 import ToastContainer from './components/ui/ToastContainer';
@@ -70,6 +72,8 @@ export default function App() {
   const initBillSync = useBillStore((s) => s.initBillSync);
   const initShiftSync = useShiftStore((s) => s.initShiftSync);
   const initSettingsSync = useSettingsStore((s) => s.initSettingsSync);
+  const initAccountingSync = useAccountingStore((s) => s.initAccountingSync);
+  const initStaffSync = useStaffStore((s) => s.initStaffSync);
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -82,6 +86,8 @@ export default function App() {
     initBillSync();
     initShiftSync();
     initSettingsSync();
+    initAccountingSync();
+    initStaffSync();
     
     // Auto-refresh when tablet wakes up from sleep
     const handleVisibilityChange = () => {
@@ -93,7 +99,7 @@ export default function App() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [initTableSync, initMenuSync, initOrderSync, initBillSync, initShiftSync, initSettingsSync]);
+  }, [initTableSync, initMenuSync, initOrderSync, initBillSync, initShiftSync, initSettingsSync, initAccountingSync, initStaffSync]);
 
   return (
     <BrowserRouter>

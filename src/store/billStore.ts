@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { Bill } from '../types';
 import { supabase } from '../lib/supabase';
 import { useSettingsStore } from './settingsStore';
+import { useAccountingStore } from './accountingStore';
 
 interface BillState {
   bills: Bill[];
@@ -46,6 +47,37 @@ export const useBillStore = create<BillState>()(
     if (error) {
       console.error('Failed to insert bill into Supabase:', error);
       // Fallback: If table doesn't exist, we should at least warn them
+    } else {
+      // Record in accounting daybook
+      if (bill.payments && bill.payments.length > 0) {
+        for (const payment of bill.payments) {
+          if (payment.amount > 0) {
+            let accountType: 'cash' | 'bank' = 'cash';
+            if (payment.method === 'card' || payment.method === 'upi' || payment.method === 'bank_transfer') {
+              accountType = 'bank';
+            }
+            
+            await useAccountingStore.getState().addLedgerTransaction({
+              date: new Date(),
+              accountType,
+              transactionType: 'credit',
+              amount: payment.amount,
+              description: `Sales Revenue - Invoice ${bill.invoiceNumber} (${payment.method})`,
+              referenceId: bill.id
+            });
+          }
+        }
+      } else if (bill.totalAmount > 0) {
+        // Fallback if no specific payment breakdown was provided but the bill was paid
+        await useAccountingStore.getState().addLedgerTransaction({
+          date: new Date(),
+          accountType: 'cash',
+          transactionType: 'credit',
+          amount: bill.totalAmount,
+          description: `Sales Revenue - Invoice ${bill.invoiceNumber}`,
+          referenceId: bill.id
+        });
+      }
     }
   },
 

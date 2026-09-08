@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { StaffDetails, SalaryRecord } from '../types';
 import { supabase } from '../lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
+import { useAccountingStore } from './accountingStore';
 
 interface StaffState {
   staffDetails: StaffDetails[];
@@ -65,7 +66,23 @@ export const useStaffStore = create<StaffState>()(
           notes: newRecord.notes,
           created_at: newRecord.createdAt.toISOString()
         });
-        if (error) console.error('Failed to insert salary record:', error);
+        if (error) {
+          console.error('Failed to insert salary record:', error);
+          return;
+        }
+
+        // Also add an accounting daybook entry for salary expense
+        // Assuming we want to map this to an account, we use 'cash' as default if not specified
+        const staffName = get().staffDetails.find(s => s.userId === newRecord.staffId)?.userId || 'Staff'; // we don't have name easily here without auth store, maybe just 'Staff'
+        
+        await useAccountingStore.getState().addLedgerTransaction({
+          date: newRecord.paymentDate,
+          accountType: 'cash',
+          transactionType: 'debit',
+          amount: newRecord.amount,
+          description: `Salary Payment - ${newRecord.month} ${newRecord.year}${newRecord.notes ? ` - ${newRecord.notes}` : ''}`,
+          referenceId: newRecord.id
+        });
       },
 
       initStaffSync: async () => {
