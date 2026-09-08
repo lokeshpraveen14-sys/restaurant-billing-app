@@ -96,6 +96,56 @@ export const useShiftStore = create<ShiftState>()(
             referenceId: closed.id,
           });
         }
+
+        // === NEW FEATURE: Consolidated Sales/Receipt Posting per Shift ===
+        if (current.totalRevenue > 0) {
+          const dt = new Date();
+          // 1. Consolidated Sales (Credit Revenue)
+          await useAccountingStore.getState().addLedgerTransaction({
+            date: dt,
+            accountType: 'cash',
+            voucherType: 'sales',
+            transactionType: 'credit',
+            amount: current.totalRevenue,
+            description: `Sales — Shift Consolidated (${current.staffName})`,
+            referenceId: closed.id,
+          });
+
+          // 2. Consolidated Receipts (Debit Assets)
+          if (current.totalCash > 0) {
+            await useAccountingStore.getState().addLedgerTransaction({
+              date: dt,
+              accountType: 'cash',
+              voucherType: 'receipt',
+              transactionType: 'debit',
+              amount: current.totalCash,
+              description: `Receipt — Shift Consolidated (Cash)`,
+              referenceId: closed.id,
+            });
+          }
+          if (current.totalUPI > 0) {
+            await useAccountingStore.getState().addLedgerTransaction({
+              date: dt,
+              accountType: 'bank',
+              voucherType: 'receipt',
+              transactionType: 'debit',
+              amount: current.totalUPI,
+              description: `Receipt — Shift Consolidated (UPI)`,
+              referenceId: closed.id,
+            });
+          }
+          if (current.totalCard > 0) {
+            await useAccountingStore.getState().addLedgerTransaction({
+              date: dt,
+              accountType: 'bank',
+              voucherType: 'receipt',
+              transactionType: 'debit',
+              amount: current.totalCard,
+              description: `Receipt — Shift Consolidated (Card)`,
+              referenceId: closed.id,
+            });
+          }
+        }
       },
 
       addBillToShift: async (cashAmount, upiAmount, cardAmount, total, covers) => {
