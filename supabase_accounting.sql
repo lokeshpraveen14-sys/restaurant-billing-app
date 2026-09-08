@@ -48,6 +48,7 @@ CREATE TABLE ledger_transactions (
   account_type TEXT NOT NULL, -- 'bank', 'vendor', 'staff', 'cash'
   account_id UUID,
   transaction_type TEXT NOT NULL, -- 'credit', 'debit'
+  voucher_type TEXT, -- 'sales', 'receipt', 'payment', 'purchase', 'contra', 'journal'
   amount NUMERIC NOT NULL,
   description TEXT,
   reference_id TEXT,
