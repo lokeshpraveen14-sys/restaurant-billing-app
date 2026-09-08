@@ -68,7 +68,7 @@ export const useStaffStore = create<StaffState>()(
         });
         if (error) {
           console.error('Failed to insert salary record:', error);
-          return;
+          throw new Error('Failed to record salary in database');
         }
 
         // Also add an accounting daybook entry for salary expense (Payment voucher per spec §9)

@@ -34,6 +34,10 @@ export default function StaffManagement() {
   const [showSalaryModal, setShowSalaryModal] = useState(false);
   const [salaryForm, setSalaryForm] = useState({ staffId: '', amount: 0, transactionType: 'salary' as 'salary' | 'advance', month: new Date().getMonth() + 1, year: new Date().getFullYear(), notes: '' });
 
+  // Salary filters
+  const [filterStaffId, setFilterStaffId] = useState('all');
+  const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
+
   useEffect(() => {
     initStaffSync();
   }, []);
@@ -85,22 +89,26 @@ export default function StaffManagement() {
     setEditingStaff(null);
   };
 
-  const handleAddSalary = () => {
+  const handleAddSalary = async () => {
     if (!salaryForm.staffId || salaryForm.amount <= 0) {
       toast.error('Invalid input', 'Please select staff and enter valid amount');
       return;
     }
-    addSalaryRecord({
-      staffId: salaryForm.staffId,
-      amount: salaryForm.amount,
-      transactionType: salaryForm.transactionType,
-      month: salaryForm.month,
-      year: salaryForm.year,
-      notes: salaryForm.notes,
-      paymentDate: new Date()
-    });
-    toast.success('Payment recorded', `${salaryForm.transactionType === 'salary' ? 'Salary' : 'Advance'} of ${formatAmount(salaryForm.amount)} recorded`);
-    setShowSalaryModal(false);
+    try {
+      await addSalaryRecord({
+        staffId: salaryForm.staffId,
+        amount: salaryForm.amount,
+        transactionType: salaryForm.transactionType,
+        month: salaryForm.month,
+        year: salaryForm.year,
+        notes: salaryForm.notes,
+        paymentDate: new Date()
+      });
+      toast.success('Payment recorded', `${salaryForm.transactionType === 'salary' ? 'Salary' : 'Advance'} of ${formatAmount(salaryForm.amount)} recorded`);
+      setShowSalaryModal(false);
+    } catch (error: any) {
+      toast.error('Payment Failed', error.message || 'Could not record salary');
+    }
   };
 
   return (
@@ -143,6 +151,7 @@ export default function StaffManagement() {
                     <th>Salary</th>
                     <th>Bank Details</th>
                     <th>Status</th>
+                    <th>Salary Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -196,6 +205,18 @@ export default function StaffManagement() {
                           </span>
                         </td>
                         <td>
+                          {(() => {
+                            const currentMonth = new Date().getMonth() + 1;
+                            const currentYear = new Date().getFullYear();
+                            const isPaid = salaryRecords.some(r => r.staffId === user.id && r.month === currentMonth && r.year === currentYear && r.transactionType === 'salary');
+                            return isPaid ? (
+                              <span style={{ color: 'var(--status-free)', fontWeight: 600, fontSize: '0.8rem' }}>✅ Paid</span>
+                            ) : (
+                              <span style={{ color: 'var(--status-occupied)', fontWeight: 600, fontSize: '0.8rem' }}>⏳ Pending</span>
+                            );
+                          })()}
+                        </td>
+                        <td>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={() => handleEditClick(user)}>
                               <PencilSimple size={16} />
@@ -234,6 +255,18 @@ export default function StaffManagement() {
 
         {activeTab === 'salaries' && (
           <div className="card">
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+              <select className="input select" style={{ width: 200 }} value={filterStaffId} onChange={(e) => setFilterStaffId(e.target.value)}>
+                <option value="all">All Staff</option>
+                {allUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+              <select className="input select" style={{ width: 150 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
+                <option value="0">All Months</option>
+                {Array.from({length: 12}, (_, i) => i + 1).map(m => (
+                  <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>
+                ))}
+              </select>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
                 <thead>
@@ -247,30 +280,37 @@ export default function StaffManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {salaryRecords.map(record => {
-                    const staff = allUsers.find(u => u.id === record.staffId);
+                  {(() => {
+                    const filteredRecords = salaryRecords.filter(r => (filterStaffId === 'all' || r.staffId === filterStaffId) && (filterMonth === 0 || r.month === filterMonth));
                     return (
-                      <tr key={record.id}>
-                        <td>{new Date(record.paymentDate).toLocaleDateString()}</td>
-                        <td style={{ fontWeight: 600 }}>{staff?.name || 'Unknown Staff'}</td>
-                        <td>{record.month}/{record.year}</td>
-                        <td>
-                          <span className={`badge badge-${record.transactionType === 'salary' ? 'free' : 'billing'}`}>
-                            {record.transactionType.toUpperCase()}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 700, color: 'var(--accent)' }}>{formatAmount(record.amount)}</td>
-                        <td style={{ color: 'var(--text-muted)' }}>{record.notes || '-'}</td>
-                      </tr>
+                      <>
+                        {filteredRecords.map(record => {
+                          const staff = allUsers.find(u => u.id === record.staffId);
+                          return (
+                            <tr key={record.id}>
+                              <td>{new Date(record.paymentDate).toLocaleDateString()}</td>
+                              <td style={{ fontWeight: 600 }}>{staff?.name || 'Unknown Staff'}</td>
+                              <td>{record.month}/{record.year}</td>
+                              <td>
+                                <span className={`badge badge-${record.transactionType === 'salary' ? 'free' : 'billing'}`}>
+                                  {record.transactionType.toUpperCase()}
+                                </span>
+                              </td>
+                              <td style={{ fontWeight: 700, color: 'var(--accent)' }}>{formatAmount(record.amount)}</td>
+                              <td style={{ color: 'var(--text-muted)' }}>{record.notes || '-'}</td>
+                            </tr>
+                          );
+                        })}
+                        {filteredRecords.length === 0 && (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                              No salary or advance records found.
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
-                  })}
-                  {salaryRecords.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                        No salary or advance records found.
-                      </td>
-                    </tr>
-                  )}
+                  })()}
                 </tbody>
               </table>
             </div>

@@ -13,7 +13,7 @@ CREATE TABLE vendors (
 );
 
 CREATE TABLE staff_details (
-  user_id UUID PRIMARY KEY,
+  user_id TEXT PRIMARY KEY,
   base_salary NUMERIC DEFAULT 0,
   joining_date DATE,
   bank_account_no TEXT,
@@ -22,7 +22,7 @@ CREATE TABLE staff_details (
 
 CREATE TABLE salary_records (
   id UUID PRIMARY KEY,
-  staff_id UUID NOT NULL,
+  staff_id TEXT NOT NULL,
   month INTEGER NOT NULL,
   year INTEGER NOT NULL,
   amount NUMERIC NOT NULL,
