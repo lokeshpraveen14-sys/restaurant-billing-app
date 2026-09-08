@@ -8,7 +8,14 @@ interface ShiftState {
   shifts: Shift[];
   currentShift: Shift | null;
   openShift: (staffName: string, staffId: string, openingBalance: number) => Promise<Shift>;
-  closeShift: (actualClosingBalance: number, notes?: string) => Promise<void>;
+  closeShift: (
+    actualClosingBalance: number,
+    shiftRevenue: number,
+    shiftCash: number,
+    shiftUPI: number,
+    shiftCard: number,
+    notes?: string
+  ) => Promise<void>;
   addBillToShift: (cashAmount: number, upiAmount: number, cardAmount: number, total: number, covers: number) => Promise<void>;
   initShiftSync: () => Promise<void>;
 }
@@ -48,38 +55,55 @@ export const useShiftStore = create<ShiftState>()(
         return newShift;
       },
 
-      closeShift: async (actualClosingBalance: number, notes?: string) => {
+      closeShift: async (
+        actualClosingBalance: number,
+        shiftRevenue: number,
+        shiftCash: number,
+        shiftUPI: number,
+        shiftCard: number,
+        notes?: string
+      ) => {
         const current = get().currentShift;
         if (!current) return;
 
-        // Expected closing = opening + all cash collected during shift
-        const expectedClosingBalance = current.openingBalance + current.totalCash;
+        // Expected closing = opening + dynamically calculated cash
+        const expectedClosingBalance = current.openingBalance + shiftCash;
         const variance = actualClosingBalance - expectedClosingBalance;
 
         const closed: Shift = {
           ...current,
           closedAt: new Date(),
-          closingBalance: actualClosingBalance,
+          totalRevenue: shiftRevenue,
+          totalCash: shiftCash,
+          totalUPI: shiftUPI,
+          totalCard: shiftCard,
+          expectedClosingBalance,
+          actualClosingBalance,
+          variance,
           status: 'closed',
           notes,
         };
-        set((state) => ({
-          shifts: [closed, ...state.shifts],
-          currentShift: null,
-        }));
-        
-        await supabase.from('shifts').update({
+
+        const { error } = await supabase.from('shifts').update({
           closed_at: closed.closedAt!.toISOString(),
-          closing_balance: closed.closingBalance,
-          status: closed.status,
-          notes: closed.notes,
-          total_cash: closed.totalCash,
-          total_upi: closed.totalUPI,
-          total_card: closed.totalCard,
-          total_revenue: closed.totalRevenue,
-          total_orders: closed.totalOrders,
-          total_covers: closed.totalCovers
+          total_revenue: shiftRevenue,
+          total_cash: shiftCash,
+          total_upi: shiftUPI,
+          total_card: shiftCard,
+          closing_balance: actualClosingBalance,
+          status: 'closed',
+          notes,
         }).eq('id', closed.id);
+
+        if (error) {
+          console.error('Failed to close shift in Supabase:', error);
+          return;
+        }
+
+        set({
+          currentShift: null,
+          shifts: [closed, ...get().shifts],
+        });
 
         // === SPEC §8: Post shift cash variance as Journal voucher ===
         if (variance !== 0) {
@@ -91,14 +115,14 @@ export const useShiftStore = create<ShiftState>()(
             transactionType: isShort ? 'debit' : 'credit',
             amount: Math.abs(variance),
             description: isShort
-              ? `Journal — Cash Short on shift close (${current.staffName}) — Expected ${expectedClosingBalance}, Actual ${actualClosingBalance}`
-              : `Journal — Cash Over on shift close (${current.staffName}) — Expected ${expectedClosingBalance}, Actual ${actualClosingBalance}`,
+              ? `Journal — Cash Short on shift close (${current.staffName})`
+              : `Journal — Cash Over on shift close (${current.staffName})`,
             referenceId: closed.id,
           });
         }
 
         // === NEW FEATURE: Consolidated Sales/Receipt Posting per Shift ===
-        if (current.totalRevenue > 0) {
+        if (shiftRevenue > 0) {
           const dt = new Date();
           // 1. Consolidated Sales (Credit Revenue)
           await useAccountingStore.getState().addLedgerTransaction({
@@ -106,41 +130,41 @@ export const useShiftStore = create<ShiftState>()(
             accountType: 'cash',
             voucherType: 'sales',
             transactionType: 'credit',
-            amount: current.totalRevenue,
+            amount: shiftRevenue,
             description: `Sales — Shift Consolidated (${current.staffName})`,
             referenceId: closed.id,
           });
 
           // 2. Consolidated Receipts (Debit Assets)
-          if (current.totalCash > 0) {
+          if (shiftCash > 0) {
             await useAccountingStore.getState().addLedgerTransaction({
               date: dt,
               accountType: 'cash',
               voucherType: 'receipt',
               transactionType: 'debit',
-              amount: current.totalCash,
+              amount: shiftCash,
               description: `Receipt — Shift Consolidated (Cash)`,
               referenceId: closed.id,
             });
           }
-          if (current.totalUPI > 0) {
+          if (shiftUPI > 0) {
             await useAccountingStore.getState().addLedgerTransaction({
               date: dt,
               accountType: 'bank',
               voucherType: 'receipt',
               transactionType: 'debit',
-              amount: current.totalUPI,
+              amount: shiftUPI,
               description: `Receipt — Shift Consolidated (UPI)`,
               referenceId: closed.id,
             });
           }
-          if (current.totalCard > 0) {
+          if (shiftCard > 0) {
             await useAccountingStore.getState().addLedgerTransaction({
               date: dt,
               accountType: 'bank',
               voucherType: 'receipt',
               transactionType: 'debit',
-              amount: current.totalCard,
+              amount: shiftCard,
               description: `Receipt — Shift Consolidated (Card)`,
               referenceId: closed.id,
             });

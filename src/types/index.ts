@@ -216,7 +216,10 @@ export interface Shift {
   openedAt: Date;
   closedAt?: Date;
   openingBalance: number;
-  closingBalance?: number;
+  closingBalance?: number; // legacy alias for actualClosingBalance
+  expectedClosingBalance?: number;
+  actualClosingBalance?: number;
+  variance?: number;
   totalCash: number;
   totalUPI: number;
   totalCard: number;

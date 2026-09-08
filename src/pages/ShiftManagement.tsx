@@ -67,7 +67,7 @@ export default function ShiftManagement() {
       toast.error('Required', 'Please enter the actual cash in the till');
       return;
     }
-    closeShift(actualClosingBalance, closeNotes);
+    closeShift(actualClosingBalance, shiftRevenue, shiftCash, shiftUPI, shiftCard, closeNotes);
     setCloseNotes('');
     setActualCash('');
     setShowCloseModal(false);
