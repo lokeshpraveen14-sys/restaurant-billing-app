@@ -71,16 +71,14 @@ export const useStaffStore = create<StaffState>()(
           return;
         }
 
-        // Also add an accounting daybook entry for salary expense
-        // Assuming we want to map this to an account, we use 'cash' as default if not specified
-        const staffName = get().staffDetails.find(s => s.userId === newRecord.staffId)?.userId || 'Staff'; // we don't have name easily here without auth store, maybe just 'Staff'
-        
+        // Also add an accounting daybook entry for salary expense (Payment voucher per spec §9)
         await useAccountingStore.getState().addLedgerTransaction({
           date: newRecord.paymentDate,
           accountType: 'cash',
-          transactionType: 'debit',
+          voucherType: 'payment',
+          transactionType: 'debit',   // Expense increases with Debit (per-account-type rule §4)
           amount: newRecord.amount,
-          description: `Salary Payment - ${newRecord.month} ${newRecord.year}${newRecord.notes ? ` - ${newRecord.notes}` : ''}`,
+          description: `Payment Voucher — Salary ${newRecord.transactionType === 'advance' ? '(Advance)' : ''} — ${newRecord.month}/${newRecord.year}${newRecord.notes ? ` — ${newRecord.notes}` : ''}`,
           referenceId: newRecord.id
         });
       },

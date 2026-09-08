@@ -16,11 +16,12 @@ type Section = 'dashboard' | 'bank' | 'vendors' | 'ledger' | 'payables' | 'journ
 
 // ─── Voucher types (Tally-style) ─────────────────────────────────────────────
 const VOUCHER_TYPES = [
+  { id: 'sales',   label: 'Sales',   icon: '🧾', help: 'Manual sales revenue entry — normally auto-generated when a bill is created. Use only for corrections.' },
   { id: 'payment', label: 'Payment', icon: '💸', help: 'Cash/Bank going OUT of business (paying vendor, expenses, salary, etc.)' },
-  { id: 'receipt', label: 'Receipt', icon: '💰', help: 'Cash/Bank coming IN to business (customer payment, refund received, etc.)' },
+  { id: 'receipt', label: 'Receipt', icon: '💰', help: 'Cash/Bank coming IN to business (customer payment, refund received, etc.) — normally auto-generated from billing' },
   { id: 'purchase', label: 'Purchase', icon: '🛒', help: 'Goods/Services purchased on credit from vendor (payable increases)' },
   { id: 'contra', label: 'Contra', icon: '🔄', help: 'Transfer between Cash and Bank accounts' },
-  { id: 'journal', label: 'Journal', icon: '📓', help: 'All other entries — adjustments, depreciation, etc.' },
+  { id: 'journal', label: 'Journal', icon: '📓', help: 'All other entries — adjustments, depreciation, cash variance, etc.' },
 ];
 
 const EXPENSE_HEADS = [
@@ -282,11 +283,35 @@ export default function Accounting() {
           description: `Contra — Transfer from ${bankAccounts.find(b => b.id === fromAccountId)?.accountName || ''}`,
           referenceId: referenceNo || undefined,
         });
+      } else if (voucherType === 'sales') {
+        // Manual Sales voucher — use only for corrections; normally auto-created from billing
+        if (!bankAccountId) { toast.error('Required', 'Select the Cash/Bank account that received the payment'); return; }
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'cash',
+          voucherType: 'sales',
+          transactionType: 'credit',   // Revenue increases with Credit
+          amount,
+          description: `Sales — ${narration || 'Manual sales entry'}`,
+          referenceId: referenceNo || undefined,
+        });
+        // Also post the Receipt side
+        await addLedgerTransaction({
+          date: new Date(date),
+          accountType: 'bank',
+          accountId: bankAccountId,
+          voucherType: 'receipt',
+          transactionType: 'credit',
+          amount,
+          description: `Receipt — ${narration || 'Manual sales entry'}`,
+          referenceId: referenceNo || undefined,
+        });
       } else {
         // Journal
         await addLedgerTransaction({
           date: new Date(date),
           accountType: 'cash',
+          voucherType: 'journal',
           transactionType: 'debit',
           amount,
           description: narration || 'Journal Entry',
@@ -700,6 +725,15 @@ export default function Accounting() {
                   <option value="debit">Debit (Dr)</option>
                   <option value="credit">Credit (Cr)</option>
                 </select>
+                <select className="input select" value={filterAccount} onChange={e => setFilterAccount(e.target.value)} style={{ width: 160 }}>
+                  <option value="all">All Voucher Types</option>
+                  <option value="sales">🧾 Sales</option>
+                  <option value="receipt">💰 Receipt</option>
+                  <option value="payment">💸 Payment</option>
+                  <option value="purchase">🛒 Purchase</option>
+                  <option value="contra">🔄 Contra</option>
+                  <option value="journal">📓 Journal</option>
+                </select>
                 <select className="input select" value={filterAccount} onChange={e => setFilterAccount(e.target.value)} style={{ width: 140 }}>
                   <option value="all">All Accounts</option>
                   <option value="bank">Bank/Cash</option>
@@ -712,6 +746,7 @@ export default function Accounting() {
                 <thead>
                   <tr>
                     <th>Date</th>
+                    <th>Voucher</th>
                     <th>Particulars</th>
                     <th>Account</th>
                     <th>Ref. No.</th>
@@ -730,6 +765,33 @@ export default function Accounting() {
                     return (
                       <tr key={tx.id}>
                         <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString('en-IN')}</td>
+                        <td>
+                          {tx.voucherType && (
+                            <span style={{
+                              display: 'inline-block',
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: 4,
+                              textTransform: 'uppercase',
+                              letterSpacing: 0.5,
+                              background: tx.voucherType === 'sales' ? 'rgba(34,197,94,0.15)'
+                                : tx.voucherType === 'receipt' ? 'rgba(59,130,246,0.15)'
+                                : tx.voucherType === 'payment' ? 'rgba(239,68,68,0.15)'
+                                : tx.voucherType === 'purchase' ? 'rgba(234,179,8,0.15)'
+                                : tx.voucherType === 'journal' ? 'rgba(168,85,247,0.15)'
+                                : 'rgba(100,116,139,0.15)',
+                              color: tx.voucherType === 'sales' ? '#16a34a'
+                                : tx.voucherType === 'receipt' ? '#2563eb'
+                                : tx.voucherType === 'payment' ? '#dc2626'
+                                : tx.voucherType === 'purchase' ? '#ca8a04'
+                                : tx.voucherType === 'journal' ? '#9333ea'
+                                : '#64748b',
+                            }}>
+                              {VOUCHER_TYPES.find(v => v.id === tx.voucherType)?.icon} {tx.voucherType}
+                            </span>
+                          )}
+                        </td>
                         <td style={{ maxWidth: 260, fontSize: '0.875rem' }}>{tx.description || '—'}</td>
                         <td>
                           <span className={`badge badge-${tx.accountType === 'bank' ? 'free' : 'reserved'}`} style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
@@ -752,13 +814,13 @@ export default function Accounting() {
                     );
                   })}
                   {filteredLedger.length === 0 && (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No entries in selected range</td></tr>
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No entries in selected range</td></tr>
                   )}
                 </tbody>
                 {filteredLedger.length > 0 && (
                   <tfoot>
                     <tr style={{ fontWeight: 800, background: 'var(--bg-secondary)' }}>
-                      <td colSpan={4} style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Total ({filteredLedger.length} entries)</td>
+                      <td colSpan={5} style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Total ({filteredLedger.length} entries)</td>
                       <td style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--status-billing)' }}>
                         {formatAmount(filteredLedger.filter(t => t.transactionType === 'debit').reduce((s, t) => s + t.amount, 0))}
                       </td>

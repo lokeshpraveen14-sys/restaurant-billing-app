@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Vendor, BankAccount, LedgerTransaction, LedgerAccountType } from '../types';
+import { Vendor, BankAccount, LedgerTransaction, LedgerAccountType, VoucherType } from '../types';
 import { supabase } from '../lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -127,6 +127,7 @@ export const useAccountingStore = create<AccountingState>()(
           account_type: newTx.accountType,
           account_id: newTx.accountId,
           transaction_type: newTx.transactionType,
+          voucher_type: newTx.voucherType || null,
           amount: newTx.amount,
           description: newTx.description,
           reference_id: newTx.referenceId,
@@ -197,6 +198,7 @@ export const useAccountingStore = create<AccountingState>()(
               accountType: t.account_type as LedgerAccountType,
               accountId: t.account_id,
               transactionType: t.transaction_type,
+              voucherType: t.voucher_type as VoucherType | undefined,
               amount: Number(t.amount),
               description: t.description,
               referenceId: t.reference_id,

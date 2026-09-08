@@ -334,12 +334,15 @@ export interface BankAccount {
 export type LedgerAccountType = 'bank' | 'vendor' | 'staff' | 'cash';
 export type LedgerTransactionType = 'credit' | 'debit';
 
+export type VoucherType = 'sales' | 'receipt' | 'payment' | 'purchase' | 'contra' | 'journal';
+
 export interface LedgerTransaction {
   id: string;
   date: Date;
   accountType: LedgerAccountType;
   accountId?: string; // id of bank, vendor, or staff. Null for general cash
   transactionType: LedgerTransactionType;
+  voucherType?: VoucherType; // Tally-style voucher classification
   amount: number;
   description?: string;
   referenceId?: string; // could link to a bill or purchase

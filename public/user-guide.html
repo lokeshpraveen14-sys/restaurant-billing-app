@@ -797,21 +797,20 @@
     <li><div class="step-body"><strong>Click Generate Bill</strong>The bill is finalized and the table status changes to Billing, then Free. This also automatically creates a credit entry in the Accounting Daybook based on the payment modes used.</div></li>
   </ol>
 
-  <h2>GST Calculation</h2>
-  <p>GST is automatically calculated based on the rate assigned to each menu item. Restaurants typically apply:</p>
+  <h2>GST Calculation (2026 Rules)</h2>
+  <p>GST is automatically calculated based on the rate assigned to each menu item. As of 2026, the GST Council has simplified restaurant GST into two tiers:</p>
   <table>
-    <thead><tr><th>GST Rate</th><th>When Applied</th></tr></thead>
+    <thead><tr><th>Scenario</th><th>GST Rate</th><th>Input Tax Credit?</th></tr></thead>
     <tbody>
-      <tr><td>5%</td><td>Most food items at standalone restaurants with turnover below Rs. 1.5 crore</td></tr>
-      <tr><td>12%</td><td>Restaurants with air conditioning, seafood, or items served in five-star properties</td></tr>
-      <tr><td>18%</td><td>Outdoor catering</td></tr>
+      <tr><td>Standalone restaurant — dine-in or takeaway (AC or non-AC makes no difference)</td><td><strong>5%</strong></td><td>Not eligible</td></tr>
+      <tr><td>Restaurant inside a hotel where room tariff is ₹7,500 or more per night</td><td><strong>18%</strong></td><td>Eligible</td></tr>
+      <tr><td>Outdoor catering at a standalone venue</td><td><strong>5%</strong></td><td>Not eligible</td></tr>
+      <tr><td>Outdoor catering at a luxury hotel (room tariff ≥ ₹7,500)</td><td><strong>18%</strong></td><td>Eligible</td></tr>
     </tbody>
   </table>
-  <p>The bill shows both CGST and SGST breakup as required by Indian GST law. The total GST is split 50/50 between CGST (Central) and SGST (State).</p>
-
   <div class="info-box note">
-    <strong>Note</strong>
-    The GST rate for each item is set in Menu Management. Make sure the correct rate is assigned when adding new menu items.
+    <strong>Important GST Change</strong>
+    The old AC vs non-AC distinction and the 12% GST slab for restaurants no longer applies as of 2019. Most standalone restaurants like Railway Coach Kerala apply 5% GST (2.5% CGST + 2.5% SGST). The GST rate is a property of your restaurant type — set it once in Settings, not per table or per shift.
   </div>
 
   <h2>Split Payment</h2>
@@ -1051,11 +1050,16 @@
   </table>
 
   <h2>12.1 Understanding the Voucher System</h2>
-  <p>In Indian accounting, every transaction is recorded as a voucher. A voucher is simply a record of one financial event — money received, money paid, goods purchased on credit, or a fund transfer. There are five voucher types:</p>
+  <p>In Indian accounting, every transaction is recorded as a voucher. A voucher is simply a record of one financial event. There are six voucher types in this system:</p>
 
   <table>
     <thead><tr><th>Voucher Type</th><th>When to Use</th><th>Example</th></tr></thead>
     <tbody>
+      <tr>
+        <td><strong>Sales</strong></td>
+        <td>Automatically created every time a bill is generated. Records revenue earned. Do not create manually unless correcting an error.</td>
+        <td>Bill #INV-0042 for ₹850 at Table 5 — auto-posted when the cashier clicks Generate Bill</td>
+      </tr>
       <tr>
         <td><strong>Payment</strong></td>
         <td>Any time money goes OUT of your bank or cash account</td>
@@ -1063,8 +1067,8 @@
       </tr>
       <tr>
         <td><strong>Receipt</strong></td>
-        <td>Any time money comes IN to your bank or cash account</td>
-        <td>Depositing cash sales to bank, receiving a refund from a supplier</td>
+        <td>Automatically created for the money-received side of every sale. Also used for any other cash/bank inflow not tied to a sale.</td>
+        <td>Auto-created when a bill is paid; or manually: depositing cash sales to bank, receiving a refund from a supplier</td>
       </tr>
       <tr>
         <td><strong>Purchase</strong></td>
@@ -1078,8 +1082,8 @@
       </tr>
       <tr>
         <td><strong>Journal</strong></td>
-        <td>Any other adjustment entry that does not involve cash or bank directly</td>
-        <td>Depreciation of equipment, writing off a bad debt</td>
+        <td>Any other adjustment entry that does not involve cash or bank directly. Also auto-created when a shift is closed with a cash difference.</td>
+        <td>Depreciation of equipment, writing off a bad debt, cash short/over on shift close</td>
       </tr>
     </tbody>
   </table>
@@ -1420,11 +1424,11 @@
     <tbody>
       <tr>
         <td><strong>Debit (Dr)</strong></td>
-        <td>An entry that reduces what the account holds. For a bank account, a Debit means money went out. For a vendor account, a Debit means you made a payment to them (reducing what you owe).</td>
+        <td>Debit means different things depending on the account type. For <strong>Asset accounts (Cash, Bank)</strong>: a Debit means money came IN. For <strong>Expense accounts (Salary, Rent)</strong>: a Debit records an expense incurred. For <strong>Vendor/Liability accounts</strong>: a Debit means you made a payment, reducing what you owe. The rule is: Debit = Increases Assets and Expenses; Decreases Liabilities and Revenue.</td>
       </tr>
       <tr>
         <td><strong>Credit (Cr)</strong></td>
-        <td>An entry that increases what the account holds. For a bank account, a Credit means money came in. For a vendor account, a Credit means you received more goods on credit (increasing what you owe them).</td>
+        <td>Credit also means different things depending on the account type. For <strong>Revenue accounts (Sales)</strong>: a Credit records income earned. For <strong>Liability accounts (Vendor Payables)</strong>: a Credit means what you owe has increased. For <strong>Asset accounts (Cash, Bank)</strong>: a Credit means money went out. The rule is: Credit = Increases Revenue and Liabilities; Decreases Assets and Expenses.</td>
       </tr>
       <tr>
         <td><strong>Payable</strong></td>

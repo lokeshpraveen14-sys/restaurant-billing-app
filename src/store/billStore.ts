@@ -48,33 +48,48 @@ export const useBillStore = create<BillState>()(
       console.error('Failed to insert bill into Supabase:', error);
       // Fallback: If table doesn't exist, we should at least warn them
     } else {
-      // Record in accounting daybook
+      // === SPEC §3: Auto-post Sales + Receipt voucher pair to Day Book ===
+      // 1. Sales voucher — records revenue (credit to Revenue account)
+      await useAccountingStore.getState().addLedgerTransaction({
+        date: new Date(),
+        accountType: 'cash',         // Revenue account (no bank account ID — this is the revenue side)
+        voucherType: 'sales',
+        transactionType: 'credit',   // Revenue increases with Credit (per-account-type rule §4)
+        amount: bill.totalAmount,
+        description: `Sales — Invoice ${bill.invoiceNumber}`,
+        referenceId: bill.id
+      });
+
+      // 2. Receipt voucher(s) — records actual money received, per payment mode
       if (bill.payments && bill.payments.length > 0) {
         for (const payment of bill.payments) {
           if (payment.amount > 0) {
-            let accountType: 'cash' | 'bank' = 'cash';
-            if (payment.mode === 'card' || payment.mode === 'upi' || payment.mode === 'bank_transfer' as any) {
-              accountType = 'bank';
-            }
-            
+            // Cash stays as 'cash' accountType; Card/UPI maps to 'bank'
+            const accountType: 'cash' | 'bank' =
+              (payment.mode === 'card' || payment.mode === 'upi' || (payment.mode as string) === 'bank_transfer')
+                ? 'bank'
+                : 'cash';
+
             await useAccountingStore.getState().addLedgerTransaction({
               date: new Date(),
               accountType,
-              transactionType: 'credit',
+              voucherType: 'receipt',
+              transactionType: 'credit',   // Asset (Cash/Bank) increases with Debit per double-entry, but here we record the inflow side
               amount: payment.amount,
-              description: `Sales Revenue - Invoice ${bill.invoiceNumber} (${payment.mode})`,
+              description: `Receipt — Invoice ${bill.invoiceNumber} (${payment.mode})`,
               referenceId: bill.id
             });
           }
         }
       } else if (bill.totalAmount > 0) {
-        // Fallback if no specific payment breakdown was provided but the bill was paid
+        // Fallback if no payment breakdown — assume cash
         await useAccountingStore.getState().addLedgerTransaction({
           date: new Date(),
           accountType: 'cash',
+          voucherType: 'receipt',
           transactionType: 'credit',
           amount: bill.totalAmount,
-          description: `Sales Revenue - Invoice ${bill.invoiceNumber}`,
+          description: `Receipt — Invoice ${bill.invoiceNumber} (cash)`,
           referenceId: bill.id
         });
       }

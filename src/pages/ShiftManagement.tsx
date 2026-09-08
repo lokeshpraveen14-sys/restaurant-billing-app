@@ -18,6 +18,7 @@ export default function ShiftManagement() {
   const toast = useToast();
   const [openingBalance, setOpeningBalance] = useState('');
   const [closeNotes, setCloseNotes] = useState('');
+  const [actualCash, setActualCash] = useState('');
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showOpenModal, setShowOpenModal] = useState(false);
   const printRef = React.useRef<HTMLDivElement>(null);
@@ -61,8 +62,14 @@ export default function ShiftManagement() {
   };
 
   const handleCloseShift = () => {
-    closeShift(closeNotes);
+    const actualClosingBalance = parseFloat(actualCash);
+    if (isNaN(actualClosingBalance)) {
+      toast.error('Required', 'Please enter the actual cash in the till');
+      return;
+    }
+    closeShift(actualClosingBalance, closeNotes);
     setCloseNotes('');
+    setActualCash('');
     setShowCloseModal(false);
     toast.success('Shift Closed', 'Shift summary saved successfully');
   };
@@ -318,6 +325,26 @@ export default function ShiftManagement() {
                     <span style={{ fontWeight: 600 }}>{v}</span>
                   </div>
                 ))}
+              </div>
+              <div className="input-group">
+                <label className="input-label">Actual Cash in Till (₹) <span style={{ color: 'var(--status-occupied)' }}>*</span></label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  placeholder="Count and enter the cash physically in the drawer"
+                  value={actualCash}
+                  onChange={(e) => setActualCash(e.target.value)}
+                />
+                {actualCash && (
+                  <div style={{ fontSize: '0.8rem', marginTop: 6, color: parseFloat(actualCash) < closingBalance ? 'var(--status-occupied)' : 'var(--status-free)' }}>
+                    {parseFloat(actualCash) < closingBalance
+                      ? `⚠️ Cash Short by ₹${(closingBalance - parseFloat(actualCash)).toFixed(2)} — Journal entry will be auto-created`
+                      : parseFloat(actualCash) > closingBalance
+                        ? `✅ Cash Over by ₹${(parseFloat(actualCash) - closingBalance).toFixed(2)} — Journal entry will be auto-created`
+                        : '✅ Cash matches expected amount'}
+                  </div>
+                )}
               </div>
               <div className="input-group">
                 <label className="input-label">Notes (optional)</label>

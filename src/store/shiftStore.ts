@@ -2,12 +2,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Shift } from '../types';
 import { supabase } from '../lib/supabase';
+import { useAccountingStore } from './accountingStore';
 
 interface ShiftState {
   shifts: Shift[];
   currentShift: Shift | null;
   openShift: (staffName: string, staffId: string, openingBalance: number) => Promise<Shift>;
-  closeShift: (notes?: string) => Promise<void>;
+  closeShift: (actualClosingBalance: number, notes?: string) => Promise<void>;
   addBillToShift: (cashAmount: number, upiAmount: number, cardAmount: number, total: number, covers: number) => Promise<void>;
   initShiftSync: () => Promise<void>;
 }
@@ -47,13 +48,18 @@ export const useShiftStore = create<ShiftState>()(
         return newShift;
       },
 
-      closeShift: async (notes) => {
+      closeShift: async (actualClosingBalance: number, notes?: string) => {
         const current = get().currentShift;
         if (!current) return;
+
+        // Expected closing = opening + all cash collected during shift
+        const expectedClosingBalance = current.openingBalance + current.totalCash;
+        const variance = actualClosingBalance - expectedClosingBalance;
+
         const closed: Shift = {
           ...current,
           closedAt: new Date(),
-          closingBalance: current.openingBalance + current.totalCash,
+          closingBalance: actualClosingBalance,
           status: 'closed',
           notes,
         };
@@ -74,6 +80,22 @@ export const useShiftStore = create<ShiftState>()(
           total_orders: closed.totalOrders,
           total_covers: closed.totalCovers
         }).eq('id', closed.id);
+
+        // === SPEC §8: Post shift cash variance as Journal voucher ===
+        if (variance !== 0) {
+          const isShort = variance < 0;
+          await useAccountingStore.getState().addLedgerTransaction({
+            date: new Date(),
+            accountType: 'cash',
+            voucherType: 'journal',
+            transactionType: isShort ? 'debit' : 'credit',
+            amount: Math.abs(variance),
+            description: isShort
+              ? `Journal — Cash Short on shift close (${current.staffName}) — Expected ${expectedClosingBalance}, Actual ${actualClosingBalance}`
+              : `Journal — Cash Over on shift close (${current.staffName}) — Expected ${expectedClosingBalance}, Actual ${actualClosingBalance}`,
+            referenceId: closed.id,
+          });
+        }
       },
 
       addBillToShift: async (cashAmount, upiAmount, cardAmount, total, covers) => {
