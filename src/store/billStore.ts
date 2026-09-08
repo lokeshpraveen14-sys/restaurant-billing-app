@@ -53,7 +53,7 @@ export const useBillStore = create<BillState>()(
         for (const payment of bill.payments) {
           if (payment.amount > 0) {
             let accountType: 'cash' | 'bank' = 'cash';
-            if (payment.method === 'card' || payment.method === 'upi' || payment.method === 'bank_transfer') {
+            if (payment.mode === 'card' || payment.mode === 'upi' || payment.mode === 'bank_transfer' as any) {
               accountType = 'bank';
             }
             
@@ -62,7 +62,7 @@ export const useBillStore = create<BillState>()(
               accountType,
               transactionType: 'credit',
               amount: payment.amount,
-              description: `Sales Revenue - Invoice ${bill.invoiceNumber} (${payment.method})`,
+              description: `Sales Revenue - Invoice ${bill.invoiceNumber} (${payment.mode})`,
               referenceId: bill.id
             });
           }
