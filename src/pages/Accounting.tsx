@@ -60,6 +60,7 @@ export default function Accounting() {
   const [filterTo, setFilterTo] = useState(new Date().toISOString().slice(0, 10));
   const [filterType, setFilterType] = useState<string>('all');
   const [filterAccount, setFilterAccount] = useState<string>('all');
+  const [filterVoucherType, setFilterVoucherType] = useState<string>('all');
 
   // Forms
   const [bankForm, setBankForm] = useState({ accountName: '', accountNumber: '', bankName: '', openingBalance: 0, accountType: 'current' as 'current' | 'savings' | 'cash' });
@@ -201,9 +202,10 @@ export default function Accounting() {
       const inRange = (!filterFrom || tDate >= filterFrom) && (!filterTo || tDate <= filterTo);
       const typeMatch = filterType === 'all' || t.transactionType === filterType;
       const acMatch = filterAccount === 'all' || t.accountType === filterAccount;
-      return inRange && typeMatch && acMatch;
+      const voucherMatch = filterVoucherType === 'all' || t.voucherType === filterVoucherType;
+      return inRange && typeMatch && acMatch && voucherMatch;
     });
-  }, [ledgerTransactions, filterFrom, filterTo, filterType, filterAccount]);
+  }, [ledgerTransactions, filterFrom, filterTo, filterType, filterAccount, filterVoucherType]);
 
   // ─── Voucher Submission ──────────────────────────────────────────────────────
   const handleSubmitVoucher = async () => {
@@ -725,7 +727,7 @@ export default function Accounting() {
                   <option value="debit">Debit (Dr)</option>
                   <option value="credit">Credit (Cr)</option>
                 </select>
-                <select className="input select" value={filterAccount} onChange={e => setFilterAccount(e.target.value)} style={{ width: 160 }}>
+                <select className="input select" value={filterVoucherType} onChange={e => setFilterVoucherType(e.target.value)} style={{ width: 160 }}>
                   <option value="all">All Voucher Types</option>
                   <option value="sales">🧾 Sales</option>
                   <option value="receipt">💰 Receipt</option>
