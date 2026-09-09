@@ -1,6 +1,75 @@
 // GST Calculation Engine — India Compliant
 
 import { GSTBreakdown, OrderItem } from '../types';
+import { supabase } from './supabase';
+
+// ── Indian GST State Code Map (first 2 digits of GSTIN → state name) ──────────
+export const GST_STATE_CODES: Record<string, string> = {
+  '01': 'Jammu & Kashmir',
+  '02': 'Himachal Pradesh',
+  '03': 'Punjab',
+  '04': 'Chandigarh',
+  '05': 'Uttarakhand',
+  '06': 'Haryana',
+  '07': 'Delhi',
+  '08': 'Rajasthan',
+  '09': 'Uttar Pradesh',
+  '10': 'Bihar',
+  '11': 'Sikkim',
+  '12': 'Arunachal Pradesh',
+  '13': 'Nagaland',
+  '14': 'Manipur',
+  '15': 'Mizoram',
+  '16': 'Tripura',
+  '17': 'Meghalaya',
+  '18': 'Assam',
+  '19': 'West Bengal',
+  '20': 'Jharkhand',
+  '21': 'Odisha',
+  '22': 'Chhattisgarh',
+  '23': 'Madhya Pradesh',
+  '24': 'Gujarat',
+  '25': 'Daman & Diu',
+  '26': 'Dadra & Nagar Haveli',
+  '27': 'Maharashtra',
+  '28': 'Andhra Pradesh (Old)',
+  '29': 'Karnataka',
+  '30': 'Goa',
+  '31': 'Lakshadweep',
+  '32': 'Kerala',
+  '33': 'Tamil Nadu',
+  '34': 'Puducherry',
+  '35': 'Andaman & Nicobar',
+  '36': 'Telangana',
+  '37': 'Andhra Pradesh',
+  '38': 'Ladakh',
+  '97': 'Other Territory',
+  '99': 'Centre Jurisdiction',
+};
+
+/**
+ * Derive state name from first 2 digits of a GSTIN.
+ * Returns null if GSTIN is invalid/empty.
+ */
+export function getStateFromGSTIN(gstin: string | undefined | null): string | null {
+  if (!gstin || gstin.length < 2) return null;
+  const code = gstin.slice(0, 2).toUpperCase();
+  return GST_STATE_CODES[code] || null;
+}
+
+/**
+ * Determine whether a transaction is inter-state.
+ * Compares businessState (from Settings) with the state derived from customerGstin.
+ * Falls back to intra-state if customerGstin is missing/invalid.
+ */
+export function determineIsInterState(
+  businessState: string,
+  customerGstin?: string | null
+): boolean {
+  const customerState = getStateFromGSTIN(customerGstin);
+  if (!customerState) return false; // no GSTIN → treat as intra-state (B2C)
+  return customerState.toLowerCase().trim() !== businessState.toLowerCase().trim();
+}
 
 /**
  * Calculate GST based on transaction type
@@ -70,6 +139,21 @@ export function calculateGSTBreakdown(
   return breakdown.sort((a, b) => a.rate - b.rate);
 }
 
+/** Sum CGST across all breakdown entries */
+export function sumCGST(breakdown: GSTBreakdown[]): number {
+  return roundTo2(breakdown.reduce((s, g) => s + g.cgst, 0));
+}
+
+/** Sum SGST across all breakdown entries */
+export function sumSGST(breakdown: GSTBreakdown[]): number {
+  return roundTo2(breakdown.reduce((s, g) => s + g.sgst, 0));
+}
+
+/** Sum IGST across all breakdown entries */
+export function sumIGST(breakdown: GSTBreakdown[]): number {
+  return roundTo2(breakdown.reduce((s, g) => s + g.igst, 0));
+}
+
 /** Round to 2 decimal places */
 export function roundTo2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -118,6 +202,39 @@ export function generateInvoiceNumber(
   return `${prefix}/${fy}/${seq}`;
 }
 
+/**
+ * Get current financial year string (e.g. "2025-26")
+ */
+export function getCurrentFY(date = new Date()): string {
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  const fyStart = month >= 4 ? year : year - 1;
+  const fyEnd = (fyStart + 1).toString().slice(2);
+  return `${fyStart}-${fyEnd}`;
+}
+
+/**
+ * Atomically fetch the next invoice number from Postgres.
+ * Falls back to local counter if RPC fails (e.g. offline / network error).
+ */
+export async function getNextInvoiceNumber(
+  prefix: string,
+  localFallback: () => string
+): Promise<string> {
+  try {
+    const fy = getCurrentFY();
+    const { data, error } = await supabase.rpc('get_next_invoice_number', {
+      p_prefix: prefix,
+      p_fy: fy,
+    });
+    if (error || !data) throw error;
+    return data as string;
+  } catch {
+    console.warn('Invoice RPC failed, using local counter fallback');
+    return localFallback();
+  }
+}
+
 /** HSN Code for common food items */
 export const HSN_CODES: Record<string, string> = {
   'restaurant': '9963',
@@ -150,3 +267,5 @@ export function calculateDiscount(
   if (type === 'flat') return Math.min(value, subtotal);
   return roundTo2((subtotal * value) / 100);
 }
+
+

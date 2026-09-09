@@ -147,6 +147,9 @@ export interface Bill {
   subtotal: number;
   gstBreakdown: GSTBreakdown[];
   totalGST: number;
+  cgstAmount?: number;       // stored separately for GSTR-1
+  sgstAmount?: number;
+  igstAmount?: number;
   serviceCharge: number;
   serviceChargePercent: number;
   parcelCharge?: number;
@@ -160,6 +163,10 @@ export interface Bill {
   changeDue: number;
   customerName?: string;
   customerPhone?: string;
+  customerGstin?: string;    // B2B customer GSTIN
+  placeOfSupply?: string;    // state name derived from customer GSTIN or business state
+  hsnCodes?: Record<string, string>; // { menuItemId: hsnCode } snapshot at bill time
+  isGstBill?: boolean;       // if false: store tax internally but hide on print / exclude from GSTR-1
   staffName: string;
   status?: 'paid' | 'void';
   guestCount?: number;
@@ -269,6 +276,7 @@ export interface Settings {
   gstEnabled: boolean;
   defaultGstRate: 0 | 5 | 12 | 18 | 28;
   categoryGstRates: Record<string, number>;
+  businessState: string; // e.g. "Tamil Nadu" — used for intra vs inter-state GST split
 }
 
 // Toast notification
@@ -331,6 +339,8 @@ export interface BankAccount {
   bankName?: string;
   openingBalance: number;
   currentBalance: number;
+  reconciledBalance?: number;      // set manually during bank reconciliation
+  lastReconciledDate?: Date;       // date of last reconciliation
   createdAt: Date;
 }
 

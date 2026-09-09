@@ -6,7 +6,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useBillStore } from '../store/billStore';
 import { useShiftStore } from '../store/shiftStore';
 import { useToast } from '../store/uiStore';
-import { calculateGSTBreakdown, gstRoundOff, generateInvoiceNumber, formatAmount, calculateServiceCharge, calculateDiscount } from '../lib/gst';
+import { calculateGSTBreakdown, gstRoundOff, getNextInvoiceNumber, generateInvoiceNumber, formatAmount, calculateServiceCharge, calculateDiscount, determineIsInterState, sumCGST, sumSGST, sumIGST, getStateFromGSTIN } from '../lib/gst';
 import { Bill, Payment, PaymentMode, DiscountType } from '../types';
 import { Printer, FilePdf, CurrencyInr, Receipt } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
@@ -35,6 +35,9 @@ export default function Billing() {
   const [cashTendered, setCashTendered] = useState('');
   const [upiRef, setUpiRef] = useState('');
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
+  // GST + B2B fields
+  const [isGstBill, setIsGstBill] = useState(settings.gstEnabled);
+  const [customerGstin, setCustomerGstin] = useState('');
 
   const handlePrint = async (printerId: string = 'billing', bill?: Bill | null) => {
     const b = bill || billGenerated;
@@ -84,12 +87,41 @@ export default function Billing() {
   const totalAmount = rounded;
   const changeDue = paymentMode === 'cash' && cashTendered ? parseFloat(cashTendered) - totalAmount : 0;
 
-  const handleGenerateBill = () => {
+  const handleGenerateBill = async () => {
     if (!order) return;
     if (!window.confirm('Are you sure you want to generate and save this bill? This action cannot be undone.')) return;
-    
-    const counter = incrementInvoiceCounter();
-    const invoiceNumber = generateInvoiceNumber(settings.invoicePrefix, counter);
+
+    // Determine inter-state from customer GSTIN vs business state
+    const interState = determineIsInterState(settings.businessState || '', customerGstin);
+
+    // GST: always calculate and store — isGstBill only controls visibility on print
+    const gstBreakdown = settings.gstEnabled ? calculateGSTBreakdown(cartItems, interState) : [];
+    const totalGST = gstBreakdown.reduce((sum, g) => sum + g.cgst + g.sgst + g.igst, 0);
+    const cgstAmount = sumCGST(gstBreakdown);
+    const sgstAmount = sumSGST(gstBreakdown);
+    const igstAmount = sumIGST(gstBreakdown);
+
+    // Determine place of supply
+    const customerState = getStateFromGSTIN(customerGstin);
+    const placeOfSupply = customerState || settings.businessState || '';
+
+    // Snapshot HSN codes from menu items at bill time
+    const hsnCodes: Record<string, string> = {};
+    cartItems.forEach(item => {
+      // hsnCode is on MenuItem but not OrderItem — use a string match from the enum or leave blank
+      // The menuItem's hsnCode isn't available here without importing menuStore; leave blank for now
+      // This will be populated in the future when hsnCode is added to OrderItem
+      if ((item as any).hsnCode) hsnCodes[item.menuItemId] = (item as any).hsnCode;
+    });
+
+    // Get invoice number from DB (atomic) with local fallback
+    const invoiceNumber = await getNextInvoiceNumber(
+      settings.invoicePrefix,
+      () => {
+        const counter = incrementInvoiceCounter();
+        return generateInvoiceNumber(settings.invoicePrefix, counter);
+      }
+    );
 
     const bill: Bill = {
       id: crypto.randomUUID(),
@@ -103,6 +135,9 @@ export default function Billing() {
       subtotal: subtotalWithCharges,
       gstBreakdown,
       totalGST,
+      cgstAmount,
+      sgstAmount,
+      igstAmount,
       serviceCharge,
       serviceChargePercent: settings.serviceChargePercent,
       discountType,
@@ -119,6 +154,10 @@ export default function Billing() {
       outletName: settings.restaurantName,
       outletAddress: settings.address,
       outletGSTIN: settings.gstin,
+      isGstBill,
+      customerGstin: customerGstin || undefined,
+      placeOfSupply,
+      hsnCodes: Object.keys(hsnCodes).length > 0 ? hsnCodes : undefined,
     };
 
     setBillGenerated(bill);
@@ -132,6 +171,7 @@ export default function Billing() {
     if (order.tableId) updateTableStatus(order.tableId, 'free');
     toast.success('Bill Generated', `Invoice ${invoiceNumber} created`);
   };
+
 
 
   const upiQRValue = `upi://pay?pa=${settings.upiId}&pn=${encodeURIComponent(settings.restaurantName)}&am=${totalAmount}&cu=INR`;
@@ -351,9 +391,59 @@ export default function Billing() {
               </div>
             </div>
 
+            {/* GST Bill Toggle + Customer GSTIN */}
+            <div className="card" style={{ marginBottom: 0 }}>
+              <div className="card-header"><div className="card-title">GST & Customer Details</div></div>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+                    <div
+                      onClick={() => setIsGstBill(v => !v)}
+                      style={{
+                        width: 42, height: 24, borderRadius: 12, cursor: 'pointer',
+                        background: isGstBill ? 'var(--status-free)' : 'var(--border-strong)',
+                        position: 'relative', transition: 'background 0.2s',
+                      }}
+                    >
+                      <div style={{
+                        position: 'absolute', top: 3, left: isGstBill ? 20 : 3,
+                        width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                        transition: 'left 0.2s',
+                      }} />
+                    </div>
+                    <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                      {isGstBill ? '🧾 GST Invoice (tax lines visible on print)' : '📄 Non-GST Bill (tax stored internally, hidden on print)'}
+                    </span>
+                  </label>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Customer GSTIN (B2B — optional)</label>
+                  <input
+                    className="input"
+                    placeholder="e.g. 33AAAAA0000A1Z5"
+                    value={customerGstin}
+                    onChange={e => setCustomerGstin(e.target.value.toUpperCase().trim())}
+                    maxLength={15}
+                    style={{ fontFamily: 'var(--font-mono)', letterSpacing: 1 }}
+                  />
+                  {customerGstin.length >= 2 && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--accent)', marginTop: 4 }}>
+                      {(() => {
+                        const state = getStateFromGSTIN(customerGstin);
+                        if (!state) return '⚠ Unknown state code';
+                        const inter = state.toLowerCase() !== (settings.businessState || '').toLowerCase();
+                        return inter ? `⚡ Inter-state → IGST (${state})` : `✓ Intra-state → CGST+SGST (${state})`;
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Payment Mode */}
             <div className="card">
               <div className="card-header"><div className="card-title">Payment Mode</div></div>
+
               <div className="card-body">
                 <div className="payment-mode-grid">
                   {(['cash', 'upi', 'card'] as PaymentMode[]).map((mode) => (

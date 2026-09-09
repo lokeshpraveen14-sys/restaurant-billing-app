@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS: Settings = {
   gstEnabled: true,
   defaultGstRate: 5,
   categoryGstRates: {},
+  businessState: 'Tamil Nadu', // default — update in Settings page for your location
 };
 
 interface SettingsState {

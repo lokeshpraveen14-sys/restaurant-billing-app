@@ -88,6 +88,8 @@ export const useAccountingStore = create<AccountingState>()(
           bank_name: newAccount.bankName,
           opening_balance: newAccount.openingBalance,
           current_balance: newAccount.currentBalance,
+          reconciled_balance: newAccount.reconciledBalance ?? null,
+          last_reconciled_date: newAccount.lastReconciledDate ? newAccount.lastReconciledDate.toISOString().slice(0, 10) : null,
           created_at: newAccount.createdAt.toISOString()
         });
         if (error) console.error('Failed to insert bank account:', error);
@@ -103,6 +105,8 @@ export const useAccountingStore = create<AccountingState>()(
         if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
         if (updates.currentBalance !== undefined) dbUpdates.current_balance = updates.currentBalance;
         if (updates.openingBalance !== undefined) dbUpdates.opening_balance = updates.openingBalance;
+        if (updates.reconciledBalance !== undefined) dbUpdates.reconciled_balance = updates.reconciledBalance;
+        if (updates.lastReconciledDate !== undefined) dbUpdates.last_reconciled_date = updates.lastReconciledDate ? updates.lastReconciledDate.toISOString().slice(0, 10) : null;
         const { error } = await supabase.from('bank_accounts').update(dbUpdates).eq('id', id);
         if (error) console.error('Failed to update bank account:', error);
       },
@@ -180,6 +184,8 @@ export const useAccountingStore = create<AccountingState>()(
               bankName: b.bank_name,
               openingBalance: Number(b.opening_balance),
               currentBalance: Number(b.current_balance),
+              reconciledBalance: b.reconciled_balance != null ? Number(b.reconciled_balance) : undefined,
+              lastReconciledDate: b.last_reconciled_date ? new Date(b.last_reconciled_date) : undefined,
               createdAt: new Date(b.created_at)
             }))
           });

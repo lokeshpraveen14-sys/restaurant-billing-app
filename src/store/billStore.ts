@@ -34,6 +34,9 @@ export const useBillStore = create<BillState>()(
       items: bill.items,
       subtotal: bill.subtotal,
       total_gst: bill.totalGST,
+      cgst_amount: bill.cgstAmount ?? 0,
+      sgst_amount: bill.sgstAmount ?? 0,
+      igst_amount: bill.igstAmount ?? 0,
       service_charge: bill.serviceCharge,
       discount_amount: bill.discountAmount,
       total_amount: bill.totalAmount,
@@ -41,6 +44,11 @@ export const useBillStore = create<BillState>()(
       staff_name: bill.staffName,
       status: newBill.status,
       guest_count: bill.guestCount,
+      customer_gstin: bill.customerGstin || null,
+      hsn_codes: bill.hsnCodes || null,
+      place_of_supply: bill.placeOfSupply || null,
+      outlet_gstin: bill.outletGSTIN || null,
+      is_gst_bill: bill.isGstBill !== false, // default true
       created_at: bill.createdAt.toISOString()
     });
 
@@ -49,6 +57,7 @@ export const useBillStore = create<BillState>()(
       // Fallback: If table doesn't exist, we should at least warn them
     }
   },
+
 
   voidBill: async (billId: string) => {
     // Optimistic UI update
@@ -106,6 +115,9 @@ export const useBillStore = create<BillState>()(
       subtotal: Number(b.subtotal),
       gstBreakdown: [],
       totalGST: Number(b.total_gst),
+      cgstAmount: Number(b.cgst_amount || 0),
+      sgstAmount: Number(b.sgst_amount || 0),
+      igstAmount: Number(b.igst_amount || 0),
       serviceCharge: Number(b.service_charge),
       serviceChargePercent: 0,
       discountType: 'flat' as const,
@@ -119,10 +131,14 @@ export const useBillStore = create<BillState>()(
       staffName: b.staff_name,
       status: b.status || 'paid',
       guestCount: b.guest_count,
+      customerGstin: b.customer_gstin || undefined,
+      placeOfSupply: b.place_of_supply || undefined,
+      hsnCodes: b.hsn_codes || undefined,
+      isGstBill: b.is_gst_bill !== false,
       createdAt: new Date(b.created_at),
       outletName: '',
       outletAddress: '',
-      outletGSTIN: '',
+      outletGSTIN: b.outlet_gstin || '',
     }));
   },
 
@@ -151,6 +167,9 @@ export const useBillStore = create<BillState>()(
         subtotal: Number(b.subtotal),
         gstBreakdown: [],
         totalGST: Number(b.total_gst),
+        cgstAmount: Number(b.cgst_amount || 0),
+        sgstAmount: Number(b.sgst_amount || 0),
+        igstAmount: Number(b.igst_amount || 0),
         serviceCharge: Number(b.service_charge),
         serviceChargePercent: 0,
         discountType: 'flat' as const,
@@ -164,10 +183,14 @@ export const useBillStore = create<BillState>()(
         staffName: b.staff_name,
         status: b.status || 'paid',
         guestCount: b.guest_count,
+        customerGstin: b.customer_gstin || undefined,
+        placeOfSupply: b.place_of_supply || undefined,
+        hsnCodes: b.hsn_codes || undefined,
+        isGstBill: b.is_gst_bill !== false,
         createdAt: new Date(b.created_at),
         outletName: '',
         outletAddress: '',
-        outletGSTIN: '',
+        outletGSTIN: b.outlet_gstin || '',
       }));
 
       // Merge: DB is authoritative. Keep any local bills not in DB (e.g. just created).
@@ -200,6 +223,9 @@ export const useBillStore = create<BillState>()(
             subtotal: Number(b.subtotal),
             gstBreakdown: [],
             totalGST: Number(b.total_gst),
+            cgstAmount: Number(b.cgst_amount || 0),
+            sgstAmount: Number(b.sgst_amount || 0),
+            igstAmount: Number(b.igst_amount || 0),
             serviceCharge: Number(b.service_charge),
             serviceChargePercent: 0,
             discountType: 'flat' as const,
@@ -213,11 +239,16 @@ export const useBillStore = create<BillState>()(
             staffName: b.staff_name,
             status: b.status || 'paid',
             guestCount: b.guest_count,
+            customerGstin: b.customer_gstin || undefined,
+            placeOfSupply: b.place_of_supply || undefined,
+            hsnCodes: b.hsn_codes || undefined,
+            isGstBill: b.is_gst_bill !== false,
             createdAt: new Date(b.created_at),
             outletName: '',
             outletAddress: '',
-            outletGSTIN: '',
+            outletGSTIN: b.outlet_gstin || '',
           };
+
           return { bills: [...state.bills, mappedBill] };
         });
 

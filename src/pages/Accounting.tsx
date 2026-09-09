@@ -21,7 +21,7 @@ const VOUCHER_TYPES = [
   { id: 'receipt', label: 'Receipt', icon: '💰', help: 'Cash/Bank coming IN to business (customer payment, refund received, etc.) — normally auto-generated from billing' },
   { id: 'purchase', label: 'Purchase', icon: '🛒', help: 'Goods/Services purchased on credit from vendor (payable increases)' },
   { id: 'contra', label: 'Contra', icon: '🔄', help: 'Transfer between Cash and Bank accounts' },
-  { id: 'journal', label: 'Journal', icon: '📓', help: 'All other entries — adjustments, depreciation, cash variance, etc.' },
+  { id: 'journal', label: 'Adjustment / Suspense', icon: '📝', help: 'Cash variance, rounding adjustments, suspense entries, or corrections that don\'t fit other types. Narration is REQUIRED. These entries are tagged with ⚠ in the Day Book and excluded from GSTR-1 export.' },
 ];
 
 const EXPENSE_HEADS = [
@@ -212,6 +212,11 @@ export default function Accounting() {
     const { voucherType, date, bankAccountId, vendorId, expenseHead, fromAccountId, toAccountId, amount, narration, referenceNo } = voucherForm;
     if (!amount || amount <= 0) { toast.error('Required', 'Amount must be greater than 0'); return; }
     if (!date) { toast.error('Required', 'Date is required'); return; }
+    // Journal / Adjustment entries require a narration
+    if (voucherType === 'journal' && !narration.trim()) {
+      toast.error('Required', 'Narration / Reason is required for Adjustment & Suspense entries');
+      return;
+    }
 
     try {
       if (voucherType === 'payment') {
@@ -734,7 +739,7 @@ export default function Accounting() {
                   <option value="payment">💸 Payment</option>
                   <option value="purchase">🛒 Purchase</option>
                   <option value="contra">🔄 Contra</option>
-                  <option value="journal">📓 Journal</option>
+                  <option value="journal">📓 Adjustment</option>
                 </select>
                 <select className="input select" value={filterAccount} onChange={e => setFilterAccount(e.target.value)} style={{ width: 140 }}>
                   <option value="all">All Accounts</option>
@@ -781,16 +786,19 @@ export default function Accounting() {
                                 : tx.voucherType === 'receipt' ? 'rgba(59,130,246,0.15)'
                                 : tx.voucherType === 'payment' ? 'rgba(239,68,68,0.15)'
                                 : tx.voucherType === 'purchase' ? 'rgba(234,179,8,0.15)'
-                                : tx.voucherType === 'journal' ? 'rgba(168,85,247,0.15)'
+                                : tx.voucherType === 'journal' ? 'rgba(251,146,60,0.2)'   // amber — adjustment/suspense
                                 : 'rgba(100,116,139,0.15)',
                               color: tx.voucherType === 'sales' ? '#16a34a'
                                 : tx.voucherType === 'receipt' ? '#2563eb'
                                 : tx.voucherType === 'payment' ? '#dc2626'
                                 : tx.voucherType === 'purchase' ? '#ca8a04'
-                                : tx.voucherType === 'journal' ? '#9333ea'
+                                : tx.voucherType === 'journal' ? '#ea580c'   // orange for adjustment
                                 : '#64748b',
+                              border: tx.voucherType === 'journal' ? '1px solid rgba(251,146,60,0.5)' : 'none',
                             }}>
-                              {VOUCHER_TYPES.find(v => v.id === tx.voucherType)?.icon} {tx.voucherType}
+                              {tx.voucherType === 'journal'
+                                ? '⚠ Adjustment'
+                                : `${VOUCHER_TYPES.find(v => v.id === tx.voucherType)?.icon ?? ''} ${tx.voucherType}`}
                             </span>
                           )}
                         </td>
