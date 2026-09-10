@@ -96,16 +96,35 @@ export default function GstFiling() {
         return `${posString},Intra-State,${rate}%,${vals.taxable.toFixed(2)},${vals.cgst.toFixed(2)},${vals.sgst.toFixed(2)},0.00,`;
       });
 
-    // --- TABLE 13: Documents Issued ---
-    const allInvoiceNumbers = gstrBills.map(b => b.invoiceNumber).sort();
-    const minInvoice = allInvoiceNumbers.length > 0 ? allInvoiceNumbers[0] : '';
-    const maxInvoice = allInvoiceNumbers.length > 0 ? allInvoiceNumbers[allInvoiceNumbers.length - 1] : '';
-    const totalCount = gstrBills.length;
-    const cancelledCount = gstrBills.filter(b => b.status === 'void').length;
-    const netIssued = totalCount - cancelledCount;
+    // --- TABLE 13: Documents Issued (Daily Segregation) ---
+    const billsByDate = new Map<string, Bill[]>();
+    gstrBills.forEach(b => {
+      const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+      // Format to YYYY-MM-DD for stable chronological sorting
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
+      if (!billsByDate.has(dateStr)) {
+        billsByDate.set(dateStr, []);
+      }
+      billsByDate.get(dateStr)!.push(b);
+    });
 
     const t13Header = 'Type of Document,From Serial No.,To Serial No.,Total Count,Cancelled Count,Net Issued';
-    const t13Row = `B2C Invoices,${minInvoice},${maxInvoice},${totalCount},${cancelledCount},${netIssued}`;
+    const sortedDates = Array.from(billsByDate.keys()).sort();
+    
+    const t13Rows = sortedDates.map(dateStr => {
+      const dailyBills = billsByDate.get(dateStr)!;
+      const allInvoiceNumbers = dailyBills.map(b => b.invoiceNumber).sort();
+      const minInvoice = allInvoiceNumbers[0];
+      const maxInvoice = allInvoiceNumbers[allInvoiceNumbers.length - 1];
+      const totalCount = dailyBills.length;
+      const cancelledCount = dailyBills.filter(b => b.status === 'void').length;
+      const netIssued = totalCount - cancelledCount;
+      return `B2C Invoices,${minInvoice},${maxInvoice},${totalCount},${cancelledCount},${netIssued}`;
+    });
 
     const csvContent = [
       `GSTR-1 EXPORT — ${settings.restaurantName}`,
@@ -118,7 +137,7 @@ export default function GstFiling() {
       '',
       'doc_iss',
       t13Header,
-      t13Row
+      ...t13Rows
     ];
 
     downloadCSV(csvContent, `GSTR1`);
