@@ -96,33 +96,32 @@ export default function GstFiling() {
         return `${posString},Intra-State,${rate}%,${vals.taxable.toFixed(2)},${vals.cgst.toFixed(2)},${vals.sgst.toFixed(2)},0.00,`;
       });
 
-    // --- TABLE 13: Documents Issued (Strict Numeric & Date Segregation) ---
-    // 1. Sort all bills strictly by numeric invoice number to prevent alphabetical sorting bugs (e.g. 10000 < 9999)
+    // --- TABLE 13: Documents Issued (Strict Contiguous Sequences) ---
     const getInvNum = (inv: string) => {
-      const match = inv.match(/\\d+$/);
-      return match ? parseInt(match[0], 10) : 0;
+      return parseInt((inv || '').split('/').pop() || '0', 10);
     };
+
+    // 1. Sort all bills strictly by numeric invoice number
     const sortedBills = [...gstrBills].sort((a, b) => getInvNum(a.invoiceNumber) - getInvNum(b.invoiceNumber));
 
-    // 2. Partition into contiguous blocks by Date
+    // 2. Partition into perfectly contiguous blocks (break row if there is a gap)
     const blocks: Bill[][] = [];
     let currentBlock: Bill[] = [];
-    let currentBlockDate = '';
 
     sortedBills.forEach(b => {
-      const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      
       if (currentBlock.length === 0) {
         currentBlock.push(b);
-        currentBlockDate = dateStr;
       } else {
-        if (dateStr === currentBlockDate) {
+        const prevInv = getInvNum(currentBlock[currentBlock.length - 1].invoiceNumber);
+        const currInv = getInvNum(b.invoiceNumber);
+        
+        // If contiguous (difference is exactly 1) or duplicate (0)
+        if (currInv <= prevInv + 1) {
           currentBlock.push(b);
         } else {
+          // Gap detected! Start a new sequence block
           blocks.push(currentBlock);
           currentBlock = [b];
-          currentBlockDate = dateStr;
         }
       }
     });
