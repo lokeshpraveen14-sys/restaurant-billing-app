@@ -51,110 +51,7 @@ export default function GstFiling() {
     URL.revokeObjectURL(url); 
   };
 
-  // ── GSTR-1 CSV Export (Table 7 & Table 13 for B2C Intra-State) ────────────────
-  const handleExportGSTR1CSV = async () => {
-    const { start, end, bills: gstrBills } = await getBillsForPeriod();
 
-    // Resolve POS State Code robustly
-    const bState = settings.businessState || 'Tamil Nadu';
-    const stateEntries = Object.entries(GST_STATE_CODES);
-    const stateCodeMatch = stateEntries.find(([code, name]) => 
-      name.toLowerCase() === bState.toLowerCase() || 
-      name.toLowerCase().includes(bState.toLowerCase()) || 
-      bState.toLowerCase().includes(name.toLowerCase())
-    );
-    const posString = stateCodeMatch ? `${stateCodeMatch[0]}-${stateCodeMatch[1]}` : `33-${bState}`;
-
-    // --- TABLE 7: B2C (Others) ---
-    const activeGSTBills = gstrBills.filter(b => b.status !== 'void' && b.isGstBill !== false);
-    const table7Map = new Map<number, { taxable: number, cgst: number, sgst: number }>();
-    
-    activeGSTBills.forEach(b => {
-      b.items?.forEach(item => {
-        if (item.status === 'void') return;
-        const rate = item.gstRate || 0;
-        
-        const taxable = item.totalPrice / (1 + rate / 100);
-        const tax = item.totalPrice - taxable;
-        const cgst = tax / 2;
-        const sgst = tax / 2;
-
-        if (!table7Map.has(rate)) {
-          table7Map.set(rate, { taxable: 0, cgst: 0, sgst: 0 });
-        }
-        const group = table7Map.get(rate)!;
-        group.taxable += taxable;
-        group.cgst += cgst;
-        group.sgst += sgst;
-      });
-    });
-
-    const t7Header = 'Place of Supply (POS),Supply Type,Tax Rate,Total Taxable Value,CGST Amount,SGST Amount,Cess Amount,E-Commerce GSTIN';
-    const t7Rows = Array.from(table7Map.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([rate, vals]) => {
-        return `${posString},Intra-State,${rate}%,${vals.taxable.toFixed(2)},${vals.cgst.toFixed(2)},${vals.sgst.toFixed(2)},0.00,`;
-      });
-
-    // --- TABLE 13: Documents Issued (Strict Contiguous Sequences) ---
-    const getInvNum = (inv: string) => {
-      return parseInt((inv || '').split('/').pop() || '0', 10);
-    };
-
-    // 1. Sort all bills strictly by numeric invoice number
-    const sortedBills = [...gstrBills].sort((a, b) => getInvNum(a.invoiceNumber) - getInvNum(b.invoiceNumber));
-
-    // 2. Partition into perfectly contiguous blocks (break row if there is a gap)
-    const blocks: Bill[][] = [];
-    let currentBlock: Bill[] = [];
-
-    sortedBills.forEach(b => {
-      if (currentBlock.length === 0) {
-        currentBlock.push(b);
-      } else {
-        const prevInv = getInvNum(currentBlock[currentBlock.length - 1].invoiceNumber);
-        const currInv = getInvNum(b.invoiceNumber);
-        
-        // If contiguous (difference is exactly 1) or duplicate (0)
-        if (currInv <= prevInv + 1) {
-          currentBlock.push(b);
-        } else {
-          // Gap detected! Start a new sequence block
-          blocks.push(currentBlock);
-          currentBlock = [b];
-        }
-      }
-    });
-    if (currentBlock.length > 0) {
-      blocks.push(currentBlock);
-    }
-
-    const t13Header = 'Type of Document,From Serial No.,To Serial No.,Total Count,Cancelled Count,Net Issued';
-    const t13Rows = blocks.map(block => {
-      const minInvoice = block[0].invoiceNumber;
-      const maxInvoice = block[block.length - 1].invoiceNumber;
-      const totalCount = block.length;
-      const cancelledCount = block.filter(b => b.status === 'void').length;
-      const netIssued = totalCount - cancelledCount;
-      return `B2C Invoices,${minInvoice},${maxInvoice},${totalCount},${cancelledCount},${netIssued}`;
-    });
-
-    const csvContent = [
-      `GSTR-1 EXPORT — ${settings.restaurantName}`,
-      `GSTIN: ${settings.gstin || 'N/A'}`,
-      `Period: ${start.toLocaleDateString('en-IN')} to ${end.toLocaleDateString('en-IN')}`,
-      '',
-      'b2cs',
-      t7Header,
-      ...t7Rows,
-      '',
-      'doc_iss',
-      t13Header,
-      ...t13Rows
-    ];
-
-    downloadCSV(csvContent, `GSTR1`);
-  };
 
   // ── Daily GST Sales Register (CSV) ───────────────────────────────────────────
   const handleExportDailyRegisterCSV = async () => {
@@ -284,19 +181,28 @@ export default function GstFiling() {
     addLine('2. GST SUMMARY (Rate-wise)', 11, true);
     y += 2;
     const gstMap = new Map<number, { taxable: number; cgst: number; sgst: number; igst: number }>();
+    
     activeBills.forEach(b => {
-      if (!b.isGstBill) return;
-      b.gstBreakdown?.forEach(g => {
-        if (!gstMap.has(g.rate)) gstMap.set(g.rate, { taxable: 0, cgst: 0, sgst: 0, igst: 0 });
-        const e = gstMap.get(g.rate)!;
-        e.taxable += g.taxableAmount; e.cgst += g.cgst; e.sgst += g.sgst; e.igst += g.igst;
+      // Calculate GST dynamically from items to support legacy bills
+      b.items?.forEach(item => {
+        if (item.status === 'void') return;
+        const rate = item.gstRate || 0;
+        const taxable = item.totalPrice / (1 + rate / 100);
+        const tax = item.totalPrice - taxable;
+        
+        if (!gstMap.has(rate)) {
+          gstMap.set(rate, { taxable: 0, cgst: 0, sgst: 0, igst: 0 });
+        }
+        
+        const group = gstMap.get(rate)!;
+        group.taxable += taxable;
+        group.cgst += tax / 2;
+        group.sgst += tax / 2;
+        // Assuming intra-state for general auditor PDF unless specifically IGST
+        // (If IGST is needed, we would cross-check settings.businessState)
       });
-      if (!b.gstBreakdown?.length && (b.cgstAmount || b.igstAmount)) {
-        if (!gstMap.has(0)) gstMap.set(0, { taxable: 0, cgst: 0, sgst: 0, igst: 0 });
-        const e = gstMap.get(0)!;
-        e.cgst += b.cgstAmount ?? 0; e.sgst += b.sgstAmount ?? 0; e.igst += b.igstAmount ?? 0;
-      }
     });
+
     doc.setFontSize(8); doc.setFont('helvetica', 'bold');
     ['Rate', 'Taxable (Rs)', 'CGST (Rs)', 'SGST (Rs)', 'IGST (Rs)'].forEach((h, i) => { doc.text(h, lm + 4 + i * 36, y); });
     y += 5;
@@ -434,14 +340,6 @@ export default function GstFiling() {
             >
               <FileText size={20} />
               Daily Sales Register (CSV)
-            </button>
-            <button 
-              className="btn btn-secondary" 
-              onClick={handleExportGSTR1CSV}
-              style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 220, height: 48 }}
-            >
-              <Download size={20} />
-              GSTR-1 Payload (CSV)
             </button>
             <button 
               className="btn btn-secondary" 
