@@ -156,6 +156,76 @@ export default function GstFiling() {
     downloadCSV(csvContent, `GSTR1`);
   };
 
+  // ── Daily GST Sales Register (CSV) ───────────────────────────────────────────
+  const handleExportDailyRegisterCSV = async () => {
+    const { start, end, bills: rawBills } = await getBillsForPeriod();
+    const activeBills = rawBills.filter(b => b.status !== 'void' && b.isGstBill !== false);
+
+    const getInvNum = (inv: string) => parseInt((inv || '').split('/').pop() || '0', 10);
+    
+    // Sort chronologically by createdAt to guarantee daily boundaries
+    const sortedBills = [...activeBills].sort((a, b) => {
+      const da = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+      const db = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+      return da.getTime() - db.getTime();
+    });
+
+    const dailyMap = new Map<string, Map<number, {
+      minInv: number; maxInv: number; minInvStr: string; maxInvStr: string;
+      taxable: number; cgst: number; sgst: number; total: number;
+    }>>();
+
+    sortedBills.forEach(b => {
+      const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+      const dateStr = d.toLocaleDateString('en-IN');
+      const invNum = getInvNum(b.invoiceNumber);
+
+      if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, new Map());
+      const rateMap = dailyMap.get(dateStr)!;
+
+      b.items?.forEach(item => {
+        if (item.status === 'void') return;
+        const rate = item.gstRate || 0;
+        const taxable = item.totalPrice / (1 + rate / 100);
+        const tax = item.totalPrice - taxable;
+
+        if (!rateMap.has(rate)) {
+          rateMap.set(rate, {
+            minInv: invNum, maxInv: invNum, minInvStr: b.invoiceNumber, maxInvStr: b.invoiceNumber,
+            taxable: 0, cgst: 0, sgst: 0, total: 0
+          });
+        }
+        const group = rateMap.get(rate)!;
+        if (invNum < group.minInv) { group.minInv = invNum; group.minInvStr = b.invoiceNumber; }
+        if (invNum > group.maxInv) { group.maxInv = invNum; group.maxInvStr = b.invoiceNumber; }
+        group.taxable += taxable;
+        group.cgst += tax / 2;
+        group.sgst += tax / 2;
+        group.total += item.totalPrice;
+      });
+    });
+
+    const header = 'Date,From Serial No.,To Serial No.,Tax Rate,Net Sales (Taxable),CGST,SGST,Gross Sales (Total)';
+    const rows: string[] = [];
+
+    Array.from(dailyMap.entries()).forEach(([dateStr, rateMap]) => {
+      Array.from(rateMap.entries()).sort((a,b) => a[0]-b[0]).forEach(([rate, g]) => {
+        rows.push(`${dateStr},${g.minInvStr},${g.maxInvStr},${rate}%,${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`);
+      });
+    });
+
+    const csvContent = [
+      `DAILY GST SALES REGISTER — ${settings.restaurantName}`,
+      `GSTIN: ${settings.gstin || 'N/A'}`,
+      `Period: ${start.toLocaleDateString('en-IN')} to ${end.toLocaleDateString('en-IN')}`,
+      '',
+      header,
+      ...rows
+    ];
+
+    downloadCSV(csvContent, 'Daily-GST-Register');
+  };
+
   // ── jsPDF Auditor Report ─────────────────────────────────────────────────────
   const handleDownloadAuditorPDF = async () => {
     const { start, end, bills: auditBills } = await getBillsForPeriod();
@@ -359,6 +429,14 @@ export default function GstFiling() {
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button 
               className="btn btn-primary" 
+              onClick={handleExportDailyRegisterCSV}
+              style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 220, height: 48 }}
+            >
+              <FileText size={20} />
+              Daily Sales Register (CSV)
+            </button>
+            <button 
+              className="btn btn-secondary" 
               onClick={handleExportGSTR1CSV}
               style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 220, height: 48 }}
             >
