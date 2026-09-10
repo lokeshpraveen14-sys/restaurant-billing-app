@@ -19,6 +19,8 @@ const INITIAL_CATEGORIES: MenuCategory[] = [
   { id: 'cat12', name: 'Milkshakes', type: 'juice', sortOrder: 12, active: true },
   { id: 'cat13', name: 'Mocktails', type: 'juice', sortOrder: 13, active: true },
   { id: 'cat14', name: 'Other (Cosmetics etc.)', type: 'other', sortOrder: 14, active: true },
+  // AC Category
+  { id: 'cat_ac', name: 'AC', type: 'food', sortOrder: 15, active: true },
 ];
 
 const INITIAL_ITEMS: MenuItem[] = [
@@ -176,7 +178,7 @@ export const useMenuStore = create<MenuState>()(
         set((state) => ({
           items: state.items.map((i) => (i.id === id ? { ...i, ...updates } : i)),
         }));
-        
+
         const updatedItem = get().items.find(i => i.id === id);
         if (updatedItem) {
           await supabase.from('menu_items').update({
@@ -208,7 +210,7 @@ export const useMenuStore = create<MenuState>()(
             i.id === id ? { ...i, available: !i.available } : i
           ),
         }));
-        
+
         const updatedItem = get().items.find(i => i.id === id);
         if (updatedItem) {
           await supabase.from('menu_items').update({ available: updatedItem.available }).eq('id', id);
@@ -233,8 +235,17 @@ export const useMenuStore = create<MenuState>()(
       initMenuSync: async () => {
         // Migration: Ensure all INITIAL_CATEGORIES exist for existing users
         set((state) => {
-          const newCategories = [...state.categories];
+          let newCategories = [...state.categories];
           let changed = false;
+          
+          // Cleanup old multiple AC categories
+          const oldAcCategoryIds = ['cat_ac1', 'cat_ac2', 'cat_ac3', 'cat_ac4', 'cat_ac5', 'cat_ac6', 'cat_ac7', 'cat_ac8'];
+          const filteredCategories = newCategories.filter(c => !oldAcCategoryIds.includes(c.id));
+          if (filteredCategories.length !== newCategories.length) {
+            newCategories = filteredCategories;
+            changed = true;
+          }
+
           INITIAL_CATEGORIES.forEach(initCat => {
             if (!newCategories.find(c => c.id === initCat.id)) {
               newCategories.push(initCat);
@@ -290,10 +301,10 @@ export const useMenuStore = create<MenuState>()(
                   spiceLevel: idx >= 0 ? newItems[idx].spiceLevel : undefined,
                   isBakery: idx >= 0 ? newItems[idx].isBakery : undefined
                 };
-                
+
                 if (idx >= 0) newItems[idx] = mappedItem;
                 else newItems.push(mappedItem);
-                
+
                 return { items: newItems };
               });
             }
