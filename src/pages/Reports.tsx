@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { formatAmount } from '../lib/gst';
+import { formatAmount, GST_STATE_CODES } from '../lib/gst';
 import { ChartBar, Download, Calendar, TrendUp, Package, FilePdf } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useBillStore } from '../store/billStore';
@@ -130,60 +130,78 @@ export default function Reports() {
   const downloadCSV = (lines: string[], name: string) => { const blob = new Blob([lines.join('\n')], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${name}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`; a.click(); URL.revokeObjectURL(url); };
   const handleExportOverviewCSV = () => { const lines = ['RESTAURANT SALES REPORT', `Total Revenue,${totalRevenue.toFixed(2)}`, `Total Orders,${totalOrders}`, `Total Covers,${totalCovers}`, '', 'DAILY BREAKDOWN', 'Date,Revenue,Orders', ...DAILY_DATA.map(d => `${d.date},${d.revenue.toFixed(2)},${d.orders}`), '', 'GST SUMMARY', 'Rate,Taxable,CGST,SGST,Total', ...GST_DATA.map(g => `${g.rate},${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`)]; downloadCSV(lines, `sales-report-${datePreset}`); };
 
-  // ── GSTR-1 CSV Export ────────────────────────────────────────────────────────
+  // ── GSTR-1 CSV Export (Table 7 & Table 13 for B2C Intra-State) ────────────────
   const handleExportGSTR1CSV = async () => {
-    // Fetch bills for current period
     const { start, end } = getDateRange(datePreset, customFrom, customTo);
     let gstrBills: Bill[] = [];
     try { gstrBills = await fetchBillsByDateRange(start, end); } catch { gstrBills = localBills; }
-    // Filter: only GST bills (not non-GST, and we exclude journal voucher type as they’re adjustments from the ledger side — bills don’t have voucher types)
-    const filtered = gstrBills.filter(b => b.status !== 'void' && b.isGstBill !== false);
 
-    const header = 'Invoice No,Date,Customer GSTIN,Place of Supply,HSN Codes,Taxable Value,CGST,SGST,IGST,Total GST,Invoice Total';
-    const rows = filtered.map(b => {
-      const dateStr = (b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt)).toLocaleDateString('en-IN');
-      const hsnStr = b.hsnCodes ? Object.values(b.hsnCodes).join('; ') : '';
-      // taxable = total - totalGST (simplified since we store total_gst)
-      const taxable = (b.totalAmount - b.totalGST).toFixed(2);
-      const cgst = (b.cgstAmount ?? b.totalGST / 2).toFixed(2);
-      const sgst = (b.sgstAmount ?? b.totalGST / 2).toFixed(2);
-      const igst = (b.igstAmount ?? 0).toFixed(2);
-      return [
-        b.invoiceNumber,
-        dateStr,
-        b.customerGstin || '',
-        b.placeOfSupply || settings.businessState || '',
-        hsnStr,
-        taxable,
-        cgst,
-        sgst,
-        igst,
-        b.totalGST.toFixed(2),
-        b.totalAmount.toFixed(2),
-      ].join(',');
+    // Resolve POS State Code
+    const bState = settings.businessState || '';
+    const stateCodeMatch = Object.entries(GST_STATE_CODES).find(([code, name]) => name.toLowerCase() === bState.toLowerCase());
+    const posString = stateCodeMatch ? `${stateCodeMatch[0]}-${stateCodeMatch[1]}` : bState;
+
+    // --- TABLE 7: B2C (Others) ---
+    // Filter active GST bills
+    const activeGSTBills = gstrBills.filter(b => b.status !== 'void' && b.isGstBill !== false);
+    
+    // Group items by tax rate
+    const table7Map = new Map<number, { taxable: number, cgst: number, sgst: number }>();
+    
+    activeGSTBills.forEach(b => {
+      b.items?.forEach(item => {
+        if (item.status === 'void') return;
+        const rate = item.gstRate || 0;
+        
+        const taxable = item.totalPrice / (1 + rate / 100);
+        const tax = item.totalPrice - taxable;
+        const cgst = tax / 2;
+        const sgst = tax / 2;
+
+        if (!table7Map.has(rate)) {
+          table7Map.set(rate, { taxable: 0, cgst: 0, sgst: 0 });
+        }
+        const group = table7Map.get(rate)!;
+        group.taxable += taxable;
+        group.cgst += cgst;
+        group.sgst += sgst;
+      });
     });
 
-    const totals = filtered.reduce((acc, b) => ({
-      taxable: acc.taxable + (b.totalAmount - b.totalGST),
-      cgst: acc.cgst + (b.cgstAmount ?? b.totalGST / 2),
-      sgst: acc.sgst + (b.sgstAmount ?? b.totalGST / 2),
-      igst: acc.igst + (b.igstAmount ?? 0),
-      gst: acc.gst + b.totalGST,
-      total: acc.total + b.totalAmount,
-    }), { taxable: 0, cgst: 0, sgst: 0, igst: 0, gst: 0, total: 0 });
+    const t7Header = 'Place of Supply (POS),Supply Type,Tax Rate,Total Taxable Value,CGST Amount,SGST Amount,Cess Amount,E-Commerce GSTIN';
+    const t7Rows = Array.from(table7Map.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([rate, vals]) => {
+        return `${posString},Intra-State,${rate}%,${vals.taxable.toFixed(2)},${vals.cgst.toFixed(2)},${vals.sgst.toFixed(2)},0.00,`;
+      });
 
-    const totalsRow = `TOTALS,,,,,${ totals.taxable.toFixed(2)},${totals.cgst.toFixed(2)},${totals.sgst.toFixed(2)},${totals.igst.toFixed(2)},${totals.gst.toFixed(2)},${totals.total.toFixed(2)}`;
+    // --- TABLE 13: Documents Issued ---
+    const allInvoiceNumbers = gstrBills.map(b => b.invoiceNumber).sort();
+    const minInvoice = allInvoiceNumbers.length > 0 ? allInvoiceNumbers[0] : '';
+    const maxInvoice = allInvoiceNumbers.length > 0 ? allInvoiceNumbers[allInvoiceNumbers.length - 1] : '';
+    const totalCount = gstrBills.length;
+    const cancelledCount = gstrBills.filter(b => b.status === 'void').length;
+    const netIssued = totalCount - cancelledCount;
 
-    downloadCSV([
+    const t13Header = 'Type of Document,From Serial No.,To Serial No.,Total Count,Cancelled Count,Net Issued';
+    const t13Row = `B2C Invoices,${minInvoice},${maxInvoice},${totalCount},${cancelledCount},${netIssued}`;
+
+    // Combine into standard format payload
+    const csvContent = [
       `GSTR-1 EXPORT — ${settings.restaurantName}`,
       `GSTIN: ${settings.gstin || 'N/A'}`,
       `Period: ${start.toLocaleDateString('en-IN')} to ${end.toLocaleDateString('en-IN')}`,
       '',
-      header,
-      ...rows,
+      'b2cs',
+      t7Header,
+      ...t7Rows,
       '',
-      totalsRow,
-    ], `GSTR1-${datePreset}`);
+      'doc_iss',
+      t13Header,
+      t13Row
+    ];
+
+    downloadCSV(csvContent, `GSTR1-${datePreset}`);
   };
 
   // ── jsPDF Auditor Report ─────────────────────────────────────────────────────
