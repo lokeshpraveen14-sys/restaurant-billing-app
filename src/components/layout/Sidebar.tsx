@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   SquaresFour, Table, ClipboardText, CookingPot, Receipt, Package,
   ChartBar, Gear, Users, ForkKnife, Storefront, CaretDoubleLeft,
-  CaretDoubleRight, SignOut, Drop, Timer, ChartLine, Bank
+  CaretDoubleRight, SignOut, Drop, Timer, ChartLine, Bank, FileText
 } from '@phosphor-icons/react';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
@@ -43,6 +43,7 @@ const NAV_GROUPS = [
       { label: 'Menu', path: '/menu', icon: <ForkKnife size={20} />, module: 'menu' },
       { label: 'Inventory', path: '/inventory', icon: <Package size={20} />, module: 'inventory' },
       { label: 'Reports', path: '/reports', icon: <ChartBar size={20} />, module: 'reports' },
+      { label: 'GST Filing', path: '/gst-filing', icon: <FileText size={20} />, module: 'reports' },
       { label: 'Analytics', path: '/analytics', icon: <ChartLine size={20} />, module: 'reports' },
       { label: 'Shift', path: '/shift', icon: <Timer size={20} />, module: 'all' },
     ] as NavItem[],

@@ -23,6 +23,7 @@ import Billing from './pages/Billing';
 import MenuManagement from './pages/MenuManagement';
 import Inventory from './pages/Inventory';
 import Reports from './pages/Reports';
+import GstFiling from './pages/GstFiling';
 import Settings from './pages/Settings';
 import BakeryCounter from './pages/BakeryCounter';
 import JuiceCounter from './pages/JuiceCounter';
@@ -122,13 +123,14 @@ export default function App() {
                   <Route path="/juice" element={<JuiceCounter />} />
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/reports" element={<Reports />} />
+                  <Route path="/gst-filing" element={<GstFiling />} />
+                  <Route path="/settings" element={<Settings />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/shift" element={<ShiftManagement />} />
                   <Route path="/bills" element={<BillHistory />} />
                   <Route path="/staff" element={<StaffManagement />} />
                   <Route path="/accounting" element={<Accounting />} />
                   <Route path="/headcount" element={<HeadCount />} />
-                  <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </ProtectedLayout>
