@@ -96,32 +96,46 @@ export default function GstFiling() {
         return `${posString},Intra-State,${rate}%,${vals.taxable.toFixed(2)},${vals.cgst.toFixed(2)},${vals.sgst.toFixed(2)},0.00,`;
       });
 
-    // --- TABLE 13: Documents Issued (Daily Segregation) ---
-    const billsByDate = new Map<string, Bill[]>();
-    gstrBills.forEach(b => {
+    // --- TABLE 13: Documents Issued (Strict Numeric & Date Segregation) ---
+    // 1. Sort all bills strictly by numeric invoice number to prevent alphabetical sorting bugs (e.g. 10000 < 9999)
+    const getInvNum = (inv: string) => {
+      const match = inv.match(/\\d+$/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    const sortedBills = [...gstrBills].sort((a, b) => getInvNum(a.invoiceNumber) - getInvNum(b.invoiceNumber));
+
+    // 2. Partition into contiguous blocks by Date
+    const blocks: Bill[][] = [];
+    let currentBlock: Bill[] = [];
+    let currentBlockDate = '';
+
+    sortedBills.forEach(b => {
       const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-      // Format to YYYY-MM-DD for stable chronological sorting
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       
-      if (!billsByDate.has(dateStr)) {
-        billsByDate.set(dateStr, []);
+      if (currentBlock.length === 0) {
+        currentBlock.push(b);
+        currentBlockDate = dateStr;
+      } else {
+        if (dateStr === currentBlockDate) {
+          currentBlock.push(b);
+        } else {
+          blocks.push(currentBlock);
+          currentBlock = [b];
+          currentBlockDate = dateStr;
+        }
       }
-      billsByDate.get(dateStr)!.push(b);
     });
+    if (currentBlock.length > 0) {
+      blocks.push(currentBlock);
+    }
 
     const t13Header = 'Type of Document,From Serial No.,To Serial No.,Total Count,Cancelled Count,Net Issued';
-    const sortedDates = Array.from(billsByDate.keys()).sort();
-    
-    const t13Rows = sortedDates.map(dateStr => {
-      const dailyBills = billsByDate.get(dateStr)!;
-      const allInvoiceNumbers = dailyBills.map(b => b.invoiceNumber).sort();
-      const minInvoice = allInvoiceNumbers[0];
-      const maxInvoice = allInvoiceNumbers[allInvoiceNumbers.length - 1];
-      const totalCount = dailyBills.length;
-      const cancelledCount = dailyBills.filter(b => b.status === 'void').length;
+    const t13Rows = blocks.map(block => {
+      const minInvoice = block[0].invoiceNumber;
+      const maxInvoice = block[block.length - 1].invoiceNumber;
+      const totalCount = block.length;
+      const cancelledCount = block.filter(b => b.status === 'void').length;
       const netIssued = totalCount - cancelledCount;
       return `B2C Invoices,${minInvoice},${maxInvoice},${totalCount},${cancelledCount},${netIssued}`;
     });
