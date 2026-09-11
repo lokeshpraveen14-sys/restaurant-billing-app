@@ -21,6 +21,7 @@ const INITIAL_CATEGORIES: MenuCategory[] = [
   { id: 'cat14', name: 'Other (Cosmetics etc.)', type: 'other', sortOrder: 14, active: true },
   // AC Category
   { id: 'cat_ac', name: 'AC', type: 'food', sortOrder: 15, active: true },
+  { id: 'cat_non_ac', name: 'NON AC', type: 'food', sortOrder: 16, active: true },
 ];
 
 const INITIAL_ITEMS: MenuItem[] = [
