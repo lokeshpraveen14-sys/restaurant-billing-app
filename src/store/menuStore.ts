@@ -4,23 +4,23 @@ import { MenuCategory, MenuItem } from '../types';
 import { supabase } from '../lib/supabase';
 
 const INITIAL_CATEGORIES: MenuCategory[] = [
-  { id: 'cat_ac', name: 'AC', type: 'food', sortOrder: 15, active: true },
-  { id: 'cat_non_ac', name: 'NON AC', type: 'food', sortOrder: 16, active: true },
-  { id: 'cat1', name: 'Starters', type: 'food', sortOrder: 1, active: true },
-  { id: 'cat2', name: 'Main Course', type: 'food', sortOrder: 2, active: true },
-  { id: 'cat3', name: 'Breads', type: 'food', sortOrder: 3, active: true },
-  { id: 'cat4', name: 'Rice & Biryani', type: 'food', sortOrder: 4, active: true },
-  { id: 'cat5', name: 'Chinese', type: 'food', sortOrder: 5, active: true },
-  { id: 'cat6', name: 'Soups', type: 'food', sortOrder: 6, active: true },
-  { id: 'cat7', name: 'Desserts', type: 'dessert', sortOrder: 7, active: true },
-  { id: 'cat8', name: 'Beverages', type: 'beverage', sortOrder: 8, active: true },
-  { id: 'cat9', name: 'Bakery', type: 'bakery', sortOrder: 9, active: true },
-  { id: 'cat10', name: 'Cakes & Pastries', type: 'bakery', sortOrder: 10, active: true },
+  { id: 'cat_ac', name: 'AC', type: 'food', sortOrder: 1, active: true },
+  { id: 'cat_non_ac', name: 'NON AC', type: 'food', sortOrder: 2, active: true },
+  { id: 'cat1', name: 'Starters', type: 'food', sortOrder: 3, active: true },
+  { id: 'cat2', name: 'Main Course', type: 'food', sortOrder: 4, active: true },
+  { id: 'cat3', name: 'Breads', type: 'food', sortOrder: 5, active: true },
+  { id: 'cat4', name: 'Rice & Biryani', type: 'food', sortOrder: 6, active: true },
+  { id: 'cat5', name: 'Chinese', type: 'food', sortOrder: 7, active: true },
+  { id: 'cat6', name: 'Soups', type: 'food', sortOrder: 8, active: true },
+  { id: 'cat7', name: 'Desserts', type: 'dessert', sortOrder: 9, active: true },
+  { id: 'cat8', name: 'Beverages', type: 'beverage', sortOrder: 10, active: true },
+  { id: 'cat9', name: 'Bakery', type: 'bakery', sortOrder: 11, active: true },
+  { id: 'cat10', name: 'Cakes & Pastries', type: 'bakery', sortOrder: 12, active: true },
   // Juice Counter categories
-  { id: 'cat11', name: 'Fresh Juices', type: 'juice', sortOrder: 11, active: true },
-  { id: 'cat12', name: 'Milkshakes', type: 'juice', sortOrder: 12, active: true },
-  { id: 'cat13', name: 'Mocktails', type: 'juice', sortOrder: 13, active: true },
-  { id: 'cat14', name: 'Other (Cosmetics etc.)', type: 'other', sortOrder: 14, active: true },
+  { id: 'cat11', name: 'Fresh Juices', type: 'juice', sortOrder: 13, active: true },
+  { id: 'cat12', name: 'Milkshakes', type: 'juice', sortOrder: 14, active: true },
+  { id: 'cat13', name: 'Mocktails', type: 'juice', sortOrder: 15, active: true },
+  { id: 'cat14', name: 'Other (Cosmetics etc.)', type: 'other', sortOrder: 16, active: true },
 
 ];
 
