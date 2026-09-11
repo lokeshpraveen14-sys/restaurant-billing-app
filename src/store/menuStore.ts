@@ -4,6 +4,8 @@ import { MenuCategory, MenuItem } from '../types';
 import { supabase } from '../lib/supabase';
 
 const INITIAL_CATEGORIES: MenuCategory[] = [
+  { id: 'cat_ac', name: 'AC', type: 'food', sortOrder: 15, active: true },
+  { id: 'cat_non_ac', name: 'NON AC', type: 'food', sortOrder: 16, active: true },
   { id: 'cat1', name: 'Starters', type: 'food', sortOrder: 1, active: true },
   { id: 'cat2', name: 'Main Course', type: 'food', sortOrder: 2, active: true },
   { id: 'cat3', name: 'Breads', type: 'food', sortOrder: 3, active: true },
@@ -19,9 +21,7 @@ const INITIAL_CATEGORIES: MenuCategory[] = [
   { id: 'cat12', name: 'Milkshakes', type: 'juice', sortOrder: 12, active: true },
   { id: 'cat13', name: 'Mocktails', type: 'juice', sortOrder: 13, active: true },
   { id: 'cat14', name: 'Other (Cosmetics etc.)', type: 'other', sortOrder: 14, active: true },
-  // AC Category
-  { id: 'cat_ac', name: 'AC', type: 'food', sortOrder: 15, active: true },
-  { id: 'cat_non_ac', name: 'NON AC', type: 'food', sortOrder: 16, active: true },
+
 ];
 
 const INITIAL_ITEMS: MenuItem[] = [
@@ -238,7 +238,7 @@ export const useMenuStore = create<MenuState>()(
         set((state) => {
           let newCategories = [...state.categories];
           let changed = false;
-          
+
           // Cleanup old multiple AC categories
           const oldAcCategoryIds = ['cat_ac1', 'cat_ac2', 'cat_ac3', 'cat_ac4', 'cat_ac5', 'cat_ac6', 'cat_ac7', 'cat_ac8'];
           const filteredCategories = newCategories.filter(c => !oldAcCategoryIds.includes(c.id));
