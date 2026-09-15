@@ -109,7 +109,7 @@ export const useBillStore = create<BillState>()(
       }
     }
 
-    return allData.map((b) => ({
+    const mapped = allData.map((b) => ({
       id: b.id,
       invoiceNumber: b.invoice_number,
       orderId: b.order_id,
@@ -145,6 +145,17 @@ export const useBillStore = create<BillState>()(
       outletAddress: '',
       outletGSTIN: b.outlet_gstin || '',
     }));
+
+    // Deduplicate by invoiceNumber — keep the earliest-created row per invoice.
+    // This handles existing duplicate rows in DB from the previous bug.
+    const byInvoice = new Map<string, typeof mapped[0]>();
+    for (const b of mapped) {
+      const existing = byInvoice.get(b.invoiceNumber);
+      if (!existing || b.createdAt < existing.createdAt) {
+        byInvoice.set(b.invoiceNumber, b);
+      }
+    }
+    return Array.from(byInvoice.values());
   },
 
   initBillSync: async () => {

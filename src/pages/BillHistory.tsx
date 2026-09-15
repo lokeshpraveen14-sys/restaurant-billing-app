@@ -19,13 +19,18 @@ export default function BillHistory() {
   const toast = useToast();
   const navigate = useNavigate();
   
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today');
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('today');
+  const [customStart, setCustomStart] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30); d.setHours(0,0,0,0);
+    return d.toISOString().slice(0, 10);
+  });
+  const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
 
   useEffect(() => {
-    loadBills();
+    if (dateRange !== 'custom') loadBills();
   }, [dateRange]);
 
   const loadBills = async () => {
@@ -41,6 +46,11 @@ export default function BillHistory() {
     } else if (dateRange === 'month') {
       start.setMonth(start.getMonth() - 1);
       start.setHours(0, 0, 0, 0);
+    } else if (dateRange === 'custom') {
+      const s = new Date(customStart); s.setHours(0, 0, 0, 0);
+      const e = new Date(customEnd);   e.setHours(23, 59, 59, 999);
+      start.setTime(s.getTime());
+      end.setTime(e.getTime());
     }
 
     // Try Supabase first, fall back to local store
@@ -52,11 +62,18 @@ export default function BillHistory() {
         const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
         return d >= start && d <= end;
       });
-      // Deduplicate by id, prefer Supabase version
-      const allById: Record<string, Bill> = {};
-      localFiltered.forEach((b) => { allById[b.id] = b; });
-      supabaseBills.forEach((b) => { allById[b.id] = b; });
-      fetchedBills = Object.values(allById);
+
+      // Merge all into one list — deduplicate by invoiceNumber (keep earliest created_at row)
+      // This correctly handles bills that were saved multiple times with different UUIDs
+      const allBills = [...localFiltered, ...supabaseBills];
+      const byInvoice = new Map<string, Bill>();
+      for (const b of allBills) {
+        const existing = byInvoice.get(b.invoiceNumber);
+        if (!existing || new Date(b.createdAt) < new Date(existing.createdAt)) {
+          byInvoice.set(b.invoiceNumber, b);
+        }
+      }
+      fetchedBills = Array.from(byInvoice.values());
     } catch (err) {
       // Fallback to local bills only
       fetchedBills = localBills.filter((b) => {
@@ -162,17 +179,39 @@ export default function BillHistory() {
       <TopBar
         title="Bill History"
         actions={
-          <div className="tabs" style={{ padding: 3 }}>
-            {(['today', 'week', 'month'] as const).map((r) => (
-              <button
-                key={r}
-                className={`tab-item ${dateRange === r ? 'active' : ''}`}
-                onClick={() => setDateRange(r)}
-                style={{ padding: '6px 12px', fontSize: '0.8125rem', textTransform: 'capitalize' }}
-              >
-                {r === 'today' ? 'Today' : `This ${r}`}
-              </button>
-            ))}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="tabs" style={{ padding: 3 }}>
+              {(['today', 'week', 'month', 'custom'] as const).map((r) => (
+                <button
+                  key={r}
+                  className={`tab-item ${dateRange === r ? 'active' : ''}`}
+                  onClick={() => setDateRange(r)}
+                  style={{ padding: '6px 12px', fontSize: '0.8125rem', textTransform: 'capitalize' }}
+                >
+                  {r === 'today' ? 'Today' : r === 'custom' ? 'Custom' : `This ${r}`}
+                </button>
+              ))}
+            </div>
+            {dateRange === 'custom' && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ width: 140, padding: '4px 8px', fontSize: '0.8125rem' }}
+                  value={customStart}
+                  onChange={e => setCustomStart(e.target.value)}
+                />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>to</span>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ width: 140, padding: '4px 8px', fontSize: '0.8125rem' }}
+                  value={customEnd}
+                  onChange={e => setCustomEnd(e.target.value)}
+                />
+                <button className="btn btn-primary btn-sm" onClick={loadBills}>Search</button>
+              </div>
+            )}
           </div>
         }
       />
