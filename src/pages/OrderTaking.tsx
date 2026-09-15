@@ -75,7 +75,7 @@ export default function OrderTaking() {
     }
 
     // No specific order requested — find or create one for this table.
-    const existing = tableId ? getOrdersByTable(tableId)[0] : null;
+    const existing = tableId ? getOrdersByTable(tableId, table?.number)[0] : null;
     if (existing) {
       setActiveOrder(existing);
     } else if (ordersLoaded && tableId) {

@@ -161,7 +161,7 @@ export default function Billing() {
     addBillToShift(cashPaid, upiPaid, cardPaid, totalAmount, order.guestCount || 0);
     updateOrderStatus(order.id, 'paid');
     if (order.tableId) {
-      const otherActiveOrders = useOrderStore.getState().getOrdersByTable(order.tableId).filter(o => o.id !== order.id);
+      const otherActiveOrders = useOrderStore.getState().getOrdersByTable(order.tableId, order.tableNumber).filter(o => o.id !== order.id);
       if (otherActiveOrders.length === 0) {
         updateTableStatus(order.tableId, 'free');
       }

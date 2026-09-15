@@ -70,7 +70,7 @@ export default function TableManagement() {
     : tables.filter((t) => t.section === activeSection);
 
   const getEffectiveStatus = (table: TableType): TableStatus => {
-    if (table.status === 'free' && getOrdersByTable(table.id).length > 0) {
+    if (table.status === 'free' && getOrdersByTable(table.id, table.number).length > 0) {
       return 'occupied';
     }
     return table.status;
@@ -89,7 +89,7 @@ export default function TableManagement() {
     if (!table) return;
 
     // Always check for active orders first
-    const activeOrders = getOrdersByTable(tableId);
+    const activeOrders = getOrdersByTable(tableId, table.number);
     if (activeOrders.length > 0) {
       // Show sub-table modal so they can either select the existing order or seat a new guest (sub-table)
       setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
@@ -190,7 +190,7 @@ export default function TableManagement() {
     if (!table) return;
 
     // Safety check: Don't unmerge if there are ANY open orders for this parent table
-    const activeOrders = getOrdersByTable(tableId);
+    const activeOrders = getOrdersByTable(tableId, table.number);
     if (activeOrders.length > 0) {
       toast.error('Cannot un-merge', 'Please settle or move all active bills before un-merging.');
       return;
@@ -288,7 +288,7 @@ export default function TableManagement() {
         ) : (
           <div className="grid grid-tables" style={{ gap: 'var(--space-4)' }}>
             {displayTables.filter(t => t.status !== 'merged').map((table) => {
-              const activeOrders = getOrdersByTable(table.id);
+              const activeOrders = getOrdersByTable(table.id, table.number);
               const computedStatus = getEffectiveStatus(table);
             return (
               <div
@@ -402,7 +402,7 @@ export default function TableManagement() {
                   <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Select an order to view/edit, or seat a new group.</div>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {getOrdersByTable(actionModal.tableId).map(order => (
+                    {getOrdersByTable(actionModal.tableId, actionModal.tableNumber).map(order => (
                       <div
                         key={order.id}
                         style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}
@@ -431,7 +431,7 @@ export default function TableManagement() {
                             style={{ padding: '0 14px', background: 'var(--danger, #ef4444)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                             onClick={() => {
                               voidOrder(order.id, 'Released by staff');
-                              const remaining = getOrdersByTable(actionModal.tableId).filter(o => o.id !== order.id);
+                              const remaining = getOrdersByTable(actionModal.tableId, actionModal.tableNumber).filter(o => o.id !== order.id);
                               if (remaining.length === 0) {
                                 updateTableStatus(actionModal.tableId, 'free');
                                 setActionModal(null);
@@ -477,7 +477,7 @@ export default function TableManagement() {
                   {actionMode === 'seat' && (() => {
                     const table = tables.find(t => t.id === actionModal.tableId);
                     const capacity = table ? table.capacity : 4;
-                    const activeOrders = getOrdersByTable(actionModal.tableId);
+                    const activeOrders = getOrdersByTable(actionModal.tableId, actionModal.tableNumber);
                     
                     // Find all seats currently taken by active orders
                     const takenSeats = new Set<number>();

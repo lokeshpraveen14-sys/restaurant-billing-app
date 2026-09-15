@@ -20,7 +20,7 @@ interface OrderState {
   updateItemStatus: (orderId: string, itemId: string, status: OrderItem['status']) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   voidOrder: (orderId: string, reason: string) => void;
-  getOrdersByTable: (tableId: string) => Order[];
+  getOrdersByTable: (tableId: string, tableNumber?: string) => Order[];
   getActiveKitchenOrders: () => Order[];
   fetchActiveOrders: () => Promise<void>;
   initOrderSync: () => void;
@@ -275,9 +275,10 @@ export const useOrderStore = create<OrderState>()(
         deleteOrderFromDB(orderId);
       },
 
-      getOrdersByTable: (tableId) => {
+      getOrdersByTable: (tableId, tableNumber) => {
         return get().orders.filter(
-          (o) => o.tableId === tableId && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
+          (o) => (o.tableId === tableId || (tableNumber && o.tableNumber === tableNumber))
+                 && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
         );
       },
 

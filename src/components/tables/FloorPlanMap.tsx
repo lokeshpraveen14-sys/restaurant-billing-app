@@ -97,7 +97,7 @@ export default function FloorPlanMap({ tables, isEditMode, onTableClick, onEditT
           displayY = 20 + Math.floor(index / 6) * 100;
         }
 
-        const activeOrdersCount = getOrdersByTable(table.id).length;
+        const activeOrdersCount = getOrdersByTable(table.id, table.number).length;
         const effectiveStatus = (table.status === 'free' && activeOrdersCount > 0) ? 'occupied' : table.status;
 
         const isOccupied = effectiveStatus === 'occupied';
