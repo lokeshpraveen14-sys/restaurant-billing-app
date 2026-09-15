@@ -177,21 +177,27 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
 // ─── KOT receipt builder ──────────────────────────────────────────────────────
 
 export interface KotPrintData {
+  orderId:      string;
   tableNumber?: string;
   orderType:    string;
   staffName?:   string;
   items:        Array<{ menuItemName: string; quantity: number; note?: string }>;
-  kotTime:      string;
+  kotTime?:     string;
 }
 
 export function buildKotReceipt(data: KotPrintData): ReceiptLine[] {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = data.kotTime || now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
   return [
     { type: 'text', bold: true, center: true, text: '-- KITCHEN ORDER TICKET --' },
     { type: 'divider' },
+    { type: 'item', left: 'Order ID', leftVal: data.orderId },
     data.tableNumber
       ? { type: 'item', bold: true, left: 'Table',  leftVal: data.tableNumber }
       : { type: 'item', bold: true, left: 'Type',   leftVal: data.orderType },
-    { type: 'item', left: 'Time',   leftVal: data.kotTime },
+    { type: 'item', left: 'Date/Time', leftVal: `${dateStr} ${timeStr}` },
     ...(data.staffName ? [{ type: 'item' as const, left: 'Waiter', leftVal: data.staffName }] : []),
     { type: 'divider' },
     ...data.items.flatMap(i => [

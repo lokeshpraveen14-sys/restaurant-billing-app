@@ -13,6 +13,8 @@ import {
 } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { formatAmount } from '../lib/gst';
+import { useSettingsStore } from '../store/settingsStore';
+import { printReceipt, buildKotReceipt } from '../lib/printer';
 
 export default function OrderTaking() {
   const [searchParams] = useSearchParams();
@@ -27,12 +29,14 @@ export default function OrderTaking() {
   const { tables, updateTableStatus } = useTableStore();
   const { currentUser } = useAuthStore();
   const { ingredients } = useInventoryStore();
+  const { settings } = useSettingsStore();
   const toast = useToast();
 
   const [orderType, setOrderType] = useState<OrderType>(tableId ? 'dine-in' : 'takeaway');
   const [noteModal, setNoteModal] = useState<{ itemId: string; value: string } | null>(null);
   const [variantModal, setVariantModal] = useState<MenuItem | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [printerModal, setPrinterModal] = useState(false);
 
   const table = tables.find((t) => t.id === tableId);
 
@@ -127,8 +131,34 @@ export default function OrderTaking() {
       toast.error('No items', 'Add items to the order first');
       return;
     }
+    setPrinterModal(true);
+  };
+
+  const handlePrintKOT = async (printerId: string) => {
+    if (!activeOrder) return;
+
     submitKOT(activeOrder.id);
+    setPrinterModal(false);
     toast.success('KOT Sent', 'Kitchen Order Ticket sent to kitchen');
+
+    // print receipt
+    const data = {
+      orderId: (activeOrder.localId || activeOrder.id).slice(0, 8).toUpperCase(),
+      tableNumber: table?.number,
+      orderType: orderType,
+      staffName: currentUser?.name,
+      items: activeOrder.items.filter(i => i.status !== 'void').map(i => ({
+        menuItemName: i.menuItemName,
+        quantity: i.quantity,
+        note: i.note
+      }))
+    };
+    
+    const lines = buildKotReceipt(data);
+    const result = await printReceipt(lines, printerId);
+    if (!result.success) {
+      toast.error('Print Failed', result.error || 'Unknown error');
+    }
   };
 
   const handleBill = () => {
@@ -495,6 +525,41 @@ export default function OrderTaking() {
                   <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{formatAmount(v.price)}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Printer Modal */}
+      {printerModal && (
+        <div className="modal-overlay" onClick={() => setPrinterModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <span className="modal-title">Select Printer for KOT</span>
+              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setPrinterModal(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              {settings.printers?.filter(p => p.enabled !== false).length > 0 ? (
+                settings.printers.filter(p => p.enabled !== false).map((p) => (
+                  <button
+                    key={p.id}
+                    className="btn btn-secondary"
+                    style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-3)' }}
+                    onClick={() => handlePrintKOT(p.id)}
+                  >
+                    <span style={{ fontWeight: 600 }}>{p.name}</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{p.role}</span>
+                  </button>
+                ))
+              ) : (
+                <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No printers configured. Please add one in Settings.
+                  <br/><br/>
+                  <button className="btn btn-primary" onClick={() => handlePrintKOT('kot')} style={{ marginTop: 12 }}>
+                    Send KOT without printing
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
