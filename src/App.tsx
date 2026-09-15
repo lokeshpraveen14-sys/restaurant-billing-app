@@ -75,6 +75,7 @@ export default function App() {
   const initSettingsSync = useSettingsStore((s) => s.initSettingsSync);
   const initAccountingSync = useAccountingStore((s) => s.initAccountingSync);
   const initStaffSync = useStaffStore((s) => s.initStaffSync);
+  const initUserSync = useAuthStore((s) => s.initUserSync);
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -89,6 +90,7 @@ export default function App() {
     initSettingsSync();
     initAccountingSync();
     initStaffSync();
+    initUserSync();
     
     // Auto-refresh when tablet wakes up from sleep
     const handleVisibilityChange = () => {
@@ -100,7 +102,7 @@ export default function App() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [initTableSync, initMenuSync, initOrderSync, initBillSync, initShiftSync, initSettingsSync, initAccountingSync, initStaffSync]);
+  }, [initTableSync, initMenuSync, initOrderSync, initBillSync, initShiftSync, initSettingsSync, initAccountingSync, initStaffSync, initUserSync]);
 
   return (
     <BrowserRouter>
