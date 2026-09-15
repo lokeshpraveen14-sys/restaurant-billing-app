@@ -290,7 +290,9 @@ export const useOrderStore = create<OrderState>()(
         const { data, error } = await supabase
           .from('orders')
           .select('*')
-          .in('status', ['open', 'kot_sent', 'preparing', 'ready']);
+          .in('status', ['open', 'kot_sent', 'preparing', 'ready'])
+          .order('created_at', { ascending: false })
+          .limit(3000);
 
         if (!error && data) {
           const dbOrders = data.map(mapDbOrder);
