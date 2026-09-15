@@ -112,6 +112,7 @@ export default function App() {
       if (document.visibilityState === 'visible') {
         useOrderStore.getState().fetchActiveOrders();
         useAuthStore.getState().fetchUsers();
+        useTableStore.getState().initTableSync();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);

@@ -256,8 +256,8 @@ export const useTableStore = create<TableState>()(
         }
 
         // Subscribe to real-time changes
-        const existingChannel = supabase.getChannels().find(c => c.topic === 'realtime:public:restaurant_tables');
-        if (existingChannel) return;
+        const stale = supabase.getChannels().find(c => c.topic === 'realtime:public:restaurant_tables');
+        if (stale) supabase.removeChannel(stale);
 
         supabase.channel('public:restaurant_tables')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, payload => {
@@ -302,7 +302,11 @@ export const useTableStore = create<TableState>()(
               });
             }
           })
-          .subscribe();
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              console.log('✅ Real-time Table sync active');
+            }
+          });
       }
     }),
     { name: 'railway-coach-tables' }
