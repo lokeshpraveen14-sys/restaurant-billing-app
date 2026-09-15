@@ -27,7 +27,7 @@ export default function OrderTaking() {
   const initialSeats = seatsParam ? seatsParam.split(',').map(s => parseInt(s)).filter(s => !isNaN(s)) : undefined;
 
   const { categories, items, searchQuery, selectedCategoryId, setSearch, setCategory, getFilteredItems } = useMenuStore();
-  const { orders, createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrdersByTable, activeOrder, setActiveOrder, ordersLoaded } = useOrderStore();
+  const { orders, createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrdersByTable, activeOrder, setActiveOrder, ordersLoaded, voidOrder } = useOrderStore();
   const { tables, updateTableStatus } = useTableStore();
   const { currentUser } = useAuthStore();
   const { ingredients } = useInventoryStore();
@@ -85,6 +85,24 @@ export default function OrderTaking() {
     }
     // If not loaded yet, the next render after ordersLoaded=true will re-run this
   }, [tableId, orderIdParam, ordersLoaded, isNewBill]);
+
+  // Auto-cleanup: if the user navigates away without adding anything, delete the empty order
+  useEffect(() => {
+    return () => {
+      const order = useOrderStore.getState().activeOrder;
+      if (order && order.items.filter(i => i.status !== 'void').length === 0) {
+        voidOrder(order.id, 'Auto-released: no items added');
+        // If this was the only order on the table, reset table to free
+        const remaining = useOrderStore.getState().orders.filter(
+          o => o.tableId === order.tableId && o.id !== order.id && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
+        );
+        if (remaining.length === 0 && order.tableId) {
+          useTableStore.getState().updateTableStatus(order.tableId, 'free');
+        }
+      }
+      useOrderStore.getState().setActiveOrder(null);
+    };
+  }, []);
 
   const filteredItems = getFilteredItems();
 

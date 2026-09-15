@@ -3,7 +3,7 @@ import { useTableStore } from '../store/tableStore';
 import { useOrderStore } from '../store/orderStore';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../store/uiStore';
-import { Table, Plus, Users, GitMerge, ArrowsSplit, MapTrifold, SquaresFour, PencilSimple } from '@phosphor-icons/react';
+import { Table, Plus, Users, GitMerge, ArrowsSplit, MapTrifold, SquaresFour, PencilSimple, Trash } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { TableStatus, Table as TableType } from '../types';
 import FloorPlanMap from '../components/tables/FloorPlanMap';
@@ -21,7 +21,7 @@ function formatElapsed(since: Date | undefined): string {
 
 export default function TableManagement() {
   const { tables, getTablesBySection, updateTableStatus, addTable } = useTableStore();
-  const { getOrdersByTable } = useOrderStore();
+  const { getOrdersByTable, voidOrder, updateOrderStatus } = useOrderStore();
   const navigate = useNavigate();
   const toast = useToast();
   const [activeSection, setActiveSection] = useState('All');
@@ -395,24 +395,45 @@ export default function TableManagement() {
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {getOrdersByTable(actionModal.tableId).map(order => (
-                      <button
+                      <div
                         key={order.id}
-                        className="btn btn-ghost"
-                        style={{ justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', textAlign: 'left' }}
-                        onClick={() => {
-                          navigate(`/order?table=${actionModal.tableId}&orderId=${order.id}`);
-                        }}
+                        style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}
                       >
-                        <div>
-                          <div style={{ fontWeight: 600 }}>Order #{(order.localId || order.id).slice(0,6).toUpperCase()}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {order.seats && order.seats.length > 0 ? `Seats: ${order.seats.join(', ')}` : (order.guestCount ? `${order.guestCount} guests` : 'Active')} • {order.items.length} items
+                        <button
+                          className="btn btn-ghost"
+                          style={{ flex: 1, justifyContent: 'space-between', padding: '12px 16px', textAlign: 'left', border: 'none', borderRadius: 0 }}
+                          onClick={() => {
+                            navigate(`/order?table=${actionModal.tableId}&orderId=${order.id}`);
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600 }}>Order #{(order.localId || order.id).slice(0,6).toUpperCase()}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              {order.seats && order.seats.length > 0 ? `Seats: ${order.seats.join(', ')}` : (order.guestCount ? `${order.guestCount} guests` : 'Active')} • {order.items.filter(i => i.status !== 'void').length} items
+                            </div>
                           </div>
-                        </div>
-                        <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                          ₹{order.items.reduce((s,i) => s + (i.status !== 'void' ? i.totalPrice : 0), 0).toFixed(2)}
-                        </div>
-                      </button>
+                          <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                            ₹{order.items.reduce((s,i) => s + (i.status !== 'void' ? i.totalPrice : 0), 0).toFixed(2)}
+                          </div>
+                        </button>
+                        {/* Release button — only for empty orders (0 items) */}
+                        {order.items.filter(i => i.status !== 'void').length === 0 && (
+                          <button
+                            title="Release this bill"
+                            style={{ padding: '0 14px', background: 'var(--danger, #ef4444)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            onClick={() => {
+                              voidOrder(order.id, 'Released by staff');
+                              const remaining = getOrdersByTable(actionModal.tableId).filter(o => o.id !== order.id);
+                              if (remaining.length === 0) {
+                                updateTableStatus(actionModal.tableId, 'free');
+                                setActionModal(null);
+                              }
+                            }}
+                          >
+                            <Trash size={15} weight="bold" />
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
 
