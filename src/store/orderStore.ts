@@ -398,9 +398,10 @@ export const useOrderStore = create<OrderState>()(
     }),
     {
       name: 'railway-coach-orders', // localStorage key
-      // Only persist orders and activeOrder — NOT ordersLoaded (always starts false)
+      // Only persist active orders and activeOrder — NOT ordersLoaded (always starts false)
+      // This prevents the QuotaExceededError caused by closed/voided orders accumulating in localStorage.
       partialize: (state) => ({
-        orders: state.orders,
+        orders: state.orders.filter(o => ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)),
         activeOrder: state.activeOrder,
       }),
     }
