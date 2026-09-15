@@ -3,12 +3,13 @@ import { useTableStore } from '../store/tableStore';
 import { useOrderStore } from '../store/orderStore';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../store/uiStore';
-import { Table, Plus, Users, GitMerge, ArrowsSplit } from '@phosphor-icons/react';
+import { Table, Plus, Users, GitMerge, ArrowsSplit, MapTrifold, SquaresFour, PencilSimple } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
-import { TableStatus } from '../types';
+import { TableStatus, Table as TableType } from '../types';
+import FloorPlanMap from '../components/tables/FloorPlanMap';
 
 const STATUS_LABELS: Record<TableStatus, string> = {
-  free: 'Free', occupied: 'Occupied', reserved: 'Reserved', billing: 'Billing', cleaning: 'Cleaning',
+  free: 'Free', occupied: 'Occupied', reserved: 'Reserved', billing: 'Billing', cleaning: 'Cleaning', merged: 'Merged',
 };
 
 function formatElapsed(since: Date | undefined): string {
@@ -25,6 +26,9 @@ export default function TableManagement() {
   const toast = useToast();
   const [activeSection, setActiveSection] = useState('All');
   
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
+  const [isEditMode, setIsEditMode] = useState(false);
+  
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTable, setNewTable] = useState({
     number: '',
@@ -35,8 +39,11 @@ export default function TableManagement() {
   const [actionModal, setActionModal] = useState<{ type: 'free' | 'reserved' | 'occupied'; tableId: string; tableNumber: string } | null>(null);
   const [guestsCount, setGuestsCount] = useState('');
   const [reservationDetails, setReservationDetails] = useState('');
-  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order'>('seat');
+  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order' | 'merge'>('seat');
   const [editTableData, setEditTableData] = useState({ number: '', capacity: '4', section: '' });
+
+  const [geometryModalTable, setGeometryModalTable] = useState<TableType | null>(null);
+  const [mergeSelectedChild, setMergeSelectedChild] = useState('');
 
   const handleAddTable = () => {
     if (!newTable.number) {
@@ -142,14 +149,62 @@ export default function TableManagement() {
     }
   };
 
+  const handleGeometrySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!geometryModalTable) return;
+    
+    const fd = new FormData(e.target as HTMLFormElement);
+    useTableStore.getState().updateTable(geometryModalTable.id, {
+      shape: fd.get('shape') as any,
+      width: parseInt(fd.get('width') as string),
+      height: parseInt(fd.get('height') as string),
+      rotation: parseInt(fd.get('rotation') as string),
+    });
+    toast.success('Updated', 'Table geometry saved');
+    setGeometryModalTable(null);
+  };
+
+  const handleMergeSubmit = () => {
+    if (!actionModal || !mergeSelectedChild) return;
+    useTableStore.getState().mergeTables([actionModal.tableId, mergeSelectedChild]);
+    toast.success('Tables Merged', 'Tables have been merged successfully');
+    setActionModal(null);
+    setMergeSelectedChild('');
+  };
+
+  const handleUnmerge = (tableId: string) => {
+    const table = tables.find(t => t.id === tableId);
+    if (!table) return;
+
+    // Safety check: Don't unmerge if there are ANY open orders for this parent table
+    const activeOrders = getOrdersByTable(tableId);
+    if (activeOrders.length > 0) {
+      toast.error('Cannot un-merge', 'Please settle or move all active bills before un-merging.');
+      return;
+    }
+
+    useTableStore.getState().splitTable(tableId);
+    toast.success('Un-merged', 'Tables are now separated');
+  };
+
   return (
     <>
       <TopBar
         title="Table Management"
         actions={
-          <button className="btn btn-primary btn-sm" onClick={() => setIsAddModalOpen(true)}>
-            <Plus size={16} /> Add Table
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {viewMode === 'map' && (
+              <button 
+                className={`btn ${isEditMode ? 'btn-primary' : 'btn-outline'} btn-sm`} 
+                onClick={() => setIsEditMode(!isEditMode)}
+              >
+                <PencilSimple size={16} /> {isEditMode ? 'Done' : 'Edit Layout'}
+              </button>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={() => setIsAddModalOpen(true)}>
+              <Plus size={16} /> Add Table
+            </button>
+          </div>
         }
       />
       <div className="page-body">
@@ -169,17 +224,34 @@ export default function TableManagement() {
           ))}
         </div>
 
-        {/* Section Tabs */}
-        <div className="scroll-tabs" style={{ marginBottom: 'var(--space-5)' }}>
-          {sections.map((section) => (
-            <button
-              key={section}
-              className={`scroll-tab ${activeSection === section ? 'active' : ''}`}
-              onClick={() => setActiveSection(section)}
+        {/* Section Tabs & View Toggles */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)', flexWrap: 'wrap', gap: 16 }}>
+          <div className="scroll-tabs">
+            {sections.map((section) => (
+              <button
+                key={section}
+                className={`scroll-tab ${activeSection === section ? 'active' : ''}`}
+                onClick={() => setActiveSection(section)}
+              >
+                {section}
+              </button>
+            ))}
+          </div>
+          
+          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-secondary)', padding: 4, borderRadius: 8 }}>
+            <button 
+              onClick={() => { setViewMode('grid'); setIsEditMode(false); }}
+              style={{ padding: '6px 12px', border: 'none', background: viewMode === 'grid' ? 'var(--surface)' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', boxShadow: viewMode === 'grid' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', fontWeight: viewMode === 'grid' ? 600 : 400 }}
             >
-              {section}
+              <SquaresFour size={16} /> Grid
             </button>
-          ))}
+            <button 
+              onClick={() => setViewMode('map')}
+              style={{ padding: '6px 12px', border: 'none', background: viewMode === 'map' ? 'var(--surface)' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', boxShadow: viewMode === 'map' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', fontWeight: viewMode === 'map' ? 600 : 400 }}
+            >
+              <MapTrifold size={16} /> Map
+            </button>
+          </div>
         </div>
 
         {/* Legend */}
@@ -192,10 +264,18 @@ export default function TableManagement() {
           ))}
         </div>
 
-        {/* Floor Plan Grid */}
-        <div className="grid grid-tables" style={{ gap: 'var(--space-4)' }}>
-          {displayTables.map((table) => {
-            const activeOrders = getOrdersByTable(table.id);
+        {/* Floor Plan / Grid */}
+        {viewMode === 'map' ? (
+          <FloorPlanMap 
+            tables={displayTables} 
+            isEditMode={isEditMode} 
+            onTableClick={handleTableClick} 
+            onEditTableConfig={(t) => setGeometryModalTable(t)}
+          />
+        ) : (
+          <div className="grid grid-tables" style={{ gap: 'var(--space-4)' }}>
+            {displayTables.filter(t => t.status !== 'merged').map((table) => {
+              const activeOrders = getOrdersByTable(table.id);
             return (
               <div
                 key={table.id}
@@ -240,8 +320,7 @@ export default function TableManagement() {
             );
           })}
         </div>
-
-
+        )}
       </div>
 
       {isAddModalOpen && (
@@ -351,9 +430,10 @@ export default function TableManagement() {
                 <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                   {/* Action Mode Selector */}
                   <div className="tabs">
-                    <button className={`tab-item ${actionMode === 'seat' ? 'active' : ''}`} onClick={() => setActionMode('seat')}>Seat Guests</button>
+                    <button className={`tab-item ${actionMode === 'seat' ? 'active' : ''}`} onClick={() => setActionMode('seat')}>Seat</button>
                     <button className={`tab-item ${actionMode === 'reserve' ? 'active' : ''}`} onClick={() => setActionMode('reserve')}>Reserve</button>
                     <button className={`tab-item ${actionMode === 'edit' ? 'active' : ''}`} onClick={() => setActionMode('edit')}>Edit</button>
+                    <button className={`tab-item ${actionMode === 'merge' ? 'active' : ''}`} onClick={() => setActionMode('merge')}>Merge</button>
                   </div>
 
                   {actionMode === 'seat' && (
@@ -420,15 +500,88 @@ export default function TableManagement() {
                     </>
                   )}
 
+                  {actionMode === 'merge' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Select table to merge with {actionModal.tableNumber}</label>
+                      <select 
+                        className="input" 
+                        value={mergeSelectedChild} 
+                        onChange={(e) => setMergeSelectedChild(e.target.value)}
+                      >
+                        <option value="">-- Select a free table --</option>
+                        {tables
+                          .filter(t => t.status === 'free' && t.id !== actionModal.tableId && t.section === tables.find(x => x.id === actionModal.tableId)?.section)
+                          .map(t => (
+                            <option key={t.id} value={t.id}>Table {t.number} ({t.capacity} seats)</option>
+                          ))}
+                      </select>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
+                        Only free tables in the same section are shown.
+                      </div>
+                    </div>
+                  )}
+
+                  {tables.find(t => t.id === actionModal.tableId)?.mergedWith && tables.find(t => t.id === actionModal.tableId)!.mergedWith!.length > 0 && (
+                    <div style={{ marginTop: 8, padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>This table is merged</div>
+                      <button 
+                        className="btn btn-outline btn-sm" 
+                        style={{ width: '100%', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                        onClick={() => handleUnmerge(actionModal.tableId)}
+                      >
+                        <ArrowsSplit size={16} /> Un-merge Tables
+                      </button>
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleActionSubmit}>
-                      {actionMode === 'seat' ? 'Open Order' : actionMode === 'reserve' ? 'Save Reservation' : 'Save Changes'}
+                      {actionMode === 'seat' ? 'Open Order' : actionMode === 'reserve' ? 'Save Reservation' : actionMode === 'merge' ? 'Merge Tables' : 'Save Changes'}
                     </button>
                     <button className="btn btn-ghost" onClick={() => setActionModal(null)}>Cancel</button>
                   </div>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Geometry Edit Modal */}
+      {geometryModalTable && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+          <div className="card" style={{ width: 350, maxWidth: '90vw' }}>
+            <div className="card-header">
+              <div className="card-title">Edit Geometry: {geometryModalTable.number}</div>
+            </div>
+            <form onSubmit={handleGeometrySubmit} style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Shape</label>
+                <select name="shape" className="input" defaultValue={geometryModalTable.shape || 'square'}>
+                  <option value="square">Square</option>
+                  <option value="rectangle">Rectangle</option>
+                  <option value="round">Round</option>
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Width (px)</label>
+                  <input name="width" type="number" className="input" defaultValue={geometryModalTable.width || 60} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Height (px)</label>
+                  <input name="height" type="number" className="input" defaultValue={geometryModalTable.height || 60} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Rotation (degrees)</label>
+                <input name="rotation" type="number" className="input" defaultValue={geometryModalTable.rotation || 0} />
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setGeometryModalTable(null)}>Cancel</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -64,13 +64,13 @@ export const useTableStore = create<TableState>()(
           ),
         }));
         
-        // Sync to Supabase
         const updatedTable = get().tables.find(t => t.id === tableId);
         if (updatedTable) {
           await supabase.from('restaurant_tables').update({
             status: updatedTable.status,
             reserved_for: updatedTable.reservedFor || null,
             occupied_since: updatedTable.occupiedSince?.toISOString() || null,
+            merged_into: updatedTable.mergedInto || null,
             updated_at: new Date().toISOString()
           }).eq('id', tableId);
         }
@@ -99,7 +99,11 @@ export const useTableStore = create<TableState>()(
             status: newTable.status,
             section: newTable.section,
             pos_x: newTable.posX,
-            pos_y: newTable.posY
+            pos_y: newTable.posY,
+            width: newTable.width || 60,
+            height: newTable.height || 60,
+            shape: newTable.shape || 'square',
+            rotation: newTable.rotation || 0
           }]);
         } catch (error) {
           console.error('Failed to sync new table:', error);
@@ -116,8 +120,17 @@ export const useTableStore = create<TableState>()(
           if (data.number !== undefined) updateData.table_number = data.number;
           if (data.capacity !== undefined) updateData.capacity = data.capacity;
           if (data.section !== undefined) updateData.section = data.section;
+          if (data.posX !== undefined) updateData.pos_x = data.posX;
+          if (data.posY !== undefined) updateData.pos_y = data.posY;
+          if (data.width !== undefined) updateData.width = data.width;
+          if (data.height !== undefined) updateData.height = data.height;
+          if (data.shape !== undefined) updateData.shape = data.shape;
+          if (data.rotation !== undefined) updateData.rotation = data.rotation;
+          if (data.mergedWith !== undefined) updateData.merged_with = data.mergedWith; // Wait, mergedWith is local only right now, or maybe not needed in DB if merged_into works? Let's just sync merged_into in updateTableStatus.
           
-          await supabase.from('restaurant_tables').update(updateData).eq('id', tableId);
+          if (Object.keys(updateData).length > 0) {
+            await supabase.from('restaurant_tables').update(updateData).eq('id', tableId);
+          }
         } catch (error) {
           console.error('Failed to sync updated table:', error);
         }
@@ -129,22 +142,54 @@ export const useTableStore = create<TableState>()(
             t.id === tableId ? { ...t, posX, posY } : t
           ),
         }));
+        get().updateTable(tableId, { posX, posY });
       },
 
       mergeTables: (tableIds) => {
+        // Assume first ID is the parent, rest are children
+        if (tableIds.length < 2) return;
+        const parentId = tableIds[0];
+        const childIds = tableIds.slice(1);
+        
         set((state) => ({
-          tables: state.tables.map((t) =>
-            tableIds.includes(t.id) ? { ...t, mergedWith: tableIds.filter((id) => id !== t.id) } : t
-          ),
+          tables: state.tables.map((t) => {
+            if (t.id === parentId) {
+              return { ...t, mergedWith: childIds };
+            }
+            if (childIds.includes(t.id)) {
+              return { ...t, status: 'merged' as TableStatus, mergedInto: parentId };
+            }
+            return t;
+          }),
         }));
+
+        childIds.forEach(id => {
+          get().updateTableStatus(id, 'merged', { mergedInto: parentId });
+        });
       },
 
       splitTable: (tableId) => {
+        const state = get();
+        const table = state.tables.find(t => t.id === tableId);
+        if (!table || !table.mergedWith) return;
+        
+        const childIds = table.mergedWith;
+
         set((state) => ({
-          tables: state.tables.map((t) =>
-            t.id === tableId ? { ...t, mergedWith: undefined } : t
-          ),
+          tables: state.tables.map((t) => {
+            if (t.id === tableId) {
+              return { ...t, mergedWith: undefined };
+            }
+            if (childIds.includes(t.id)) {
+              return { ...t, status: 'free' as TableStatus, mergedInto: undefined };
+            }
+            return t;
+          }),
         }));
+
+        childIds.forEach(id => {
+          get().updateTableStatus(id, 'free', { mergedInto: undefined });
+        });
       },
 
       getTablesBySection: () => {
@@ -172,9 +217,14 @@ export const useTableStore = create<TableState>()(
                   section: dbTable.section,
                   posX: localTable?.posX ?? dbTable.pos_x ?? 0,
                   posY: localTable?.posY ?? dbTable.pos_y ?? 0,
+                  width: localTable?.width ?? dbTable.width ?? 60,
+                  height: localTable?.height ?? dbTable.height ?? 60,
+                  shape: localTable?.shape ?? dbTable.shape ?? 'square',
+                  rotation: localTable?.rotation ?? dbTable.rotation ?? 0,
                   status: dbTable.status as TableStatus,
                   reservedFor: dbTable.reserved_for || undefined,
                   occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined,
+                  mergedInto: dbTable.merged_into || undefined,
                 };
               });
               return { tables: newTables };
@@ -190,7 +240,12 @@ export const useTableStore = create<TableState>()(
                 status: 'free',
                 section: t.section,
                 pos_x: t.posX,
-                pos_y: t.posY
+                pos_y: t.posY,
+                width: t.width || 60,
+                height: t.height || 60,
+                shape: t.shape || 'square',
+                rotation: t.rotation || 0,
+                merged_into: t.mergedInto || null
               });
             }
             // Now set all local tables as free
@@ -216,7 +271,14 @@ export const useTableStore = create<TableState>()(
                     ...newTables[idx],
                     status: dbTable.status as TableStatus,
                     reservedFor: dbTable.reserved_for || undefined,
-                    occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined
+                    occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined,
+                    mergedInto: dbTable.merged_into || undefined,
+                    posX: dbTable.pos_x ?? 0,
+                    posY: dbTable.pos_y ?? 0,
+                    width: dbTable.width ?? 60,
+                    height: dbTable.height ?? 60,
+                    shape: dbTable.shape ?? 'square',
+                    rotation: dbTable.rotation ?? 0
                   };
                 } else {
                   newTables.push({
@@ -226,9 +288,14 @@ export const useTableStore = create<TableState>()(
                     section: dbTable.section,
                     posX: dbTable.pos_x ?? 0,
                     posY: dbTable.pos_y ?? 0,
+                    width: dbTable.width ?? 60,
+                    height: dbTable.height ?? 60,
+                    shape: dbTable.shape ?? 'square',
+                    rotation: dbTable.rotation ?? 0,
                     status: dbTable.status as TableStatus,
                     reservedFor: dbTable.reserved_for || undefined,
-                    occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined
+                    occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined,
+                    mergedInto: dbTable.merged_into || undefined
                   });
                 }
                 return { tables: newTables };

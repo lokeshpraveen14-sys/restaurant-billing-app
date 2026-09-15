@@ -13,7 +13,7 @@ export interface User {
   createdAt: Date;
 }
 
-export type TableStatus = 'free' | 'occupied' | 'reserved' | 'billing' | 'cleaning';
+export type TableStatus = 'free' | 'occupied' | 'reserved' | 'billing' | 'cleaning' | 'merged';
 export type OrderType = 'dine-in' | 'takeaway' | 'counter';
 
 export interface Table {
@@ -24,10 +24,15 @@ export interface Table {
   section: string;
   posX: number;
   posY: number;
+  width?: number;
+  height?: number;
+  shape?: 'square' | 'round' | 'rectangle';
+  rotation?: number;
   currentOrderId?: string;
   occupiedSince?: Date;
   reservedFor?: string;
   mergedWith?: string[];
+  mergedInto?: string;
 }
 
 export type ItemCategory = 'food' | 'bakery' | 'beverage' | 'dessert' | 'juice' | 'other';
