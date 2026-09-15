@@ -137,21 +137,34 @@ export default function OrderTaking() {
   const handlePrintKOT = async (printerId: string) => {
     if (!activeOrder) return;
 
+    // 1. Find items that have unprinted quantities
+    const newItemsToPrint = activeOrder.items
+      .filter(i => i.status !== 'void' && i.quantity > (i.printedQuantity || 0))
+      .map(i => ({
+        menuItemName: i.menuItemName,
+        // Calculate delta: only print the newly added amount
+        quantity: i.quantity - (i.printedQuantity || 0),
+        note: i.note
+      }));
+
+    if (newItemsToPrint.length === 0) {
+      toast.warning('No new items', 'There are no new items to send to the kitchen.');
+      setPrinterModal(false);
+      return;
+    }
+
+    // 2. Submit KOT (this updates printedQuantity in store and syncs to DB)
     submitKOT(activeOrder.id);
     setPrinterModal(false);
     toast.success('KOT Sent', 'Kitchen Order Ticket sent to kitchen');
 
-    // print receipt
+    // 3. Print receipt with only the new items
     const data = {
       orderId: (activeOrder.localId || activeOrder.id).slice(0, 8).toUpperCase(),
       tableNumber: table?.number,
       orderType: orderType,
       staffName: currentUser?.name,
-      items: activeOrder.items.filter(i => i.status !== 'void').map(i => ({
-        menuItemName: i.menuItemName,
-        quantity: i.quantity,
-        note: i.note
-      }))
+      items: newItemsToPrint
     };
     
     const lines = buildKotReceipt(data);

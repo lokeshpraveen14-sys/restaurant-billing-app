@@ -207,7 +207,20 @@ export const useOrderStore = create<OrderState>()(
       submitKOT: (orderId) => {
         const order = get().orders.find((o) => o.id === orderId);
         if (!order) return;
-        const updated = { ...order, status: 'kot_sent' as OrderStatus, kotPrintedAt: new Date() };
+        
+        // Mark current items as printed by setting printedQuantity to current quantity
+        const updatedItems = order.items.map(item => ({
+          ...item,
+          printedQuantity: item.quantity
+        }));
+
+        const updated = { 
+          ...order, 
+          items: updatedItems,
+          status: 'kot_sent' as OrderStatus, 
+          kotPrintedAt: new Date() 
+        };
+        
         set((state) => ({
           orders: state.orders.map((o) => (o.id === orderId ? updated : o)),
           activeOrder: state.activeOrder?.id === orderId ? updated : state.activeOrder,

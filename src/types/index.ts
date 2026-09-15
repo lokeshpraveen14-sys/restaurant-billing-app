@@ -92,6 +92,7 @@ export interface OrderItem {
   gstRate: number;
   weight?: number; // for weight items
   kotType?: 'food' | 'juice' | 'bakery'; // which KOT printer to route to
+  printedQuantity?: number; // how many of this item have already been sent to kitchen
 }
 
 export type OrderStatus = 'open' | 'kot_sent' | 'preparing' | 'ready' | 'billed' | 'paid' | 'void' | 'cancelled';
