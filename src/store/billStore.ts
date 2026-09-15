@@ -19,12 +19,18 @@ export const useBillStore = create<BillState>()(
       bills: [],
 
       addBill: async (bill: Bill) => {
+    // Guard: skip if this bill ID is already in local state (prevents double-save on retry)
+    if (get().bills.some(b => b.id === bill.id)) {
+      console.warn('[addBill] Duplicate bill ID detected, skipping:', bill.id);
+      return;
+    }
+
     // Add locally for instant UI update
     const newBill = { ...bill, status: bill.status || 'paid' as const };
     set((state) => ({ bills: [...state.bills, newBill] }));
 
-    // Push to Supabase
-    const { error } = await supabase.from('bills').insert({
+    // Push to Supabase — use UPSERT (onConflict: id) so retries/refreshes never create duplicate rows
+    const { error } = await supabase.from('bills').upsert({
       id: bill.id,
       invoice_number: bill.invoiceNumber,
       order_id: bill.orderId,
@@ -48,13 +54,12 @@ export const useBillStore = create<BillState>()(
       hsn_codes: bill.hsnCodes || null,
       place_of_supply: bill.placeOfSupply || null,
       outlet_gstin: bill.outletGSTIN || null,
-      is_gst_bill: bill.isGstBill !== false, // default true
+      is_gst_bill: bill.isGstBill !== false,
       created_at: bill.createdAt.toISOString()
-    });
+    }, { onConflict: 'id' });
 
     if (error) {
-      console.error('Failed to insert bill into Supabase:', error);
-      // Fallback: If table doesn't exist, we should at least warn them
+      console.error('[addBill] Failed to upsert bill into Supabase:', error);
     }
   },
 
@@ -193,11 +198,28 @@ export const useBillStore = create<BillState>()(
         outletGSTIN: b.outlet_gstin || '',
       }));
 
+      // Deduplicate DB bills by invoiceNumber — keep the earliest created_at per invoice.
+      // This handles the case where the same invoice was accidentally inserted twice in DB.
+      const deduplicatedDbBills = (() => {
+        const seenInvoices = new Map<string, (typeof dbBills)[0]>();
+        for (const b of dbBills) {
+          const existing = seenInvoices.get(b.invoiceNumber);
+          if (!existing || b.createdAt < existing.createdAt) {
+            seenInvoices.set(b.invoiceNumber, b);
+          }
+        }
+        return Array.from(seenInvoices.values());
+      })();
+
       // Merge: DB is authoritative. Keep any local bills not in DB (e.g. just created).
       set((state) => {
-        const dbIds = new Set(dbBills.map(b => b.id));
-        const localOnly = state.bills.filter(b => !dbIds.has(b.id));
-        return { bills: [...dbBills, ...localOnly] };
+        const dbIds = new Set(deduplicatedDbBills.map(b => b.id));
+        const dbInvoiceNumbers = new Set(deduplicatedDbBills.map(b => b.invoiceNumber));
+        // Exclude local bills whose invoice number is already in DB (prevents showing stale local copies)
+        const localOnly = state.bills.filter(
+          b => !dbIds.has(b.id) && !dbInvoiceNumbers.has(b.invoiceNumber)
+        );
+        return { bills: [...deduplicatedDbBills, ...localOnly] };
       });
 
       // Sync the invoice counter based on the bills we just fetched
@@ -209,8 +231,8 @@ export const useBillStore = create<BillState>()(
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bills' }, payload => {
         const b = payload.new;
         set((state) => {
-          // Avoid duplicate insert if we created it locally
-          if (state.bills.some(existing => existing.id === b.id)) return state;
+          // Avoid duplicate if we created it locally — check both UUID and invoice number
+          if (state.bills.some(existing => existing.id === b.id || existing.invoiceNumber === b.invoice_number)) return state;
 
           const mappedBill = {
             id: b.id,

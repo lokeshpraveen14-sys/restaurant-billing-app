@@ -216,6 +216,10 @@ export function getCurrentFY(date = new Date()): string {
 /**
  * Atomically fetch the next invoice number from Postgres.
  * Falls back to local counter if RPC fails (e.g. offline / network error).
+ *
+ * IMPORTANT: The local fallback appends a short timestamp suffix (e.g. "3331-T4A2")
+ * so that two devices going offline at the same time never produce the exact same
+ * invoice number. The DB RPC is always the preferred path.
  */
 export async function getNextInvoiceNumber(
   prefix: string,
@@ -230,8 +234,12 @@ export async function getNextInvoiceNumber(
     if (error || !data) throw error;
     return data as string;
   } catch {
-    console.warn('Invoice RPC failed, using local counter fallback');
-    return localFallback();
+    console.warn('[getNextInvoiceNumber] RPC failed — using local counter fallback');
+    // Append a short timestamp suffix (last 4 hex chars of current ms)
+    // so two devices failing at the same time produce different numbers.
+    const base = localFallback();
+    const suffix = Date.now().toString(16).slice(-4).toUpperCase();
+    return `${base}-${suffix}`;
   }
 }
 
