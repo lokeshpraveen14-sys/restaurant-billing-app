@@ -160,7 +160,12 @@ export default function Billing() {
     const cardPaid = paymentMode === 'card' ? totalAmount : 0;
     addBillToShift(cashPaid, upiPaid, cardPaid, totalAmount, order.guestCount || 0);
     updateOrderStatus(order.id, 'paid');
-    if (order.tableId) updateTableStatus(order.tableId, 'free');
+    if (order.tableId) {
+      const otherActiveOrders = useOrderStore.getState().getOrdersByTable(order.tableId).filter(o => o.id !== order.id);
+      if (otherActiveOrders.length === 0) {
+        updateTableStatus(order.tableId, 'free');
+      }
+    }
     toast.success('Bill Generated', `Invoice ${invoiceNumber} created`);
   };
 

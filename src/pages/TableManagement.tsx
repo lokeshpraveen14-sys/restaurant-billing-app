@@ -20,7 +20,7 @@ function formatElapsed(since: Date | undefined): string {
 
 export default function TableManagement() {
   const { tables, getTablesBySection, updateTableStatus, addTable } = useTableStore();
-  const { getOrderByTable } = useOrderStore();
+  const { getOrdersByTable } = useOrderStore();
   const navigate = useNavigate();
   const toast = useToast();
   const [activeSection, setActiveSection] = useState('All');
@@ -32,10 +32,10 @@ export default function TableManagement() {
     section: 'Main Hall',
   });
 
-  const [actionModal, setActionModal] = useState<{ type: 'free' | 'reserved'; tableId: string; tableNumber: string } | null>(null);
+  const [actionModal, setActionModal] = useState<{ type: 'free' | 'reserved' | 'occupied'; tableId: string; tableNumber: string } | null>(null);
   const [guestsCount, setGuestsCount] = useState('');
   const [reservationDetails, setReservationDetails] = useState('');
-  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit'>('seat');
+  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order'>('seat');
   const [editTableData, setEditTableData] = useState({ number: '', capacity: '4', section: '' });
 
   const handleAddTable = () => {
@@ -84,7 +84,15 @@ export default function TableManagement() {
         section: table.section,
       });
     } else if (status === 'occupied' || status === 'billing') {
-      navigate(`/order?table=${tableId}`);
+      const activeOrders = getOrdersByTable(tableId);
+      if (activeOrders.length === 1) {
+        // Only 1 order -> Go straight to it
+        navigate(`/order?table=${tableId}&orderId=${activeOrders[0].id}`);
+      } else {
+        // Multiple orders (or 0 for some reason) -> Show sub-table modal
+        setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
+        setActionMode('select_order');
+      }
     } else if (status === 'reserved') {
       setActionModal({ type: 'reserved', tableId, tableNumber: table.number });
       setActionMode('seat');
@@ -186,43 +194,51 @@ export default function TableManagement() {
 
         {/* Floor Plan Grid */}
         <div className="grid grid-tables" style={{ gap: 'var(--space-4)' }}>
-          {displayTables.map((table) => (
-            <div
-              key={table.id}
-              className={`table-card ${table.status}`}
-              onClick={() => handleTableClick(table.id, table.status)}
-              title={`${table.number} — ${STATUS_LABELS[table.status]}${table.reservedFor ? ': ' + table.reservedFor : ''}`}
-            >
-              <div style={{ position: 'absolute', top: 8, right: 8 }}>
-                <span style={{
-                  display: 'block', width: 8, height: 8, borderRadius: '50%',
-                  background: `var(--status-${table.status})`,
-                  boxShadow: `0 0 6px var(--status-${table.status})`,
-                }} />
-              </div>
+          {displayTables.map((table) => {
+            const activeOrders = getOrdersByTable(table.id);
+            return (
+              <div
+                key={table.id}
+                className={`table-card ${table.status}`}
+                onClick={() => handleTableClick(table.id, table.status)}
+                title={`${table.number} — ${STATUS_LABELS[table.status]}${table.reservedFor ? ': ' + table.reservedFor : ''}`}
+              >
+                <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {activeOrders.length > 1 && (
+                    <span style={{ fontSize: '0.65rem', background: 'var(--bg-card)', color: 'var(--text-primary)', padding: '2px 6px', borderRadius: 4, fontWeight: 700, border: '1px solid var(--border)' }}>
+                      {activeOrders.length} Bills
+                    </span>
+                  )}
+                  <span style={{
+                    display: 'block', width: 8, height: 8, borderRadius: '50%',
+                    background: `var(--status-${table.status})`,
+                    boxShadow: `0 0 6px var(--status-${table.status})`,
+                  }} />
+                </div>
 
-              <Table size={24} style={{ color: `var(--status-${table.status})`, marginBottom: 6, opacity: 0.7 }} />
-              <div className="table-number">{table.number}</div>
-              <div className="table-capacity">
-                <Users size={10} style={{ display: 'inline', marginRight: 3 }} />{table.capacity} seats
-              </div>
-              {table.occupiedSince && (
-                <div className="table-timer" style={{ color: `var(--status-${table.status})` }}>
-                  {formatElapsed(table.occupiedSince)}
+                <Table size={24} style={{ color: `var(--status-${table.status})`, marginBottom: 6, opacity: 0.7 }} />
+                <div className="table-number">{table.number}</div>
+                <div className="table-capacity">
+                  <Users size={10} style={{ display: 'inline', marginRight: 3 }} />{table.capacity} seats
                 </div>
-              )}
-              {table.reservedFor && (
-                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 4, textAlign: 'center', padding: '0 4px', lineHeight: 1.3 }}>
-                  {table.reservedFor}
+                {table.occupiedSince && (
+                  <div className="table-timer" style={{ color: `var(--status-${table.status})` }}>
+                    {formatElapsed(table.occupiedSince)}
+                  </div>
+                )}
+                {table.reservedFor && (
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 4, textAlign: 'center', padding: '0 4px', lineHeight: 1.3 }}>
+                    {table.reservedFor}
+                  </div>
+                )}
+                <div style={{ position: 'absolute', bottom: 6, left: 8, right: 8, textAlign: 'center' }}>
+                  <span className={`badge badge-${table.status}`} style={{ fontSize: '0.55rem', padding: '2px 6px' }}>
+                    {STATUS_LABELS[table.status]}
+                  </span>
                 </div>
-              )}
-              <div style={{ position: 'absolute', bottom: 6, left: 8, right: 8, textAlign: 'center' }}>
-                <span className={`badge badge-${table.status}`} style={{ fontSize: '0.55rem', padding: '2px 6px' }}>
-                  {STATUS_LABELS[table.status]}
-                </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
 
@@ -281,95 +297,138 @@ export default function TableManagement() {
       {/* Action Modal */}
       {actionModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-          <div className="card" style={{ width: 350, maxWidth: '90vw' }}>
-            <div className="card-header">
-              <div className="card-title">Table {actionModal.tableNumber}</div>
-            </div>
-            <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-              
-              {actionModal.type === 'free' && (
-                <div className="tabs" style={{ padding: 3, marginBottom: 'var(--space-2)' }}>
-                  <button
-                    className={`tab-item ${actionMode === 'seat' ? 'active' : ''}`}
-                    onClick={() => setActionMode('seat')}
-                    style={{ flex: 1, textAlign: 'center', padding: '6px 0' }}
-                  >
-                    Seat Guests
-                  </button>
-                  <button
-                    className={`tab-item ${actionMode === 'reserve' ? 'active' : ''}`}
-                    onClick={() => setActionMode('reserve')}
-                    style={{ flex: 1, textAlign: 'center', padding: '6px 0' }}
-                  >
-                    Reserve Table
-                  </button>
-                  <button
-                    className={`tab-item ${actionMode === 'edit' ? 'active' : ''}`}
-                    onClick={() => setActionMode('edit')}
-                    style={{ flex: 1, textAlign: 'center', padding: '6px 0' }}
-                  >
-                    Edit Table
-                  </button>
+          <div className="card" style={{ width: 400, maxWidth: '90vw' }}>
+            
+            {actionMode === 'select_order' ? (
+              // Multiple Orders / Occupied Table Modal
+              <>
+                <div className="card-header">
+                  <div className="card-title">Table {actionModal.tableNumber} (Shared)</div>
                 </div>
-              )}
-
-              {actionMode === 'seat' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Number of Guests (Covers) *</label>
-                  <input 
-                    className="input" 
-                    type="number"
-                    min="1"
-                    value={guestsCount} 
-                    onChange={(e) => setGuestsCount(e.target.value)}
-                    placeholder="e.g. 4"
-                    autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && handleActionSubmit()}
-                  />
-                </div>
-              )}
-              
-              {actionMode === 'reserve' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Reservation Details *</label>
-                  <input 
-                    className="input" 
-                    type="text"
-                    value={reservationDetails} 
-                    onChange={(e) => setReservationDetails(e.target.value)}
-                    placeholder="e.g. Mehta Family - 8:00 PM"
-                    autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && handleActionSubmit()}
-                  />
-                </div>
-              )}
-              
-              {actionMode === 'edit' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Table Number / Name *</label>
-                    <input className="input" value={editTableData.number} onChange={(e) => setEditTableData({ ...editTableData, number: e.target.value.toUpperCase() })} />
+                <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Select an order to view/edit, or seat a new group.</div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {getOrdersByTable(actionModal.tableId).map(order => (
+                      <button
+                        key={order.id}
+                        className="btn btn-ghost"
+                        style={{ justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', textAlign: 'left' }}
+                        onClick={() => {
+                          navigate(`/order?table=${actionModal.tableId}&orderId=${order.id}`);
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600 }}>Order #{(order.localId || order.id).slice(0,6).toUpperCase()}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{order.guestCount ? `${order.guestCount} guests` : 'Active'} • {order.items.length} items</div>
+                        </div>
+                        <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                          ₹{order.items.reduce((s,i) => s + (i.status !== 'void' ? i.totalPrice : 0), 0).toFixed(2)}
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Capacity</label>
-                      <input className="input" type="number" value={editTableData.capacity} onChange={(e) => setEditTableData({ ...editTableData, capacity: e.target.value })} />
+
+                  <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+                  
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => {
+                      navigate(`/order?table=${actionModal.tableId}&new=true`);
+                    }}
+                  >
+                    <Plus size={16} /> Seat New Guest (New Bill)
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setActionModal(null)}>Cancel</button>
+                </div>
+              </>
+            ) : (
+              // Standard Seat/Reserve/Edit Modal
+              <>
+                <div className="card-header">
+                  <div className="card-title">Table {actionModal.tableNumber}</div>
+                </div>
+                <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                  {/* Action Mode Selector */}
+                  <div className="tabs">
+                    <button className={`tab-item ${actionMode === 'seat' ? 'active' : ''}`} onClick={() => setActionMode('seat')}>Seat Guests</button>
+                    <button className={`tab-item ${actionMode === 'reserve' ? 'active' : ''}`} onClick={() => setActionMode('reserve')}>Reserve</button>
+                    <button className={`tab-item ${actionMode === 'edit' ? 'active' : ''}`} onClick={() => setActionMode('edit')}>Edit</button>
+                  </div>
+
+                  {actionMode === 'seat' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Number of Guests</label>
+                      <input 
+                        type="number" 
+                        className="input" 
+                        min="1" 
+                        value={guestsCount} 
+                        onChange={(e) => setGuestsCount(e.target.value)}
+                        placeholder="e.g. 2"
+                        autoFocus
+                      />
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Section *</label>
-                      <input className="input" value={editTableData.section} onChange={(e) => setEditTableData({ ...editTableData, section: e.target.value })} />
+                  )}
+
+                  {actionMode === 'reserve' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Reservation Details</label>
+                      <input 
+                        className="input" 
+                        value={reservationDetails} 
+                        onChange={(e) => setReservationDetails(e.target.value)}
+                        placeholder="Name & Time (e.g. John @ 8:00 PM)"
+                        autoFocus
+                      />
                     </div>
+                  )}
+
+                  {actionMode === 'edit' && (
+                    <>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Table Number / Name *</label>
+                        <input 
+                          className="input" 
+                          value={editTableData.number} 
+                          onChange={(e) => setEditTableData({ ...editTableData, number: e.target.value.toUpperCase() })}
+                        />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Capacity</label>
+                          <input 
+                            type="number" 
+                            className="input" 
+                            value={editTableData.capacity} 
+                            onChange={(e) => setEditTableData({ ...editTableData, capacity: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Section</label>
+                          <input 
+                            className="input" 
+                            value={editTableData.section} 
+                            onChange={(e) => setEditTableData({ ...editTableData, section: e.target.value })}
+                            list="sections"
+                          />
+                          <datalist id="sections">
+                            {sections.filter(s => s !== 'All').map(s => <option key={s} value={s} />)}
+                          </datalist>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleActionSubmit}>
+                      {actionMode === 'seat' ? 'Open Order' : actionMode === 'reserve' ? 'Save Reservation' : 'Save Changes'}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setActionModal(null)}>Cancel</button>
                   </div>
                 </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 'var(--space-2)' }}>
-                <button className="btn btn-ghost" onClick={() => setActionModal(null)}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleActionSubmit}>
-                  {actionMode === 'seat' ? 'Create Order' : actionMode === 'edit' ? 'Save Changes' : 'Confirm Reservation'}
-                </button>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}

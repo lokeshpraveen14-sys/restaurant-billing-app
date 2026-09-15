@@ -25,7 +25,7 @@ export default function OrderTaking() {
   const initialGuestCount = guestsParam ? parseInt(guestsParam) : undefined;
 
   const { categories, items, searchQuery, selectedCategoryId, setSearch, setCategory, getFilteredItems } = useMenuStore();
-  const { orders, createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrderByTable, activeOrder, setActiveOrder, ordersLoaded } = useOrderStore();
+  const { orders, createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrdersByTable, activeOrder, setActiveOrder, ordersLoaded } = useOrderStore();
   const { tables, updateTableStatus } = useTableStore();
   const { currentUser } = useAuthStore();
   const { ingredients } = useInventoryStore();
@@ -40,12 +40,14 @@ export default function OrderTaking() {
 
   const table = tables.find((t) => t.id === tableId);
 
+  const isNewBill = searchParams.get('new') === 'true';
+
   // Restore existing order for this table immediately from cache (localStorage)
   // Then sync with DB once loaded
   useEffect(() => {
     if (!currentUser) return;
     
-    // If navigating from Revise Bill, we pass the specific orderId
+    // If navigating from Revise Bill or Sub-table modal, we pass the specific orderId
     if (orderIdParam) {
       const existingRevise = orders.find(o => o.id === orderIdParam);
       if (existingRevise) {
@@ -54,17 +56,27 @@ export default function OrderTaking() {
       }
     }
 
-    const existing = tableId ? getOrderByTable(tableId) : null;
+    // If new=true is passed, force a fresh order creation
+    if (isNewBill && tableId && ordersLoaded) {
+      const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount);
+      setActiveOrder(newOrder);
+      // Remove 'new' from URL to prevent recreating on reload
+      searchParams.delete('new');
+      navigate(`?${searchParams.toString()}`, { replace: true });
+      return;
+    }
+
+    const existing = tableId ? getOrdersByTable(tableId)[0] : null; // pick the first open order if not specifying orderId
     if (existing) {
       // Found in cache immediately — no waiting
       setActiveOrder(existing);
-    } else if (ordersLoaded) {
+    } else if (ordersLoaded && tableId) {
       // DB loaded and no order found — create a new one
       const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount);
       setActiveOrder(newOrder);
     }
     // If not loaded yet, the next render after ordersLoaded=true will re-run this
-  }, [tableId, orderIdParam, ordersLoaded]);
+  }, [tableId, orderIdParam, ordersLoaded, isNewBill]);
 
   const filteredItems = getFilteredItems();
 
