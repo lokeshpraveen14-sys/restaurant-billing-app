@@ -147,7 +147,7 @@ export default function TableManagement() {
       }
       // Update table to occupied immediately
       updateTableStatus(actionModal.tableId, 'occupied');
-      let url = `/order?table=${actionModal.tableId}&guests=${covers}`;
+      let url = `/order?table=${actionModal.tableId}&guests=${covers}&new=true`;
       if (selectedSeats.length > 0) {
         url += `&seats=${selectedSeats.join(',')}`;
       }
