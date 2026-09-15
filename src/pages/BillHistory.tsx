@@ -57,23 +57,19 @@ export default function BillHistory() {
     let fetchedBills: Bill[] = [];
     try {
       const supabaseBills = await fetchBillsByDateRange(start, end);
-      // Merge with local bills (in case Supabase is missing some)
+      // Merge local bills that are in range (covers offline-created bills not yet in DB)
       const localFiltered = localBills.filter((b) => {
         const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
         return d >= start && d <= end;
       });
 
-      // Merge all into one list — deduplicate by invoiceNumber (keep earliest created_at row)
-      // This correctly handles bills that were saved multiple times with different UUIDs
-      const allBills = [...localFiltered, ...supabaseBills];
-      const byInvoice = new Map<string, Bill>();
-      for (const b of allBills) {
-        const existing = byInvoice.get(b.invoiceNumber);
-        if (!existing || new Date(b.createdAt) < new Date(existing.createdAt)) {
-          byInvoice.set(b.invoiceNumber, b);
-        }
-      }
-      fetchedBills = Array.from(byInvoice.values());
+      // Deduplicate ONLY by UUID — each unique id is a distinct DB record.
+      // Bills with the same invoice_number but different UUIDs are DIFFERENT sales
+      // that collided due to the race condition bug. We show them all and flag them.
+      const allById = new Map<string, Bill>();
+      localFiltered.forEach(b => allById.set(b.id, b));
+      supabaseBills.forEach(b => allById.set(b.id, b)); // Supabase wins on conflict
+      fetchedBills = Array.from(allById.values());
     } catch (err) {
       // Fallback to local bills only
       fetchedBills = localBills.filter((b) => {
@@ -219,6 +215,20 @@ export default function BillHistory() {
         <div className="card">
           <div className="card-header">
             <div className="card-title">All Invoices</div>
+            {bills.length > 0 && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {bills.filter(b => b.status !== 'void').length} paid
+                {(() => {
+                  // Find invoice numbers that appear more than once
+                  const counts: Record<string, number> = {};
+                  bills.forEach(b => { counts[b.invoiceNumber] = (counts[b.invoiceNumber] || 0) + 1; });
+                  const dupCount = Object.values(counts).filter(c => c > 1).length;
+                  return dupCount > 0 ? (
+                    <span style={{ color: '#f59e0b', marginLeft: 8 }}>⚠ {dupCount} duplicate invoice number{dupCount > 1 ? 's' : ''} found</span>
+                  ) : null;
+                })()}
+              </span>
+            )}
           </div>
           
           {loading ? (
@@ -246,37 +256,49 @@ export default function BillHistory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bills.map((bill) => (
-                    <tr key={bill.id} style={{ opacity: bill.status === 'void' ? 0.6 : 1 }}>
-                      <td style={{ fontWeight: 600 }}>{bill.invoiceNumber}</td>
-                      <td>
-                        <div style={{ fontSize: '0.875rem' }}>{new Date(bill.createdAt).toLocaleDateString('en-IN')}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          {new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </td>
-                      <td>
-                        {bill.tableNumber ? `Table ${bill.tableNumber}` : <span style={{ textTransform: 'capitalize' }}>{bill.orderType}</span>}
-                      </td>
-                      <td>{bill.staffName}</td>
-                      <td style={{ fontWeight: 700 }}>{formatAmount(bill.totalAmount)}</td>
-                      <td>
-                        {bill.status === 'void' ? (
-                          <span className="badge badge-error">Voided</span>
-                        ) : (
-                          <span className="badge badge-success">Paid</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => setSelectedBill(bill)}
-                        >
-                          <Eye size={16} /> View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    // Pre-compute which invoice numbers appear more than once
+                    const invoiceCounts: Record<string, number> = {};
+                    bills.forEach(b => { invoiceCounts[b.invoiceNumber] = (invoiceCounts[b.invoiceNumber] || 0) + 1; });
+                    return bills.map((bill) => (
+                      <tr key={bill.id} style={{ opacity: bill.status === 'void' ? 0.6 : 1 }}>
+                        <td style={{ fontWeight: 600 }}>
+                          {bill.invoiceNumber}
+                          {invoiceCounts[bill.invoiceNumber] > 1 && (
+                            <span title="This invoice number appears more than once due to a prior sync bug. Check items and void the incorrect one."
+                              style={{ marginLeft: 6, fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontWeight: 700, cursor: 'help' }}
+                            >⚠ DUP</span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ fontSize: '0.875rem' }}>{new Date(bill.createdAt).toLocaleDateString('en-IN')}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            {new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+                        <td>
+                          {bill.tableNumber ? `Table ${bill.tableNumber}` : <span style={{ textTransform: 'capitalize' }}>{bill.orderType}</span>}
+                        </td>
+                        <td>{bill.staffName}</td>
+                        <td style={{ fontWeight: 700 }}>{formatAmount(bill.totalAmount)}</td>
+                        <td>
+                          {bill.status === 'void' ? (
+                            <span className="badge badge-error">Voided</span>
+                          ) : (
+                            <span className="badge badge-success">Paid</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setSelectedBill(bill)}
+                          >
+                            <Eye size={16} /> View
+                          </button>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>

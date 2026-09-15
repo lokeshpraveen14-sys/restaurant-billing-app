@@ -146,16 +146,9 @@ export const useBillStore = create<BillState>()(
       outletGSTIN: b.outlet_gstin || '',
     }));
 
-    // Deduplicate by invoiceNumber — keep the earliest-created row per invoice.
-    // This handles existing duplicate rows in DB from the previous bug.
-    const byInvoice = new Map<string, typeof mapped[0]>();
-    for (const b of mapped) {
-      const existing = byInvoice.get(b.invoiceNumber);
-      if (!existing || b.createdAt < existing.createdAt) {
-        byInvoice.set(b.invoiceNumber, b);
-      }
-    }
-    return Array.from(byInvoice.values());
+    // Return all rows as-is — each row has a unique UUID (b.id) representing a unique DB record.
+    // Duplicate invoice numbers from the old bug will be flagged visually in BillHistory.
+    return mapped;
   },
 
   initBillSync: async () => {
