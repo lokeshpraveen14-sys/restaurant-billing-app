@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from './store/authStore';
+import { useAuthStore, hasPermission } from './store/authStore';
 import { useUIStore } from './store/uiStore';
 import { useTableStore } from './store/tableStore';
 import { useMenuStore } from './store/menuStore';
@@ -64,6 +64,21 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RequirePermission({ module, children }: { module: string, children: React.ReactNode }) {
+  const currentUser = useAuthStore((s) => s.currentUser);
+  if (!currentUser) return <Navigate to="/login" replace />;
+  
+  if (!hasPermission(currentUser.role, module)) {
+    // Redirect unauthorized users to their most appropriate default page
+    if (currentUser.role === 'manager' || currentUser.role === 'waiter') return <Navigate to="/tables" replace />;
+    if (currentUser.role === 'cashier') return <Navigate to="/billing" replace />;
+    if (currentUser.role === 'kitchen') return <Navigate to="/kitchen" replace />;
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const theme = useUIStore((s) => s.theme);
@@ -116,24 +131,24 @@ export default function App() {
             <RequireAuth>
               <ProtectedLayout>
                 <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/tables" element={<TableManagement />} />
-                  <Route path="/order" element={<OrderTaking />} />
-                  <Route path="/kitchen" element={<KitchenDisplay />} />
-                  <Route path="/billing" element={<Billing />} />
-                  <Route path="/menu" element={<MenuManagement />} />
-                  <Route path="/bakery" element={<BakeryCounter />} />
-                  <Route path="/juice" element={<JuiceCounter />} />
-                  <Route path="/inventory" element={<Inventory />} />
-                  <Route path="/reports" element={<Reports />} />
-                  <Route path="/gst-filing" element={<GstFiling />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/shift" element={<ShiftManagement />} />
-                  <Route path="/bills" element={<BillHistory />} />
-                  <Route path="/staff" element={<StaffManagement />} />
-                  <Route path="/accounting" element={<Accounting />} />
-                  <Route path="/headcount" element={<HeadCount />} />
+                  <Route path="/" element={<RequirePermission module="admin"><Dashboard /></RequirePermission>} />
+                  <Route path="/tables" element={<RequirePermission module="tables"><TableManagement /></RequirePermission>} />
+                  <Route path="/order" element={<RequirePermission module="orders"><OrderTaking /></RequirePermission>} />
+                  <Route path="/kitchen" element={<RequirePermission module="kitchen"><KitchenDisplay /></RequirePermission>} />
+                  <Route path="/billing" element={<RequirePermission module="billing"><Billing /></RequirePermission>} />
+                  <Route path="/menu" element={<RequirePermission module="menu"><MenuManagement /></RequirePermission>} />
+                  <Route path="/bakery" element={<RequirePermission module="billing"><BakeryCounter /></RequirePermission>} />
+                  <Route path="/juice" element={<RequirePermission module="billing"><JuiceCounter /></RequirePermission>} />
+                  <Route path="/inventory" element={<RequirePermission module="inventory"><Inventory /></RequirePermission>} />
+                  <Route path="/reports" element={<RequirePermission module="reports"><Reports /></RequirePermission>} />
+                  <Route path="/gst-filing" element={<RequirePermission module="reports"><GstFiling /></RequirePermission>} />
+                  <Route path="/settings" element={<RequirePermission module="admin"><Settings /></RequirePermission>} />
+                  <Route path="/analytics" element={<RequirePermission module="reports"><Analytics /></RequirePermission>} />
+                  <Route path="/shift" element={<RequirePermission module="admin"><ShiftManagement /></RequirePermission>} />
+                  <Route path="/bills" element={<RequirePermission module="reports"><BillHistory /></RequirePermission>} />
+                  <Route path="/staff" element={<RequirePermission module="admin"><StaffManagement /></RequirePermission>} />
+                  <Route path="/accounting" element={<RequirePermission module="admin"><Accounting /></RequirePermission>} />
+                  <Route path="/headcount" element={<RequirePermission module="admin"><HeadCount /></RequirePermission>} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </ProtectedLayout>

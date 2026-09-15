@@ -21,13 +21,13 @@ const NAV_GROUPS = [
   {
     label: 'Operations',
     items: [
-      { label: 'Dashboard', path: '/', icon: <SquaresFour size={20} />, module: 'all' },
+      { label: 'Dashboard', path: '/', icon: <SquaresFour size={20} />, module: 'admin' },
       { label: 'Tables', path: '/tables', icon: <Table size={20} />, module: 'tables' },
       { label: 'New Order', path: '/order', icon: <ClipboardText size={20} />, module: 'orders' },
       { label: 'Kitchen Display', path: '/kitchen', icon: <CookingPot size={20} />, module: 'kitchen' },
       { label: 'Billing', path: '/billing', icon: <Receipt size={20} />, module: 'billing' },
       { label: 'Bill History', path: '/bills', icon: <Receipt size={20} />, module: 'reports' },
-      { label: 'Head Count', path: '/headcount', icon: <Users size={20} />, module: 'all' },
+      { label: 'Head Count', path: '/headcount', icon: <Users size={20} />, module: 'admin' },
     ] as NavItem[],
   },
   {
@@ -45,7 +45,7 @@ const NAV_GROUPS = [
       { label: 'Reports', path: '/reports', icon: <ChartBar size={20} />, module: 'reports' },
       { label: 'GST Filing', path: '/gst-filing', icon: <FileText size={20} />, module: 'reports' },
       { label: 'Analytics', path: '/analytics', icon: <ChartLine size={20} />, module: 'reports' },
-      { label: 'Shift', path: '/shift', icon: <Timer size={20} />, module: 'all' },
+      { label: 'Shift', path: '/shift', icon: <Timer size={20} />, module: 'admin' },
     ] as NavItem[],
   },
   {
@@ -53,7 +53,7 @@ const NAV_GROUPS = [
     items: [
       { label: 'Staff', path: '/staff', icon: <Users size={20} />, module: 'admin' },
       { label: 'Accounting', path: '/accounting', icon: <Bank size={20} />, module: 'admin' },
-      { label: 'Settings', path: '/settings', icon: <Gear size={20} />, module: 'all' },
+      { label: 'Settings', path: '/settings', icon: <Gear size={20} />, module: 'admin' },
     ] as NavItem[],
   },
 ];

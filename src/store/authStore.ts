@@ -167,8 +167,8 @@ export const useAuthStore = create<AuthState>()(
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: ['all'],
-  manager: ['tables', 'orders', 'billing', 'inventory', 'reports', 'menu', 'customers', 'kitchen'],
-  cashier: ['billing', 'orders', 'customers', 'reports'],
+  manager: ['tables', 'orders', 'billing', 'inventory', 'menu', 'customers', 'kitchen'],
+  cashier: ['billing', 'orders', 'customers'],
   waiter: ['tables', 'orders', 'menu'],
   kitchen: ['kitchen'],
 };
