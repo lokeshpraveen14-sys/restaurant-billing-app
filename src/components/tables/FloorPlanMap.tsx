@@ -86,7 +86,16 @@ export default function FloorPlanMap({ tables, isEditMode, onTableClick, onEditT
         border: isEditMode ? '2px dashed var(--brand-color)' : 'none'
       }}
     >
-      {visibleTables.map((table) => {
+      {visibleTables.map((table, index) => {
+        let displayX = table.posX || 0;
+        let displayY = table.posY || 0;
+        
+        // Auto-arrange tables that haven't been positioned yet (0,0)
+        if (displayX === 0 && displayY === 0) {
+          displayX = 20 + (index % 6) * 100;
+          displayY = 20 + Math.floor(index / 6) * 100;
+        }
+
         const isOccupied = table.status === 'occupied';
         const isBilling = table.status === 'billing';
         const isReserved = table.status === 'reserved';
@@ -119,14 +128,20 @@ export default function FloorPlanMap({ tables, isEditMode, onTableClick, onEditT
         return (
           <div
             key={table.id}
-            onPointerDown={(e) => handlePointerDown(e, table)}
+            onPointerDown={(e) => {
+              if (!isEditMode) return;
+              setHasDragged(false);
+              setDraggingTable(table.id);
+              setDragOffset({ x: e.clientX - displayX, y: e.clientY - displayY });
+              (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            }}
             onPointerMove={handlePointerMove}
             onPointerUp={(e) => handlePointerUp(e, table)}
             onClick={(e) => handleClick(e, table)}
             style={{
               position: 'absolute',
-              left: table.posX,
-              top: table.posY,
+              left: displayX,
+              top: displayY,
               width: table.width || 60,
               height: table.height || 60,
               backgroundColor: bg,
