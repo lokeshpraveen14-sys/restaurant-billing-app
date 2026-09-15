@@ -48,17 +48,8 @@ export default function OrderTaking() {
   // Then sync with DB once loaded
   useEffect(() => {
     if (!currentUser) return;
-    
-    // If navigating from Revise Bill or Sub-table modal, we pass the specific orderId
-    if (orderIdParam) {
-      const existingRevise = orders.find(o => o.id === orderIdParam);
-      if (existingRevise) {
-        setActiveOrder(existingRevise);
-        return;
-      }
-    }
 
-    // If new=true is passed, force a fresh order creation
+    // If new=true is passed, force a fresh order — do this first before anything else
     if (isNewBill && tableId && ordersLoaded) {
       const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount, initialSeats);
       setActiveOrder(newOrder);
@@ -68,7 +59,21 @@ export default function OrderTaking() {
       return;
     }
 
-    const existing = tableId ? getOrdersByTable(tableId)[0] : null; // pick the first open order if not specifying orderId
+    // If a specific orderId was requested (e.g. from the sub-table modal), load ONLY that order.
+    // If it's not in cache yet, wait until ordersLoaded before giving up.
+    if (orderIdParam) {
+      const targetOrder = orders.find(o => o.id === orderIdParam);
+      if (targetOrder) {
+        setActiveOrder(targetOrder);
+        return;
+      }
+      // Not found in cache yet — if DB is loaded and still not found, it may be a stale URL.
+      // Don't fall through and accidentally open the wrong order.
+      return;
+    }
+
+    // No specific order requested — find or create one for this table.
+    const existing = tableId ? getOrdersByTable(tableId)[0] : null;
     if (existing) {
       // Found in cache immediately — no waiting
       setActiveOrder(existing);
