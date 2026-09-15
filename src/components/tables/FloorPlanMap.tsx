@@ -87,11 +87,12 @@ export default function FloorPlanMap({ tables, isEditMode, onTableClick, onEditT
       }}
     >
       {visibleTables.map((table, index) => {
-        let displayX = table.posX || 0;
-        let displayY = table.posY || 0;
+        let displayX = table.posX ?? 0;
+        let displayY = table.posY ?? 0;
         
-        // Auto-arrange tables that haven't been positioned yet (0,0)
-        if (displayX === 0 && displayY === 0) {
+        // Auto-arrange tables that haven't been positioned yet or have legacy grid indices (e.g. 0, 1, 2, 3)
+        // Since no physical layout would have a table 3 pixels away from the origin, this is a safe heuristic.
+        if (displayX < 15 && displayY < 15) {
           displayX = 20 + (index % 6) * 100;
           displayY = 20 + Math.floor(index / 6) * 100;
         }

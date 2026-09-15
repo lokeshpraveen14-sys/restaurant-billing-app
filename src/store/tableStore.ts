@@ -6,23 +6,23 @@ import { supabase } from '../lib/supabase';
 const INITIAL_TABLES: Table[] = [
   // Main Hall
   { id: 't1', number: 'T1', capacity: 2, status: 'free', section: 'Main Hall', posX: 0, posY: 0 },
-  { id: 't2', number: 'T2', capacity: 2, status: 'free', section: 'Main Hall', posX: 1, posY: 0 },
-  { id: 't3', number: 'T3', capacity: 4, status: 'free', section: 'Main Hall', posX: 2, posY: 0 },
-  { id: 't4', number: 'T4', capacity: 4, status: 'free', section: 'Main Hall', posX: 3, posY: 0 },
-  { id: 't5', number: 'T5', capacity: 6, status: 'free', section: 'Main Hall', posX: 0, posY: 1 },
-  { id: 't6', number: 'T6', capacity: 4, status: 'free', section: 'Main Hall', posX: 1, posY: 1 },
-  { id: 't7', number: 'T7', capacity: 2, status: 'free', section: 'Main Hall', posX: 2, posY: 1 },
-  { id: 't8', number: 'T8', capacity: 4, status: 'free', section: 'Main Hall', posX: 3, posY: 1 },
+  { id: 't2', number: 'T2', capacity: 2, status: 'free', section: 'Main Hall', posX: 100, posY: 0 },
+  { id: 't3', number: 'T3', capacity: 4, status: 'free', section: 'Main Hall', posX: 200, posY: 0 },
+  { id: 't4', number: 'T4', capacity: 4, status: 'free', section: 'Main Hall', posX: 300, posY: 0 },
+  { id: 't5', number: 'T5', capacity: 6, status: 'free', section: 'Main Hall', posX: 0, posY: 100 },
+  { id: 't6', number: 'T6', capacity: 4, status: 'free', section: 'Main Hall', posX: 100, posY: 100 },
+  { id: 't7', number: 'T7', capacity: 2, status: 'free', section: 'Main Hall', posX: 200, posY: 100 },
+  { id: 't8', number: 'T8', capacity: 4, status: 'free', section: 'Main Hall', posX: 300, posY: 100 },
   // Garden
-  { id: 't9', number: 'G1', capacity: 4, status: 'free', section: 'Garden', posX: 0, posY: 2 },
-  { id: 't10', number: 'G2', capacity: 4, status: 'free', section: 'Garden', posX: 1, posY: 2 },
-  { id: 't11', number: 'G3', capacity: 6, status: 'free', section: 'Garden', posX: 2, posY: 2 },
-  { id: 't12', number: 'G4', capacity: 8, status: 'free', section: 'Garden', posX: 3, posY: 2 },
+  { id: 't9', number: 'G1', capacity: 4, status: 'free', section: 'Garden', posX: 0, posY: 200 },
+  { id: 't10', number: 'G2', capacity: 4, status: 'free', section: 'Garden', posX: 100, posY: 200 },
+  { id: 't11', number: 'G3', capacity: 6, status: 'free', section: 'Garden', posX: 200, posY: 200 },
+  { id: 't12', number: 'G4', capacity: 8, status: 'free', section: 'Garden', posX: 300, posY: 200 },
   // AC Dining
-  { id: 't13', number: 'A1', capacity: 2, status: 'free', section: 'AC Dining', posX: 0, posY: 3 },
-  { id: 't14', number: 'A2', capacity: 4, status: 'free', section: 'AC Dining', posX: 1, posY: 3 },
-  { id: 't15', number: 'A3', capacity: 4, status: 'free', section: 'AC Dining', posX: 2, posY: 3 },
-  { id: 't16', number: 'A4', capacity: 6, status: 'free', section: 'AC Dining', posX: 3, posY: 3 },
+  { id: 't13', number: 'A1', capacity: 2, status: 'free', section: 'AC Dining', posX: 0, posY: 300 },
+  { id: 't14', number: 'A2', capacity: 4, status: 'free', section: 'AC Dining', posX: 100, posY: 300 },
+  { id: 't15', number: 'A3', capacity: 4, status: 'free', section: 'AC Dining', posX: 200, posY: 300 },
+  { id: 't16', number: 'A4', capacity: 6, status: 'free', section: 'AC Dining', posX: 300, posY: 300 },
 ];
 
 interface TableState {
