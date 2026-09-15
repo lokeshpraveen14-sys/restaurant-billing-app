@@ -44,6 +44,7 @@ export default function TableManagement() {
 
   const [geometryModalTable, setGeometryModalTable] = useState<TableType | null>(null);
   const [mergeSelectedChild, setMergeSelectedChild] = useState('');
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
 
   const handleAddTable = () => {
     if (!newTable.number) {
@@ -80,9 +81,24 @@ export default function TableManagement() {
     const table = tables.find(t => t.id === tableId);
     if (!table) return;
 
+    // Always check for active orders first, to prevent getting locked out of active bills on 'free' tables
+    const activeOrders = getOrdersByTable(tableId);
+    if (activeOrders.length > 0) {
+      if (activeOrders.length === 1 && status !== 'free') {
+        // Only 1 order -> Go straight to it (unless the table is marked free, then show modal to allow cleanup)
+        navigate(`/order?table=${tableId}&orderId=${activeOrders[0].id}`);
+      } else {
+        // Multiple orders or stuck orders -> Show sub-table modal
+        setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
+        setActionMode('select_order');
+      }
+      return;
+    }
+
     if (status === 'free') {
       setActionModal({ type: 'free', tableId, tableNumber: table.number });
       setActionMode('seat');
+      setSelectedSeats([]);
       setGuestsCount('');
       setReservationDetails('');
       setEditTableData({
@@ -90,19 +106,10 @@ export default function TableManagement() {
         capacity: table.capacity.toString(),
         section: table.section,
       });
-    } else if (status === 'occupied' || status === 'billing') {
-      const activeOrders = getOrdersByTable(tableId);
-      if (activeOrders.length === 1) {
-        // Only 1 order -> Go straight to it
-        navigate(`/order?table=${tableId}&orderId=${activeOrders[0].id}`);
-      } else {
-        // Multiple orders (or 0 for some reason) -> Show sub-table modal
-        setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
-        setActionMode('select_order');
-      }
     } else if (status === 'reserved') {
       setActionModal({ type: 'reserved', tableId, tableNumber: table.number });
       setActionMode('seat');
+      setSelectedSeats([]);
       setGuestsCount('');
     } else if (status === 'cleaning') {
       updateTableStatus(tableId, 'free');
@@ -138,14 +145,18 @@ export default function TableManagement() {
       setActionModal(null);
     } else {
       // Seat guests
-      const covers = parseInt(guestsCount);
+      const covers = selectedSeats.length > 0 ? selectedSeats.length : parseInt(guestsCount);
       if (isNaN(covers) || covers <= 0) {
-        toast.error('Invalid guests', 'Please enter a valid guest count');
+        toast.error('Invalid guests', 'Please select seats or enter a valid guest count');
         return;
       }
       // Update table to occupied immediately
       updateTableStatus(actionModal.tableId, 'occupied');
-      navigate(`/order?table=${actionModal.tableId}&guests=${covers}`);
+      let url = `/order?table=${actionModal.tableId}&guests=${covers}`;
+      if (selectedSeats.length > 0) {
+        url += `&seats=${selectedSeats.join(',')}`;
+      }
+      navigate(url);
     }
   };
 
@@ -399,7 +410,9 @@ export default function TableManagement() {
                       >
                         <div>
                           <div style={{ fontWeight: 600 }}>Order #{(order.localId || order.id).slice(0,6).toUpperCase()}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{order.guestCount ? `${order.guestCount} guests` : 'Active'} • {order.items.length} items</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            {order.seats && order.seats.length > 0 ? `Seats: ${order.seats.join(', ')}` : (order.guestCount ? `${order.guestCount} guests` : 'Active')} • {order.items.length} items
+                          </div>
                         </div>
                         <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
                           ₹{order.items.reduce((s,i) => s + (i.status !== 'void' ? i.totalPrice : 0), 0).toFixed(2)}
@@ -413,7 +426,8 @@ export default function TableManagement() {
                   <button 
                     className="btn btn-primary" 
                     onClick={() => {
-                      navigate(`/order?table=${actionModal.tableId}&new=true`);
+                      setActionMode('seat');
+                      setSelectedSeats([]);
                     }}
                   >
                     <Plus size={16} /> Seat New Guest (New Bill)
@@ -436,20 +450,74 @@ export default function TableManagement() {
                     <button className={`tab-item ${actionMode === 'merge' ? 'active' : ''}`} onClick={() => setActionMode('merge')}>Merge</button>
                   </div>
 
-                  {actionMode === 'seat' && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Number of Guests</label>
-                      <input 
-                        type="number" 
-                        className="input" 
-                        min="1" 
-                        value={guestsCount} 
-                        onChange={(e) => setGuestsCount(e.target.value)}
-                        placeholder="e.g. 2"
-                        autoFocus
-                      />
-                    </div>
-                  )}
+                  {actionMode === 'seat' && (() => {
+                    const table = tables.find(t => t.id === actionModal.tableId);
+                    const capacity = table ? table.capacity : 4;
+                    const activeOrders = getOrdersByTable(actionModal.tableId);
+                    
+                    // Find all seats currently taken by active orders
+                    const takenSeats = new Set<number>();
+                    activeOrders.forEach(o => {
+                      if (o.seats) {
+                        o.seats.forEach(s => takenSeats.add(s));
+                      }
+                    });
+
+                    return (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 8 }}>Select Seats (or enter guest count)</label>
+                        
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                          {Array.from({ length: capacity }).map((_, i) => {
+                            const seatNum = i + 1;
+                            const isTaken = takenSeats.has(seatNum);
+                            const isSelected = selectedSeats.includes(seatNum);
+                            return (
+                              <button
+                                key={seatNum}
+                                type="button"
+                                disabled={isTaken}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedSeats(selectedSeats.filter(s => s !== seatNum));
+                                  } else {
+                                    setSelectedSeats([...selectedSeats, seatNum]);
+                                  }
+                                  // Clear manual guest count if using seats
+                                  setGuestsCount('');
+                                }}
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: '50%',
+                                  border: isSelected ? 'none' : '1px solid var(--border)',
+                                  background: isTaken ? 'var(--bg-secondary)' : isSelected ? 'var(--brand-color)' : 'var(--surface)',
+                                  color: isTaken ? 'var(--text-muted)' : isSelected ? '#fff' : 'var(--text-primary)',
+                                  fontWeight: 600,
+                                  cursor: isTaken ? 'not-allowed' : 'pointer',
+                                  opacity: isTaken ? 0.5 : 1,
+                                  boxShadow: isSelected ? '0 4px 12px rgba(0,0,0,0.15)' : 'none'
+                                }}
+                              >
+                                {seatNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {selectedSeats.length === 0 && (
+                          <input 
+                            type="number" 
+                            className="input" 
+                            min="1" 
+                            value={guestsCount} 
+                            onChange={(e) => setGuestsCount(e.target.value)}
+                            placeholder="Or enter total guests..."
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {actionMode === 'reserve' && (
                     <div>

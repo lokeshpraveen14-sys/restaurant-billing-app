@@ -9,7 +9,7 @@ interface OrderState {
   activeOrder: Order | null;
   ordersLoaded: boolean;
 
-  createOrder: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount?: number) => Order;
+  createOrder: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount?: number, seats?: number[]) => Order;
   recreateOrderWithItems: (tableId: string | undefined, tableNumber: string | undefined, orderType: OrderType, staffId: string, staffName: string, guestCount: number | undefined, items: Omit<OrderItem, 'id' | 'status'>[]) => Order;
   setActiveOrder: (order: Order | null) => void;
   addItemToOrder: (orderId: string, item: Omit<OrderItem, 'id' | 'status'>) => void;
@@ -40,6 +40,7 @@ function mapDbOrder(o: any): Order {
     items: (o.items || []) as OrderItem[],
     syncStatus: 'synced' as const,
     guestCount: o.guest_count || undefined,
+    seats: o.seats || undefined,
     createdAt: new Date(o.created_at),
     updatedAt: new Date(o.updated_at),
     kotPrintedAt: o.kot_printed_at ? new Date(o.kot_printed_at) : undefined,
@@ -59,6 +60,8 @@ const syncOrderToDB = async (order: Order) => {
     status: order.status,
     staff_id: order.staffId,
     staff_name: order.staffName,
+    guest_count: order.guestCount || null,
+    seats: order.seats || null,
     items: order.items,
     created_at: new Date(order.createdAt).toISOString(),
     updated_at: new Date().toISOString(),
@@ -83,7 +86,7 @@ export const useOrderStore = create<OrderState>()(
       activeOrder: null,
       ordersLoaded: false,
 
-      createOrder: (tableId, tableNumber, orderType, staffId, staffName, guestCount) => {
+      createOrder: (tableId, tableNumber, orderType, staffId, staffName, guestCount, seats) => {
         const newOrder: Order = {
           id: crypto.randomUUID(),
           localId: crypto.randomUUID(),
@@ -96,6 +99,7 @@ export const useOrderStore = create<OrderState>()(
           staffId,
           staffName,
           guestCount,
+          seats,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

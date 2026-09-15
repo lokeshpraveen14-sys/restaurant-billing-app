@@ -122,6 +122,7 @@ export interface Order {
   notes?: string;
   kotNumber?: number;
   guestCount?: number;
+  seats?: number[];
 }
 
 export interface GSTBreakdown {

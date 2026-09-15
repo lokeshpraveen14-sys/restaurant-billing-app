@@ -23,6 +23,8 @@ export default function OrderTaking() {
   const orderIdParam = searchParams.get('orderId') || undefined;
   const guestsParam = searchParams.get('guests');
   const initialGuestCount = guestsParam ? parseInt(guestsParam) : undefined;
+  const seatsParam = searchParams.get('seats');
+  const initialSeats = seatsParam ? seatsParam.split(',').map(s => parseInt(s)).filter(s => !isNaN(s)) : undefined;
 
   const { categories, items, searchQuery, selectedCategoryId, setSearch, setCategory, getFilteredItems } = useMenuStore();
   const { orders, createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrdersByTable, activeOrder, setActiveOrder, ordersLoaded } = useOrderStore();
@@ -58,7 +60,7 @@ export default function OrderTaking() {
 
     // If new=true is passed, force a fresh order creation
     if (isNewBill && tableId && ordersLoaded) {
-      const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount);
+      const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount, initialSeats);
       setActiveOrder(newOrder);
       // Remove 'new' from URL to prevent recreating on reload
       searchParams.delete('new');
@@ -72,7 +74,7 @@ export default function OrderTaking() {
       setActiveOrder(existing);
     } else if (ordersLoaded && tableId) {
       // DB loaded and no order found — create a new one
-      const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount);
+      const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount, initialSeats);
       setActiveOrder(newOrder);
     }
     // If not loaded yet, the next render after ordersLoaded=true will re-run this
@@ -86,7 +88,7 @@ export default function OrderTaking() {
         toast.error('No table selected', 'Please select a table first');
         return;
       }
-      const newOrder = createOrder(tableId, table?.number, orderType, currentUser?.id || '', currentUser?.name || '', initialGuestCount);
+      const newOrder = createOrder(tableId, table?.number, orderType, currentUser?.id || '', currentUser?.name || '', initialGuestCount, initialSeats);
       setActiveOrder(newOrder);
     }
 
