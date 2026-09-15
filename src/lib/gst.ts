@@ -180,8 +180,9 @@ export function formatINR(amount: number): string {
 }
 
 /** Format compact amount e.g. 1250.50 -> ₹1,250.50 */
-export function formatAmount(amount: number): string {
-  return '₹' + amount.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+export function formatAmount(amount: number | undefined | null): string {
+  const safeAmount = (amount === undefined || amount === null || isNaN(amount)) ? 0 : amount;
+  return '₹' + safeAmount.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
 }
 
 /** 

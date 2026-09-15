@@ -218,7 +218,7 @@ export default function OrderTaking() {
   };
 
   const cartItems = activeOrder?.items.filter((i) => i.status !== 'void') || [];
-  const subtotal = cartItems.reduce((sum, i) => sum + i.totalPrice, 0);
+  const subtotal = cartItems.reduce((sum, i) => sum + (i.totalPrice || 0), 0);
 
   // Show loading state while fetching orders from DB after a page refresh
   if (!ordersLoaded) {

@@ -421,7 +421,7 @@ export default function TableManagement() {
                             </div>
                           </div>
                           <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                            ₹{order.items.reduce((s,i) => s + (i.status !== 'void' ? i.totalPrice : 0), 0).toFixed(2)}
+                            ₹{order.items.reduce((s,i) => s + (i.status !== 'void' ? (i.totalPrice || 0) : 0), 0).toFixed(2)}
                           </div>
                         </button>
                         {/* Release button — only for empty orders (0 items) */}
