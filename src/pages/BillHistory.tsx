@@ -172,46 +172,57 @@ export default function BillHistory() {
 
   return (
     <>
-      <TopBar
-        title="Bill History"
-        actions={
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="tabs" style={{ padding: 3 }}>
-              {(['today', 'week', 'month', 'custom'] as const).map((r) => (
-                <button
-                  key={r}
-                  className={`tab-item ${dateRange === r ? 'active' : ''}`}
-                  onClick={() => setDateRange(r)}
-                  style={{ padding: '6px 12px', fontSize: '0.8125rem', textTransform: 'capitalize' }}
-                >
-                  {r === 'today' ? 'Today' : r === 'custom' ? 'Custom' : `This ${r}`}
-                </button>
-              ))}
-            </div>
-            {dateRange === 'custom' && (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                  type="date"
-                  className="input"
-                  style={{ width: 140, padding: '4px 8px', fontSize: '0.8125rem' }}
-                  value={customStart}
-                  onChange={e => setCustomStart(e.target.value)}
-                />
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>to</span>
-                <input
-                  type="date"
-                  className="input"
-                  style={{ width: 140, padding: '4px 8px', fontSize: '0.8125rem' }}
-                  value={customEnd}
-                  onChange={e => setCustomEnd(e.target.value)}
-                />
-                <button className="btn btn-primary btn-sm" onClick={loadBills}>Search</button>
-              </div>
-            )}
-          </div>
-        }
-      />
+      <TopBar title="Bill History" />
       <div className="page-body">
+
+        {/* Filter Bar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '12px 16px',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          marginBottom: 16,
+        }}>
+          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            Date Range:
+          </span>
+          <div className="tabs" style={{ padding: 3 }}>
+            {(['today', 'week', 'month', 'custom'] as const).map((r) => (
+              <button
+                key={r}
+                className={`tab-item ${dateRange === r ? 'active' : ''}`}
+                onClick={() => setDateRange(r)}
+                style={{ padding: '6px 14px', fontSize: '0.8125rem', textTransform: 'capitalize' }}
+              >
+                {r === 'today' ? 'Today' : r === 'custom' ? '📅 Custom' : `This ${r.charAt(0).toUpperCase() + r.slice(1)}`}
+              </button>
+            ))}
+          </div>
+          {dateRange === 'custom' && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="date"
+                className="input"
+                style={{ width: 150, padding: '6px 10px', fontSize: '0.875rem' }}
+                value={customStart}
+                onChange={e => setCustomStart(e.target.value)}
+              />
+              <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>→</span>
+              <input
+                type="date"
+                className="input"
+                style={{ width: 150, padding: '6px 10px', fontSize: '0.875rem' }}
+                value={customEnd}
+                onChange={e => setCustomEnd(e.target.value)}
+              />
+              <button className="btn btn-primary btn-sm" onClick={loadBills}>
+                Search
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="card">
           <div className="card-header">
             <div className="card-title">All Invoices</div>
@@ -219,12 +230,11 @@ export default function BillHistory() {
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 {bills.filter(b => b.status !== 'void').length} paid
                 {(() => {
-                  // Find invoice numbers that appear more than once
                   const counts: Record<string, number> = {};
                   bills.forEach(b => { counts[b.invoiceNumber] = (counts[b.invoiceNumber] || 0) + 1; });
                   const dupCount = Object.values(counts).filter(c => c > 1).length;
                   return dupCount > 0 ? (
-                    <span style={{ color: '#f59e0b', marginLeft: 8 }}>⚠ {dupCount} duplicate invoice number{dupCount > 1 ? 's' : ''} found</span>
+                    <span style={{ color: '#f59e0b', marginLeft: 8 }}>⚠ {dupCount} duplicate invoice number{dupCount > 1 ? 's' : ''}</span>
                   ) : null;
                 })()}
               </span>
