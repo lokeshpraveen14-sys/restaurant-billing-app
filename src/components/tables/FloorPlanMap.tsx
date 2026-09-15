@@ -97,10 +97,13 @@ export default function FloorPlanMap({ tables, isEditMode, onTableClick, onEditT
           displayY = 20 + Math.floor(index / 6) * 100;
         }
 
-        const isOccupied = table.status === 'occupied';
-        const isBilling = table.status === 'billing';
-        const isReserved = table.status === 'reserved';
-        const isCleaning = table.status === 'cleaning';
+        const activeOrdersCount = getOrdersByTable(table.id).length;
+        const effectiveStatus = (table.status === 'free' && activeOrdersCount > 0) ? 'occupied' : table.status;
+
+        const isOccupied = effectiveStatus === 'occupied';
+        const isBilling = effectiveStatus === 'billing';
+        const isReserved = effectiveStatus === 'reserved';
+        const isCleaning = effectiveStatus === 'cleaning';
         
         let bg = 'var(--surface)';
         let color = 'var(--text-primary)';
@@ -112,7 +115,6 @@ export default function FloorPlanMap({ tables, isEditMode, onTableClick, onEditT
         if (isCleaning) { bg = 'var(--status-cleaning)'; color = '#fff'; border = 'none'; }
         if (isEditMode) { border = draggingTable === table.id ? '2px solid var(--brand-color)' : border; }
 
-        const activeOrdersCount = getOrdersByTable(table.id).length;
         
         // Calculate dynamic name/capacity for merged tables
         let displayName = table.number;

@@ -69,12 +69,19 @@ export default function TableManagement() {
     ? tables
     : tables.filter((t) => t.section === activeSection);
 
+  const getEffectiveStatus = (table: TableType): TableStatus => {
+    if (table.status === 'free' && getOrdersByTable(table.id).length > 0) {
+      return 'occupied';
+    }
+    return table.status;
+  };
+
   const statusCounts = {
-    free: tables.filter((t) => t.status === 'free').length,
-    occupied: tables.filter((t) => t.status === 'occupied').length,
-    reserved: tables.filter((t) => t.status === 'reserved').length,
-    billing: tables.filter((t) => t.status === 'billing').length,
-    cleaning: tables.filter((t) => t.status === 'cleaning').length,
+    free: tables.filter((t) => getEffectiveStatus(t) === 'free').length,
+    occupied: tables.filter((t) => getEffectiveStatus(t) === 'occupied').length,
+    reserved: tables.filter((t) => getEffectiveStatus(t) === 'reserved').length,
+    billing: tables.filter((t) => getEffectiveStatus(t) === 'billing').length,
+    cleaning: tables.filter((t) => getEffectiveStatus(t) === 'cleaning').length,
   };
 
   const handleTableClick = (tableId: string, status: TableStatus) => {
@@ -282,12 +289,13 @@ export default function TableManagement() {
           <div className="grid grid-tables" style={{ gap: 'var(--space-4)' }}>
             {displayTables.filter(t => t.status !== 'merged').map((table) => {
               const activeOrders = getOrdersByTable(table.id);
+              const computedStatus = getEffectiveStatus(table);
             return (
               <div
                 key={table.id}
-                className={`table-card ${table.status}`}
+                className={`table-card ${computedStatus}`}
                 onClick={() => handleTableClick(table.id, table.status)}
-                title={`${table.number} — ${STATUS_LABELS[table.status]}${table.reservedFor ? ': ' + table.reservedFor : ''}`}
+                title={`${table.number} — ${STATUS_LABELS[computedStatus]}${table.reservedFor ? ': ' + table.reservedFor : ''}`}
               >
                 <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, alignItems: 'center' }}>
                   {activeOrders.length > 1 && (
@@ -297,8 +305,8 @@ export default function TableManagement() {
                   )}
                   <span style={{
                     display: 'block', width: 8, height: 8, borderRadius: '50%',
-                    background: `var(--status-${table.status})`,
-                    boxShadow: `0 0 6px var(--status-${table.status})`,
+                    background: `var(--status-${computedStatus})`,
+                    boxShadow: `0 0 6px var(--status-${computedStatus})`,
                   }} />
                 </div>
 
@@ -318,8 +326,8 @@ export default function TableManagement() {
                   </div>
                 )}
                 <div style={{ position: 'absolute', bottom: 6, left: 8, right: 8, textAlign: 'center' }}>
-                  <span className={`badge badge-${table.status}`} style={{ fontSize: '0.55rem', padding: '2px 6px' }}>
-                    {STATUS_LABELS[table.status]}
+                  <span className={`badge badge-${computedStatus}`} style={{ fontSize: '0.55rem', padding: '2px 6px' }}>
+                    {STATUS_LABELS[computedStatus]}
                   </span>
                 </div>
               </div>
