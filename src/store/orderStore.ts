@@ -60,7 +60,7 @@ const syncOrderToDB = async (order: Order) => {
     status: order.status,
     staff_id: order.staffId,
     staff_name: order.staffName,
-    guest_count: order.guestCount || null,
+    // guest_count: order.guestCount || null, // Removed temporarily: causes PGRST204 crash if column missing in Supabase
     seats: order.seats || null,
     items: order.items,
     created_at: new Date(order.createdAt).toISOString(),
