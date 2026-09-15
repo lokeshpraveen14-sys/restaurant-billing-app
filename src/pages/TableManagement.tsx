@@ -81,17 +81,12 @@ export default function TableManagement() {
     const table = tables.find(t => t.id === tableId);
     if (!table) return;
 
-    // Always check for active orders first, to prevent getting locked out of active bills on 'free' tables
+    // Always check for active orders first
     const activeOrders = getOrdersByTable(tableId);
     if (activeOrders.length > 0) {
-      if (activeOrders.length === 1 && status !== 'free') {
-        // Only 1 order -> Go straight to it (unless the table is marked free, then show modal to allow cleanup)
-        navigate(`/order?table=${tableId}&orderId=${activeOrders[0].id}`);
-      } else {
-        // Multiple orders or stuck orders -> Show sub-table modal
-        setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
-        setActionMode('select_order');
-      }
+      // Show sub-table modal so they can either select the existing order or seat a new guest (sub-table)
+      setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
+      setActionMode('select_order');
       return;
     }
 
