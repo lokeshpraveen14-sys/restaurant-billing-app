@@ -245,16 +245,22 @@ export const useOrderStore = create<OrderState>()(
       },
 
       updateOrderStatus: (orderId, status) => {
-        set((state) => ({
-          orders: state.orders.map((o) => (o.id === orderId ? { ...o, status } : o)),
-        }));
-        const order = get().orders.find((o) => o.id === orderId);
-        if (order) {
+        set((state) => {
+          // For terminal statuses, remove from active list immediately so UI clears instantly
           if (status === 'paid' || status === 'void') {
-            deleteOrderFromDB(orderId);
-          } else {
-            syncOrderToDB(order);
+            return {
+              orders: state.orders.filter(o => o.id !== orderId),
+              activeOrder: state.activeOrder?.id === orderId ? null : state.activeOrder,
+            };
           }
+          return { orders: state.orders.map((o) => (o.id === orderId ? { ...o, status } : o)) };
+        });
+        // Persist to DB — paid/void triggers delete, others trigger update
+        if (status === 'paid' || status === 'void') {
+          deleteOrderFromDB(orderId);
+        } else {
+          const order = get().orders.find((o) => o.id === orderId);
+          if (order) syncOrderToDB(order);
         }
       },
 
@@ -287,26 +293,29 @@ export const useOrderStore = create<OrderState>()(
 
         if (!error && data) {
           const dbOrders = data.map(mapDbOrder);
-          // Merge: DB is authoritative for status. Preserve local orders not yet in DB.
           set((state) => {
             const dbIds = new Set(dbOrders.map(o => o.id));
-            // Keep local-only orders that haven't made it to DB yet
+            // Keep local-only orders (offline-created, not yet in DB)
             const localOnly = state.orders.filter(
               o => !dbIds.has(o.id) && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
             );
-            
-            // Merge DB orders with local fields that aren't in DB
+
+            // Retry syncing any local-only orders to DB now that we're online
+            localOnly.forEach(o => syncOrderToDB(o));
+
+            // DB is authoritative for items/status — merge with local fields not stored in DB
             const mergedDbOrders = dbOrders.map(dbO => {
               const localO = state.orders.find(o => o.id === dbO.id);
               if (localO) {
                 return {
                   ...dbO,
                   guestCount: dbO.guestCount ?? localO.guestCount,
+                  seats: dbO.seats ?? localO.seats,
                 };
               }
               return dbO;
             });
-            
+
             return { orders: [...mergedDbOrders, ...localOnly], ordersLoaded: true };
           });
         } else {
@@ -371,11 +380,12 @@ export const useOrderStore = create<OrderState>()(
                   }
 
                   if (idx >= 0) {
-                    // Merge with existing local order to preserve guestCount
+                    // Merge: DB is authoritative for items. Preserve local fields not in DB.
                     const existingLocal = newOrders[idx];
                     newOrders[idx] = {
                       ...mappedOrder,
                       guestCount: mappedOrder.guestCount ?? existingLocal.guestCount,
+                      seats: mappedOrder.seats ?? existingLocal.seats,
                     };
                   } else {
                     newOrders.push(mappedOrder);
@@ -383,7 +393,7 @@ export const useOrderStore = create<OrderState>()(
 
                   return {
                     orders: newOrders,
-                    activeOrder: state.activeOrder?.id === mappedOrder.id ? newOrders[idx] : state.activeOrder,
+                    activeOrder: state.activeOrder?.id === mappedOrder.id ? newOrders.find(o => o.id === mappedOrder.id) ?? state.activeOrder : state.activeOrder,
                   };
                 });
               }

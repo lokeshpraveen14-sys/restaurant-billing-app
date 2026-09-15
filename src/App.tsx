@@ -96,6 +96,7 @@ export default function App() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         useOrderStore.getState().fetchActiveOrders();
+        useAuthStore.getState().fetchUsers();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
