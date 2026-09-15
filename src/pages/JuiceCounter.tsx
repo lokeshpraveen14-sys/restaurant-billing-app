@@ -81,6 +81,7 @@ export default function JuiceCounter() {
       }
     } else {
       const kotData: KotPrintData = {
+        orderId: billGenerated.invoiceNumber,
         orderType: 'counter',
         staffName: 'Juice Counter',
         items: billGenerated.items.map(i => ({
