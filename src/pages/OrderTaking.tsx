@@ -49,33 +49,34 @@ export default function OrderTaking() {
   useEffect(() => {
     if (!currentUser) return;
 
-    // If new=true is passed, force a fresh order — do this first before anything else
-    if (isNewBill && tableId && ordersLoaded) {
+    // If new=true is passed, force a fresh order.
+    if (isNewBill) {
+      // Wait until orders are loaded before creating — prevents double-creation race.
+      if (!ordersLoaded || !tableId) return;
       const newOrder = createOrder(tableId, table?.number, orderType, currentUser.id, currentUser.name, initialGuestCount, initialSeats);
       setActiveOrder(newOrder);
-      // Remove 'new' from URL to prevent recreating on reload
+      // Replace URL with the new order's ID so re-renders stay on this order.
+      // Removing 'new' and locking in orderId prevents falling through to the first order on the table.
       searchParams.delete('new');
+      searchParams.set('orderId', newOrder.id);
       navigate(`?${searchParams.toString()}`, { replace: true });
       return;
     }
 
     // If a specific orderId was requested (e.g. from the sub-table modal), load ONLY that order.
-    // If it's not in cache yet, wait until ordersLoaded before giving up.
     if (orderIdParam) {
       const targetOrder = orders.find(o => o.id === orderIdParam);
       if (targetOrder) {
         setActiveOrder(targetOrder);
         return;
       }
-      // Not found in cache yet — if DB is loaded and still not found, it may be a stale URL.
-      // Don't fall through and accidentally open the wrong order.
+      // Not found yet — wait for DB load (ordersLoaded re-run will try again).
       return;
     }
 
     // No specific order requested — find or create one for this table.
     const existing = tableId ? getOrdersByTable(tableId)[0] : null;
     if (existing) {
-      // Found in cache immediately — no waiting
       setActiveOrder(existing);
     } else if (ordersLoaded && tableId) {
       // DB loaded and no order found — create a new one
