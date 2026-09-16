@@ -216,7 +216,12 @@ export default function KitchenDisplay() {
     };
   }, [fetchKitchenOrders]);
 
-  const activeOrders = kdsOrders.filter(o => ['kot_sent', 'preparing'].includes(o.status));
+  const activeOrders = kdsOrders.filter(o => {
+    if (!['kot_sent', 'preparing'].includes(o.status)) return false;
+    // Auto-hide orders older than 2 hours
+    const ageInHours = (Date.now() - new Date(o.createdAt).getTime()) / (1000 * 60 * 60);
+    return ageInHours <= 2;
+  });
 
   return (
     <>
