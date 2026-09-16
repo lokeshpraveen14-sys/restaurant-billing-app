@@ -298,7 +298,7 @@ export default function BakeryCounter() {
                   className="btn btn-primary"
                   style={{ flex: 2 }}
                   onClick={async () => {
-                    if (!window.confirm('Generate and save bill for these items?')) return;
+
                     
                     const invoiceNumber = await getNextInvoiceNumber(
                       settings.invoicePrefix,

@@ -163,7 +163,7 @@ export default function JuiceCounter() {
   const { rounded } = gstRoundOff(subtotal + totalGST);
 
   const generateBill = async () => {
-    if (!window.confirm('Generate and save bill for these items?')) return;
+
 
     const invoiceNumber = await getNextInvoiceNumber(
       settings.invoicePrefix,

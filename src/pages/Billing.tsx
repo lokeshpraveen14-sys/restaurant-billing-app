@@ -88,7 +88,7 @@ export default function Billing() {
 
   const handleGenerateBill = async () => {
     if (!order) return;
-    if (!window.confirm('Are you sure you want to generate and save this bill? This action cannot be undone.')) return;
+
 
     // Determine inter-state — no customer GSTIN on billing page; always intra-state for walk-in
     const interState = determineIsInterState(settings.businessState || '', undefined);
