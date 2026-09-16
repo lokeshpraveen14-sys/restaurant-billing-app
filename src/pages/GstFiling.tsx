@@ -58,8 +58,10 @@ export default function GstFiling() {
 
     const stateMap = new Map<string, { taxable: number; igst: number; cgst: number; sgst: number }>();
 
+    const businessStateCode = settings.gstin ? settings.gstin.substring(0, 2) : '29';
+
     activeBills.forEach(b => {
-      let stCode = b.customerStateCode || settings.businessStateCode || '29';
+      let stCode = b.customerGstin ? b.customerGstin.substring(0, 2) : businessStateCode;
       if (!GST_STATE_CODES[stCode]) stCode = '29';
       if (!stateMap.has(stCode)) stateMap.set(stCode, { taxable: 0, igst: 0, cgst: 0, sgst: 0 });
       
@@ -67,7 +69,7 @@ export default function GstFiling() {
       b.items?.forEach(item => {
         if (item.status === 'void') return;
         const rate = item.gstRate || 0;
-        const isInterState = stCode !== settings.businessStateCode;
+        const isInterState = stCode !== businessStateCode;
         const taxableAmt = item.totalPrice / (1 + rate / 100);
         const taxAmt = item.totalPrice - taxableAmt;
 
@@ -374,7 +376,7 @@ export default function GstFiling() {
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button 
               className="btn btn-primary" 
-              onClick={handleExportDailyRegisterCSV}
+              onClick={handleDownloadDailyRegister}
               style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 220, height: 48 }}
             >
               <FileText size={20} />

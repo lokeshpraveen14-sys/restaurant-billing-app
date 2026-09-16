@@ -10,8 +10,52 @@ import TopBar from '../components/layout/TopBar';
 import { useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { useTableStore } from '../store/tableStore';
-import { FixedSizeList as List } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
+// @ts-ignore
+import { List } from 'react-window';
+import { AutoSizer } from 'react-virtualized-auto-sizer';
+
+const Row = ({ index, style, data }: any) => {
+  const bill = data.bills[index];
+  const counts = data.invoiceCounts;
+  return (
+    <div style={{ ...style, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: '1px solid var(--border)', opacity: bill.status === 'void' ? 0.6 : 1 }}>
+      <div style={{ flex: '1.5', fontWeight: 600 }}>
+        {bill.invoiceNumber}
+        {counts[bill.invoiceNumber] > 1 && (
+          <span title="This invoice number appears more than once due to a prior sync bug. Check items and void the incorrect one."
+            style={{ marginLeft: 6, fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontWeight: 700, cursor: 'help' }}
+          >⚠ DUP</span>
+        )}
+      </div>
+      <div style={{ flex: '2' }}>
+        <div style={{ fontSize: '0.875rem' }}>{new Date(bill.createdAt).toLocaleDateString('en-IN')}</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          {new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </div>
+      <div style={{ flex: '1.5', textTransform: 'capitalize' }}>
+        {bill.tableNumber ? `Table ${bill.tableNumber}` : bill.orderType}
+      </div>
+      <div style={{ flex: '1.5' }}>{bill.staffName}</div>
+      <div style={{ flex: '1', fontWeight: 700, textAlign: 'right', paddingRight: 16 }}>{formatAmount(bill.totalAmount)}</div>
+      <div style={{ flex: '1' }}>
+        {bill.status === 'void' ? (
+          <span className="badge badge-error">Voided</span>
+        ) : (
+          <span className="badge badge-success">Paid</span>
+        )}
+      </div>
+      <div style={{ flex: '1', textAlign: 'right' }}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => data.setSelectedBill(bill)}
+        >
+          <Eye size={16} /> View
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function BillHistory() {
   const fetchBillsByDateRange = useBillStore(s => s.fetchBillsByDateRange);
@@ -154,7 +198,7 @@ export default function BillHistory() {
     await voidBill(billId);
     toast.success('Bill Voided', 'The bill has been successfully voided.');
     setSelectedBill(null);
-    loadBills();
+    loadBillsManual();
   };
 
   const handleReviseBill = async (bill: Bill) => {
@@ -324,58 +368,18 @@ export default function BillHistory() {
               <div style={{ flex: '1', textAlign: 'right' }}>Actions</div>
             </div>
             <div style={{ height: 'calc(100vh - 350px)' }}>
+              {/* @ts-ignore */}
               <AutoSizer>
-                {({ height, width }) => (
+                {({ height, width }: { height: number, width: number }) => (
                   <List
                     height={height}
                     itemCount={bills.length}
                     itemSize={70}
                     width={width}
                     itemData={{ bills, invoiceCounts, setSelectedBill }}
-                  >
-                    {({ index, style, data }) => {
-                      const bill = data.bills[index];
-                      const counts = data.invoiceCounts;
-                      return (
-                        <div style={{ ...style, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: '1px solid var(--border)', opacity: bill.status === 'void' ? 0.6 : 1 }}>
-                          <div style={{ flex: '1.5', fontWeight: 600 }}>
-                            {bill.invoiceNumber}
-                            {counts[bill.invoiceNumber] > 1 && (
-                              <span title="This invoice number appears more than once due to a prior sync bug. Check items and void the incorrect one."
-                                style={{ marginLeft: 6, fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontWeight: 700, cursor: 'help' }}
-                              >⚠ DUP</span>
-                            )}
-                          </div>
-                          <div style={{ flex: '2' }}>
-                            <div style={{ fontSize: '0.875rem' }}>{new Date(bill.createdAt).toLocaleDateString('en-IN')}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              {new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </div>
-                          <div style={{ flex: '1.5', textTransform: 'capitalize' }}>
-                            {bill.tableNumber ? `Table ${bill.tableNumber}` : bill.orderType}
-                          </div>
-                          <div style={{ flex: '1.5' }}>{bill.staffName}</div>
-                          <div style={{ flex: '1', fontWeight: 700, textAlign: 'right', paddingRight: 16 }}>{formatAmount(bill.totalAmount)}</div>
-                          <div style={{ flex: '1' }}>
-                            {bill.status === 'void' ? (
-                              <span className="badge badge-error">Voided</span>
-                            ) : (
-                              <span className="badge badge-success">Paid</span>
-                            )}
-                          </div>
-                          <div style={{ flex: '1', textAlign: 'right' }}>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => data.setSelectedBill(bill)}
-                            >
-                              <Eye size={16} /> View
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </List>
+                    // @ts-ignore
+                    children={Row}
+                  />
                 )}
               </AutoSizer>
             </div>
