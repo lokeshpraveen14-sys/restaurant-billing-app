@@ -126,13 +126,14 @@ export default function OrderTaking() {
   const filteredItems = getFilteredItems();
 
   const handleAddItem = (menuItem: MenuItem) => {
-    if (!activeOrder) {
+    let currentOrder = activeOrder;
+    if (!currentOrder) {
       if (orderType === 'dine-in') {
         toast.error('No table selected', 'Please select a table first');
         return;
       }
-      const newOrder = createOrder(tableId, table?.number, orderType, currentUser?.id || '', currentUser?.name || '', initialGuestCount, initialSeats);
-      setActiveOrder(newOrder);
+      currentOrder = createOrder(tableId, table?.number, orderType, currentUser?.id || '', currentUser?.name || '', initialGuestCount, initialSeats);
+      setActiveOrder(currentOrder);
     }
 
     if (tableId && table?.status === 'free') {
@@ -144,10 +145,10 @@ export default function OrderTaking() {
       return;
     }
 
-    addVariantToCart(menuItem, menuItem.variants?.[0] || null);
+    addVariantToCart(menuItem, menuItem.variants?.[0] || null, currentOrder);
   };
 
-  const addVariantToCart = (menuItem: MenuItem, variant: any) => {
+  const addVariantToCart = (menuItem: MenuItem, variant: any, targetOrder = activeOrder) => {
     const price = variant ? variant.price : menuItem.basePrice;
 
     // Determine kotType based on category
@@ -156,13 +157,13 @@ export default function OrderTaking() {
       cat?.type === 'juice' ? 'juice' :
       cat?.type === 'bakery' ? 'bakery' : 'food';
 
-    const existingItem = activeOrder?.items.find(
+    const existingItem = targetOrder?.items.find(
       (i) => i.menuItemId === menuItem.id && i.variantId === variant?.id && i.status !== 'void'
     );
 
-    if (existingItem && activeOrder) {
-      updateItemQty(activeOrder.id, existingItem.id, existingItem.quantity + 1);
-    } else if (activeOrder) {
+    if (existingItem && targetOrder) {
+      updateItemQty(targetOrder.id, existingItem.id, existingItem.quantity + 1);
+    } else if (targetOrder) {
       const newItem: Omit<OrderItem, 'id' | 'status'> = {
         menuItemId: menuItem.id,
         menuItemName: menuItem.name,
@@ -176,7 +177,7 @@ export default function OrderTaking() {
         gstRate: menuItem.gstRate,
         kotType,
       };
-      addItemToOrder(activeOrder.id, newItem);
+      addItemToOrder(targetOrder.id, newItem);
     }
     
     setVariantModal(null);
