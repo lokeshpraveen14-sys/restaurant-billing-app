@@ -273,6 +273,14 @@ export const useTableStore = create<TableState>()(
 
         supabase.channel('public:restaurant_tables')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, payload => {
+            if (payload.eventType === 'DELETE') {
+              const deletedId = (payload.old as any).id;
+              set((state) => ({
+                tables: state.tables.filter((t) => t.id !== deletedId)
+              }));
+              return;
+            }
+
             if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
               const dbTable = payload.new;
               set((state) => {
@@ -281,6 +289,9 @@ export const useTableStore = create<TableState>()(
                 if (idx >= 0) {
                   newTables[idx] = {
                     ...newTables[idx],
+                    number: dbTable.table_number || newTables[idx].number,
+                    capacity: dbTable.capacity || newTables[idx].capacity,
+                    section: dbTable.section || newTables[idx].section,
                     status: dbTable.status as TableStatus,
                     reservedFor: dbTable.reserved_for || undefined,
                     occupiedSince: dbTable.occupied_since ? new Date(dbTable.occupied_since) : undefined,
@@ -295,7 +306,7 @@ export const useTableStore = create<TableState>()(
                 } else {
                   newTables.push({
                     id: dbTable.id,
-                    number: dbTable.number,
+                    number: dbTable.table_number,
                     capacity: dbTable.capacity,
                     section: dbTable.section,
                     posX: dbTable.pos_x ?? 0,
