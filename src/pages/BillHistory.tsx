@@ -75,6 +75,8 @@ export default function BillHistory() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   const invoiceCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -134,6 +136,7 @@ export default function BillHistory() {
       // Sort descending by date
       fetchedBills.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setBills(fetchedBills);
+      setCurrentPage(1);
       setLoading(false);
     };
 
@@ -190,6 +193,7 @@ export default function BillHistory() {
 
     fetchedBills.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setBills(fetchedBills);
+    setCurrentPage(1);
     setLoading(false);
   };
 
@@ -372,15 +376,41 @@ export default function BillHistory() {
               <div style={{ flex: '1', textAlign: 'right' }}>Actions</div>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 'calc(100vh - 350px)' }}>
-              {bills.map((bill, index) => (
+              {bills.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((bill, index) => (
                 <Row
                   key={bill.id || index}
-                  index={index}
+                  index={(currentPage - 1) * itemsPerPage + index}
                   style={{}}
                   data={{ bills, invoiceCounts, setSelectedBill }}
                 />
               ))}
             </div>
+            {bills.length > itemsPerPage && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, bills.length)} of {bills.length} bills
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button 
+                    className="btn btn-ghost btn-sm" 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', fontSize: '0.875rem', fontWeight: 500 }}>
+                    Page {currentPage} of {Math.ceil(bills.length / itemsPerPage)}
+                  </div>
+                  <button 
+                    className="btn btn-ghost btn-sm" 
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(bills.length / itemsPerPage), p + 1))}
+                    disabled={currentPage === Math.ceil(bills.length / itemsPerPage)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
             </>
           )}
         </div>
