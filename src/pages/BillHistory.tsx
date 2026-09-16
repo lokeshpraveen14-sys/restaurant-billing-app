@@ -93,12 +93,15 @@ export default function BillHistory() {
 
       if (dateRange === 'today') {
         start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
       } else if (dateRange === 'week') {
         start.setDate(start.getDate() - 7);
         start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
       } else if (dateRange === 'month') {
         start.setMonth(start.getMonth() - 1);
         start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
       } else if (dateRange === 'custom') {
         const s = new Date(customStart); s.setHours(0, 0, 0, 0);
         const e = new Date(customEnd); e.setHours(23, 59, 59, 999);
@@ -153,12 +156,15 @@ export default function BillHistory() {
 
     if (dateRange === 'today') {
       start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
     } else if (dateRange === 'week') {
       start.setDate(start.getDate() - 7);
       start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
     } else if (dateRange === 'month') {
       start.setMonth(start.getMonth() - 1);
       start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
     } else if (dateRange === 'custom') {
       const s = new Date(customStart); s.setHours(0, 0, 0, 0);
       const e = new Date(customEnd); e.setHours(23, 59, 59, 999);
