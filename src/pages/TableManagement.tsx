@@ -190,9 +190,13 @@ export default function TableManagement() {
 
   const handleDeleteTable = async (tableId: string) => {
     if (confirm('Are you sure you want to delete this table? This cannot be undone.')) {
-      await deleteTable(tableId);
-      toast.success('Table Deleted', 'The table has been removed successfully.');
-      setActionModal(null);
+      try {
+        await deleteTable(tableId);
+        toast.success('Table Deleted', 'The table has been removed successfully.');
+        setActionModal(null);
+      } catch (err: any) {
+        toast.error('Cannot Delete Table', 'This table has existing orders or bills linked to it. Please settle or void them first.');
+      }
     }
   };
 

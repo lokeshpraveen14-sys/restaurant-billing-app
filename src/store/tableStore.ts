@@ -194,13 +194,21 @@ export const useTableStore = create<TableState>()(
       },
 
       deleteTable: async (tableId: string) => {
+        const previousTables = get().tables;
         set((state) => ({
           tables: state.tables.filter((t) => t.id !== tableId),
         }));
         try {
-          await supabase.from('restaurant_tables').delete().eq('id', tableId);
+          const { error } = await supabase.from('restaurant_tables').delete().eq('id', tableId);
+          if (error) {
+            set({ tables: previousTables });
+            console.error('Failed to delete table:', error);
+            throw new Error(error.message || 'Failed to delete table');
+          }
         } catch (error) {
+          set({ tables: previousTables });
           console.error('Failed to delete table:', error);
+          throw error;
         }
       },
 
