@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { useTableStore } from '../store/tableStore';
 // @ts-ignore
-import { List } from 'react-window';
+import { FixedSizeList as List } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 
 const Row = ({ index, style, data }: any) => {
@@ -383,7 +383,6 @@ export default function BillHistory() {
                     itemSize={70}
                     width={width}
                     itemData={{ bills, invoiceCounts, setSelectedBill }}
-                    // @ts-ignore
                     children={Row}
                   />
                 )}
