@@ -198,6 +198,15 @@ export const useTableStore = create<TableState>()(
         set((state) => ({
           tables: state.tables.filter((t) => t.id !== tableId),
         }));
+
+        // Initial default tables use short string IDs (e.g. 't1', 't2'). 
+        // Postgres expects UUIDs, so trying to delete 't1' from Supabase throws a syntax error.
+        // If it's not a valid UUID, it only exists locally, so we can just return.
+        const isValidUUID = tableId.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tableId);
+        if (!isValidUUID) {
+          return;
+        }
+
         try {
           const { error } = await supabase.from('restaurant_tables').delete().eq('id', tableId);
           if (error) {

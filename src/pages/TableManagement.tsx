@@ -195,7 +195,8 @@ export default function TableManagement() {
         toast.success('Table Deleted', 'The table has been removed successfully.');
         setActionModal(null);
       } catch (err: any) {
-        toast.error('Cannot Delete Table', 'This table has existing orders or bills linked to it. Please settle or void them first.');
+        console.error("Full delete error:", err);
+        toast.error('Cannot Delete Table', `DB Error: ${err.message || JSON.stringify(err)}`);
       }
     }
   };
