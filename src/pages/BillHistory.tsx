@@ -11,8 +11,6 @@ import { useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { useTableStore } from '../store/tableStore';
 // @ts-ignore
-import { FixedSizeList as List } from 'react-window';
-import { AutoSizer } from 'react-virtualized-auto-sizer';
 
 const Row = ({ index, style, data }: any) => {
   const bill = data.bills[index];
@@ -373,23 +371,16 @@ export default function BillHistory() {
               <div style={{ flex: '1' }}>Status</div>
               <div style={{ flex: '1', textAlign: 'right' }}>Actions</div>
             </div>
-            <div style={{ height: 'calc(100vh - 350px)' }}>
-              {/* @ts-ignore */}
-              <AutoSizer>
-                {({ height, width }: { height: number, width: number }) => (
-                  <List
-                    height={height || 600}
-                    itemCount={bills.length}
-                    itemSize={70}
-                    width={width || 1000}
-                    itemData={{ bills, invoiceCounts, setSelectedBill }}
-                  >
-                    {Row}
-                  </List>
-                )}
-              </AutoSizer>
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 'calc(100vh - 350px)' }}>
+              {bills.map((bill, index) => (
+                <Row
+                  key={bill.id || index}
+                  index={index}
+                  style={{}}
+                  data={{ bills, invoiceCounts, setSelectedBill }}
+                />
+              ))}
             </div>
-            
             </>
           )}
         </div>
