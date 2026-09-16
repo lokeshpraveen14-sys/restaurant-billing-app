@@ -208,6 +208,11 @@ export const useTableStore = create<TableState>()(
         }
 
         try {
+          // Unlink any existing orders or bills to prevent foreign key constraint errors
+          // We keep table_number intact so historical records still show "Table T2" etc.
+          await supabase.from('orders').update({ table_id: null }).eq('table_id', tableId);
+          await supabase.from('bills').update({ table_id: null }).eq('table_id', tableId);
+
           const { error } = await supabase.from('restaurant_tables').delete().eq('id', tableId);
           if (error) {
             set({ tables: previousTables });
