@@ -43,9 +43,8 @@ export default function TableManagement() {
   const [actionModal, setActionModal] = useState<{ type: 'free' | 'reserved' | 'occupied'; tableId: string; tableNumber: string } | null>(null);
   const [guestsCount, setGuestsCount] = useState('');
   const [reservationDetails, setReservationDetails] = useState('');
-  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order' | 'merge'>('seat');
+  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order'>('seat');
   const [editTableData, setEditTableData] = useState({ number: '', capacity: '4', section: '' });
-  const [mergeSelectedChild, setMergeSelectedChild] = useState('');
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
 
   const handleAddTable = () => {
@@ -162,30 +161,6 @@ export default function TableManagement() {
       }
       navigate(url);
     }
-  };
-
-
-  const handleMergeSubmit = () => {
-    if (!actionModal || !mergeSelectedChild) return;
-    useTableStore.getState().mergeTables([actionModal.tableId, mergeSelectedChild]);
-    toast.success('Tables Merged', 'Tables have been merged successfully');
-    setActionModal(null);
-    setMergeSelectedChild('');
-  };
-
-  const handleUnmerge = (tableId: string) => {
-    const table = tables.find(t => t.id === tableId);
-    if (!table) return;
-
-    // Safety check: Don't unmerge if there are ANY open orders for this parent table
-    const activeOrders = getOrdersByTable(tableId, table.number);
-    if (activeOrders.length > 0) {
-      toast.error('Cannot un-merge', 'Please settle or move all active bills before un-merging.');
-      return;
-    }
-
-    useTableStore.getState().splitTable(tableId);
-    toast.success('Un-merged', 'Tables are now separated');
   };
 
   const handleDeleteTable = async (tableId: string) => {
@@ -439,7 +414,6 @@ export default function TableManagement() {
                     <button className={`tab-item ${actionMode === 'seat' ? 'active' : ''}`} onClick={() => setActionMode('seat')}>Seat</button>
                     <button className={`tab-item ${actionMode === 'reserve' ? 'active' : ''}`} onClick={() => setActionMode('reserve')}>Reserve</button>
                     <button className={`tab-item ${actionMode === 'edit' ? 'active' : ''}`} onClick={() => setActionMode('edit')}>Edit</button>
-                    <button className={`tab-item ${actionMode === 'merge' ? 'active' : ''}`} onClick={() => setActionMode('merge')}>Merge</button>
                   </div>
 
                   {actionMode === 'seat' && (() => {
@@ -571,43 +545,9 @@ export default function TableManagement() {
                     </>
                   )}
 
-                  {actionMode === 'merge' && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Select table to merge with {actionModal.tableNumber}</label>
-                      <select 
-                        className="input" 
-                        value={mergeSelectedChild} 
-                        onChange={(e) => setMergeSelectedChild(e.target.value)}
-                      >
-                        <option value="">-- Select a free table --</option>
-                        {tables
-                          .filter(t => t.status === 'free' && t.id !== actionModal.tableId && t.section === tables.find(x => x.id === actionModal.tableId)?.section)
-                          .map(t => (
-                            <option key={t.id} value={t.id}>Table {t.number} ({t.capacity} seats)</option>
-                          ))}
-                      </select>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
-                        Only free tables in the same section are shown.
-                      </div>
-                    </div>
-                  )}
-
-                  {tables.find(t => t.id === actionModal.tableId)?.mergedWith && tables.find(t => t.id === actionModal.tableId)!.mergedWith!.length > 0 && (
-                    <div style={{ marginTop: 8, padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>This table is merged</div>
-                      <button 
-                        className="btn btn-outline btn-sm" 
-                        style={{ width: '100%', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                        onClick={() => handleUnmerge(actionModal.tableId)}
-                      >
-                        <ArrowsSplit size={16} /> Un-merge Tables
-                      </button>
-                    </div>
-                  )}
-
                   <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleActionSubmit}>
-                      {actionMode === 'seat' ? 'Open Order' : actionMode === 'reserve' ? 'Save Reservation' : actionMode === 'merge' ? 'Merge Tables' : 'Save Changes'}
+                      {actionMode === 'seat' ? 'Open Order' : actionMode === 'reserve' ? 'Save Reservation' : 'Save Changes'}
                     </button>
                     <button className="btn btn-ghost" onClick={() => setActionModal(null)}>Cancel</button>
                   </div>

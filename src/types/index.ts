@@ -22,17 +22,9 @@ export interface Table {
   capacity: number;
   status: TableStatus;
   section: string;
-  posX: number;
-  posY: number;
-  width?: number;
-  height?: number;
-  shape?: 'square' | 'round' | 'rectangle';
-  rotation?: number;
   currentOrderId?: string;
   occupiedSince?: Date;
   reservedFor?: string;
-  mergedWith?: string[];
-  mergedInto?: string;
 }
 
 export type ItemCategory = 'food' | 'bakery' | 'beverage' | 'dessert' | 'juice' | 'other';
