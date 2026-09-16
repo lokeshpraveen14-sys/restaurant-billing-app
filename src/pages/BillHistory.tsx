@@ -378,13 +378,14 @@ export default function BillHistory() {
               <AutoSizer>
                 {({ height, width }: { height: number, width: number }) => (
                   <List
-                    height={height}
+                    height={height || 600}
                     itemCount={bills.length}
                     itemSize={70}
-                    width={width}
+                    width={width || 1000}
                     itemData={{ bills, invoiceCounts, setSelectedBill }}
-                    children={Row}
-                  />
+                  >
+                    {Row}
+                  </List>
                 )}
               </AutoSizer>
             </div>
