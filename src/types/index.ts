@@ -116,6 +116,7 @@ export interface Order {
   staffName: string;
   createdAt: Date;
   updatedAt: Date;
+  _localUpdatedAt?: number;
   kotPrintedAt?: Date;
   customerName?: string;
   customerPhone?: string;

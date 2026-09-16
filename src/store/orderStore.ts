@@ -143,7 +143,7 @@ export const useOrderStore = create<OrderState>()(
           const updatedOrders = state.orders.map((o) => {
             if (o.id !== orderId) return o;
             const newItem: OrderItem = { ...item, id: newItemId, status: 'pending' };
-            return { ...o, items: [...o.items, newItem], updatedAt: new Date() };
+            return { ...o, items: [...o.items, newItem], updatedAt: new Date(), _localUpdatedAt: Date.now() };
           });
           return {
             orders: updatedOrders,
@@ -158,7 +158,7 @@ export const useOrderStore = create<OrderState>()(
         set((state) => {
           const updatedOrders = state.orders.map((o) =>
             o.id === orderId
-              ? { ...o, items: o.items.filter((i) => i.id !== itemId), updatedAt: new Date() }
+              ? { ...o, items: o.items.filter((i) => i.id !== itemId), updatedAt: new Date(), _localUpdatedAt: Date.now() }
               : o
           );
           return {
@@ -184,6 +184,7 @@ export const useOrderStore = create<OrderState>()(
                     i.id === itemId ? { ...i, quantity: qty, totalPrice: i.unitPrice * qty } : i
                   ),
                   updatedAt: new Date(),
+                  _localUpdatedAt: Date.now()
                 }
               : o
           );
@@ -200,7 +201,7 @@ export const useOrderStore = create<OrderState>()(
         set((state) => ({
           orders: state.orders.map((o) =>
             o.id === orderId
-              ? { ...o, items: o.items.map((i) => (i.id === itemId ? { ...i, note } : i)) }
+              ? { ...o, items: o.items.map((i) => (i.id === itemId ? { ...i, note } : i)), _localUpdatedAt: Date.now() }
               : o
           ),
         }));
@@ -383,8 +384,17 @@ export const useOrderStore = create<OrderState>()(
                   }
 
                   if (idx >= 0) {
-                    // Merge: DB is authoritative for items. Preserve local fields not in DB.
                     const existingLocal = newOrders[idx];
+
+                    // PREVENT UI JUMPING / RACE CONDITION
+                    // If we locally modified this order within the last 2 seconds, ignore incoming broadcasts
+                    // because they are highly likely to be stale echoes of our own rapid clicks.
+                    const timeSinceLocalUpdate = Date.now() - (existingLocal._localUpdatedAt || 0);
+                    if (timeSinceLocalUpdate < 2000) {
+                      return state;
+                    }
+
+                    // Merge: DB is authoritative for items. Preserve local fields not in DB.
                     newOrders[idx] = {
                       ...mappedOrder,
                       guestCount: mappedOrder.guestCount ?? existingLocal.guestCount,
