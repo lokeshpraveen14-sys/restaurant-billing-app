@@ -32,12 +32,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function Dashboard() {
-  const { currentUser } = useAuthStore();
-  const { tables } = useTableStore();
-  const { orders } = useOrderStore();
-  const { items } = useMenuStore();
-  const { bills } = useBillStore();
-  const { currentShift } = useShiftStore();
+  const currentUser = useAuthStore(s => s.currentUser);
+  const tables = useTableStore(s => s.tables);
+  const orders = useOrderStore(s => s.orders);
+  const items = useMenuStore(s => s.items);
+  const bills = useBillStore(s => s.bills);
+  const currentShift = useShiftStore(s => s.currentShift);
 
   const occupiedTables = tables.filter((t) => t.status === 'occupied').length;
   const freeTables = tables.filter((t) => t.status === 'free').length;

@@ -6,7 +6,6 @@ import { useBillStore } from '../store/billStore';
 import { useAccountingStore } from '../store/accountingStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { Bill } from '../types';
-import jsPDF from 'jspdf';
 
 export default function GstFiling() {
   const [fromDate, setFromDate] = useState(() => {
@@ -41,41 +40,80 @@ export default function GstFiling() {
     return { start, end, bills: gstrBills };
   };
 
-  const downloadCSV = (lines: string[], name: string) => { 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' }); 
-    const url = URL.createObjectURL(blob); 
-    const a = document.createElement('a'); 
-    a.href = url; 
-    a.download = `${name}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`; 
-    a.click(); 
-    URL.revokeObjectURL(url); 
+  const downloadCSV = (lines: string[], filenamePrefix: string) => {
+    const csvData = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const csvUrl = URL.createObjectURL(csvData);
+    const hiddenElement = document.createElement('a');
+    hiddenElement.href = csvUrl;
+    hiddenElement.target = '_blank';
+    hiddenElement.download = `${filenamePrefix}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`;
+    hiddenElement.click();
+    URL.revokeObjectURL(csvUrl);
   };
 
+  // ── B2C CSV Report ──────────────────────────────────────────────────────────
+  const handleDownloadB2CCsv = async () => {
+    const { start, end, bills: gstrBills } = await getBillsForPeriod();
+    const activeBills = gstrBills.filter(b => b.status !== 'void');
 
+    const stateMap = new Map<string, { taxable: number; igst: number; cgst: number; sgst: number }>();
 
-  // ── Daily GST Sales Register (CSV) ───────────────────────────────────────────
-  const handleExportDailyRegisterCSV = async () => {
-    const { start, end, bills: rawBills } = await getBillsForPeriod();
-    const activeBills = rawBills.filter(b => b.status !== 'void' && b.isGstBill !== false);
+    activeBills.forEach(b => {
+      let stCode = b.customerStateCode || settings.businessStateCode || '29';
+      if (!GST_STATE_CODES[stCode]) stCode = '29';
+      if (!stateMap.has(stCode)) stateMap.set(stCode, { taxable: 0, igst: 0, cgst: 0, sgst: 0 });
+      
+      const stats = stateMap.get(stCode)!;
+      b.items?.forEach(item => {
+        if (item.status === 'void') return;
+        const rate = item.gstRate || 0;
+        const isInterState = stCode !== settings.businessStateCode;
+        const taxableAmt = item.totalPrice / (1 + rate / 100);
+        const taxAmt = item.totalPrice - taxableAmt;
 
-    const getInvNum = (inv: string) => parseInt((inv || '').split('/').pop() || '0', 10);
-    
-    // Sort chronologically by createdAt to guarantee daily boundaries
-    const sortedBills = [...activeBills].sort((a, b) => {
-      const da = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-      const db = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-      return da.getTime() - db.getTime();
+        stats.taxable += taxableAmt;
+        if (isInterState) {
+          stats.igst += taxAmt;
+        } else {
+          stats.cgst += taxAmt / 2;
+          stats.sgst += taxAmt / 2;
+        }
+      });
     });
+
+    const header = 'Type,Place Of Supply,Applicable % of Tax Rate,Taxable Value,Cess Amount';
+    const rows: string[] = [];
+    Array.from(stateMap.entries()).forEach(([code, stats]) => {
+      const stateName = GST_STATE_CODES[code] || 'Unknown';
+      const pos = `${code}-${stateName}`;
+      rows.push(`OE,${pos},,${stats.taxable.toFixed(2)},`);
+    });
+
+    const csvContent = [
+      `GST B2C REPORT — ${settings.restaurantName}`,
+      `Period: ${start.toLocaleDateString('en-IN')} to ${end.toLocaleDateString('en-IN')}`,
+      '',
+      header,
+      ...rows
+    ];
+
+    downloadCSV(csvContent, 'B2C-Report');
+  };
+
+  // ── Daily GST Register CSV ───────────────────────────────────────────────────
+  const handleDownloadDailyRegister = async () => {
+    const { start, end, bills: regBills } = await getBillsForPeriod();
+    const activeBills = regBills.filter(b => b.status !== 'void');
 
     const dailyMap = new Map<string, Map<number, {
       minInv: number; maxInv: number; minInvStr: string; maxInvStr: string;
       taxable: number; cgst: number; sgst: number; total: number;
     }>>();
 
-    sortedBills.forEach(b => {
+    activeBills.forEach(b => {
       const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
       const dateStr = d.toLocaleDateString('en-IN');
-      const invNum = getInvNum(b.invoiceNumber);
+      const invNum = parseInt(b.invoiceNumber.replace(/\D/g, ''), 10) || 0;
 
       if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, new Map());
       const rateMap = dailyMap.get(dateStr)!;
@@ -128,6 +166,7 @@ export default function GstFiling() {
     const { start, end, bills: auditBills } = await getBillsForPeriod();
     const activeBills = auditBills.filter(b => b.status !== 'void');
 
+    const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pw = doc.internal.pageSize.getWidth();
     let y = 18;

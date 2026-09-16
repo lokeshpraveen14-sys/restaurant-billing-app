@@ -67,9 +67,6 @@ export default function Reports() {
 
   const isAdminOrManager = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
-  useEffect(() => { loadBills(); }, [datePreset, customFrom, customTo]);
-  useEffect(() => { if (activeTab === 'items') loadItemBills(); }, [activeTab, itemDatePreset, itemCustomFrom, itemCustomTo]);
-
   const fetchFiltered = async (start: Date, end: Date): Promise<Bill[]> => {
     let result: Bill[] = [];
     try {
@@ -85,48 +82,112 @@ export default function Reports() {
     return result.filter(b => b.status !== 'void');
   };
 
-  const loadBills = async () => { setLoading(true); const { start, end } = getDateRange(datePreset, customFrom, customTo); setBills(await fetchFiltered(start, end)); setLoading(false); };
-  const loadItemBills = async () => { setItemLoading(true); setItemPage(1); const { start, end } = getDateRange(itemDatePreset, itemCustomFrom, itemCustomTo); setItemBills(await fetchFiltered(start, end)); setItemLoading(false); };
+  useEffect(() => { 
+    let isMounted = true;
+    const loadBills = async () => { 
+      setLoading(true); 
+      const { start, end } = getDateRange(datePreset, customFrom, customTo); 
+      const res = await fetchFiltered(start, end); 
+      if (isMounted) { setBills(res); setLoading(false); }
+    };
+    loadBills();
+    return () => { isMounted = false; };
+  }, [datePreset, customFrom, customTo]);
+
+  useEffect(() => { 
+    if (activeTab !== 'items') return;
+    let isMounted = true;
+    const loadItemBills = async () => { 
+      setItemLoading(true); 
+      setItemPage(1); 
+      const { start, end } = getDateRange(itemDatePreset, itemCustomFrom, itemCustomTo); 
+      const res = await fetchFiltered(start, end); 
+      if (isMounted) { setItemBills(res); setItemLoading(false); }
+    };
+    loadItemBills();
+    return () => { isMounted = false; };
+  }, [activeTab, itemDatePreset, itemCustomFrom, itemCustomTo]);
 
   // Overview
-  const totalRevenue = bills.reduce((s, b) => s + b.totalAmount, 0);
-  const totalOrders = bills.length;
-  const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-  const totalCovers = bills.reduce((s, b) => s + (b.guestCount || 0), 0);
-  const dailyDataMap = new Map<string, { date: string; revenue: number; orders: number; covers: number }>();
-  bills.forEach(b => {
-    const dString = (b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    if (!dailyDataMap.has(dString)) dailyDataMap.set(dString, { date: dString, revenue: 0, orders: 0, covers: 0 });
-    const d = dailyDataMap.get(dString)!; d.revenue += b.totalAmount; d.orders += 1; d.covers += b.items.reduce((sum, item) => sum + item.quantity, 0);
-  });
-  const DAILY_DATA = Array.from(dailyDataMap.values());
-  const paymentMap = new Map<string, number>(); let totalPayments = 0;
-  bills.forEach(b => { b.payments.forEach(p => { paymentMap.set(p.mode, (paymentMap.get(p.mode) || 0) + p.amount); totalPayments += p.amount; }); });
-  const paymentColors: Record<string, string> = { cash: '#22c55e', upi: '#e6a817', card: '#3b82f6', split: '#8b5cf6' };
-  const PAYMENT_DATA = Array.from(paymentMap.entries()).map(([mode, amount]) => ({ name: mode.charAt(0).toUpperCase() + mode.slice(1), value: totalPayments > 0 ? Math.round((amount / totalPayments) * 100) : 0, color: paymentColors[mode] || '#64748b' }));
-  const staffMap = new Map<string, { name: string; orders: number; revenue: number; tables: Set<string> }>();
-  bills.forEach(b => { if (!staffMap.has(b.staffName)) staffMap.set(b.staffName, { name: b.staffName, orders: 0, revenue: 0, tables: new Set() }); const s = staffMap.get(b.staffName)!; s.orders += 1; s.revenue += b.totalAmount; if (b.tableId) s.tables.add(b.tableId); });
-  const TOP_STAFF = Array.from(staffMap.values()).map(s => ({ ...s, tables: s.tables.size })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-  const gstMap = new Map<number, { rate: number; taxable: number; cgst: number; sgst: number; total: number }>();
-  bills.forEach(b => { if (b.gstBreakdown) b.gstBreakdown.forEach(g => { if (!gstMap.has(g.rate)) gstMap.set(g.rate, { rate: g.rate, taxable: 0, cgst: 0, sgst: 0, total: 0 }); const gm = gstMap.get(g.rate)!; gm.taxable += g.taxableAmount; gm.cgst += g.cgst; gm.sgst += g.sgst; gm.total += (g.cgst + g.sgst + g.igst); }); });
-  const GST_DATA = Array.from(gstMap.values()).map(g => ({ ...g, rate: `${g.rate}%` })).sort((a, b) => parseFloat(a.rate) - parseFloat(b.rate));
-  const itemMapOv = new Map<string, { name: string; qty: number; revenue: number }>();
-  bills.forEach(b => { b.items?.forEach(item => { if (!itemMapOv.has(item.menuItemId)) itemMapOv.set(item.menuItemId, { name: item.menuItemName, qty: 0, revenue: 0 }); const im = itemMapOv.get(item.menuItemId)!; im.qty += item.quantity; im.revenue += item.totalPrice; }); });
-  const TOP_DISHES = Array.from(itemMapOv.values()).sort((a, b) => b.qty - a.qty).slice(0, 10);
+  const { totalRevenue, totalOrders, avgOrderValue, totalCovers, DAILY_DATA, PAYMENT_DATA, TOP_STAFF, GST_DATA, TOP_DISHES } = React.useMemo(() => {
+    const revenue = bills.reduce((s, b) => s + b.totalAmount, 0);
+    const ordersCount = bills.length;
+    const avgVal = ordersCount > 0 ? revenue / ordersCount : 0;
+    const covers = bills.reduce((s, b) => s + (b.guestCount || 0), 0);
+    
+    const dailyDataMap = new Map<string, { date: string; revenue: number; orders: number; covers: number }>();
+    bills.forEach(b => {
+      const dString = (b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      if (!dailyDataMap.has(dString)) dailyDataMap.set(dString, { date: dString, revenue: 0, orders: 0, covers: 0 });
+      const d = dailyDataMap.get(dString)!; d.revenue += b.totalAmount; d.orders += 1; d.covers += b.items.reduce((sum, item) => sum + item.quantity, 0);
+    });
+    const dailyData = Array.from(dailyDataMap.values());
+    
+    const paymentMap = new Map<string, number>(); let totalPayments = 0;
+    bills.forEach(b => { b.payments.forEach(p => { paymentMap.set(p.mode, (paymentMap.get(p.mode) || 0) + p.amount); totalPayments += p.amount; }); });
+    const paymentColors: Record<string, string> = { cash: '#22c55e', upi: '#e6a817', card: '#3b82f6', split: '#8b5cf6' };
+    const paymentData = Array.from(paymentMap.entries()).map(([mode, amount]) => ({ name: mode.charAt(0).toUpperCase() + mode.slice(1), value: totalPayments > 0 ? Math.round((amount / totalPayments) * 100) : 0, color: paymentColors[mode] || '#64748b' }));
+    
+    const staffMap = new Map<string, { name: string; orders: number; revenue: number; tables: Set<string> }>();
+    bills.forEach(b => { if (!staffMap.has(b.staffName)) staffMap.set(b.staffName, { name: b.staffName, orders: 0, revenue: 0, tables: new Set() }); const s = staffMap.get(b.staffName)!; s.orders += 1; s.revenue += b.totalAmount; if (b.tableId) s.tables.add(b.tableId); });
+    const topStaff = Array.from(staffMap.values()).map(s => ({ ...s, tables: s.tables.size })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+    
+    const gstMap = new Map<number, { rate: number; taxable: number; cgst: number; sgst: number; total: number }>();
+    bills.forEach(b => { if (b.gstBreakdown) b.gstBreakdown.forEach(g => { if (!gstMap.has(g.rate)) gstMap.set(g.rate, { rate: g.rate, taxable: 0, cgst: 0, sgst: 0, total: 0 }); const gm = gstMap.get(g.rate)!; gm.taxable += g.taxableAmount; gm.cgst += g.cgst; gm.sgst += g.sgst; gm.total += (g.cgst + g.sgst + (g.igst || 0)); }); });
+    const gstData = Array.from(gstMap.values()).map(g => ({ ...g, rate: `${g.rate}%` })).sort((a, b) => parseFloat(a.rate) - parseFloat(b.rate));
+    
+    const itemMapOv = new Map<string, { name: string; qty: number; revenue: number }>();
+    bills.forEach(b => { b.items?.forEach(item => { if (!itemMapOv.has(item.menuItemId)) itemMapOv.set(item.menuItemId, { name: item.menuItemName, qty: 0, revenue: 0 }); const im = itemMapOv.get(item.menuItemId)!; im.qty += item.quantity; im.revenue += item.totalPrice; }); });
+    const topDishes = Array.from(itemMapOv.values()).sort((a, b) => b.qty - a.qty).slice(0, 10);
+    
+    return {
+      totalRevenue: revenue,
+      totalOrders: ordersCount,
+      avgOrderValue: avgVal,
+      totalCovers: covers,
+      DAILY_DATA: dailyData,
+      PAYMENT_DATA: paymentData,
+      TOP_STAFF: topStaff,
+      GST_DATA: gstData,
+      TOP_DISHES: topDishes,
+    };
+  }, [bills]);
 
 
   // Item stats
   interface ItemStat { id: string; name: string; categoryId: string; qty: number; gross: number; gst: number; net: number; }
-  const itemStatsMap = new Map<string, Omit<ItemStat, 'id'>>();
-  itemBills.forEach(b => { b.items?.forEach(item => { if (!itemStatsMap.has(item.menuItemId)) itemStatsMap.set(item.menuItemId, { name: item.menuItemName, categoryId: '', qty: 0, gross: 0, gst: 0, net: 0 }); const stat = itemStatsMap.get(item.menuItemId)!; stat.qty += item.quantity; stat.gross += item.totalPrice; const rate = item.gstRate || 0; const itemGst = rate > 0 ? item.totalPrice - item.totalPrice / (1 + rate / 100) : 0; stat.gst += itemGst; stat.net += item.totalPrice - itemGst; }); });
-  let ITEM_STATS: ItemStat[] = Array.from(itemStatsMap.entries()).map(([id, stat]) => { const menuItem = menuItems.find(m => m.id === id); return { id, ...stat, categoryId: menuItem?.categoryId || '' }; });
-  if (itemCategoryFilter !== 'all') ITEM_STATS = ITEM_STATS.filter(s => s.categoryId === itemCategoryFilter);
-  if (itemSearch.trim()) ITEM_STATS = ITEM_STATS.filter(s => s.name.toLowerCase().includes(itemSearch.toLowerCase()));
-  ITEM_STATS = ITEM_STATS.sort((a, b) => itemSortBy === 'qty' ? b.qty - a.qty : itemSortBy === 'gross' ? b.gross - a.gross : itemSortBy === 'net' ? b.net - a.net : itemSortBy === 'gst' ? b.gst - a.gst : a.name.localeCompare(b.name));
-  const itemTotalQty = ITEM_STATS.reduce((s, i) => s + i.qty, 0);
-  const itemTotalGross = ITEM_STATS.reduce((s, i) => s + i.gross, 0);
-  const itemTotalGST = ITEM_STATS.reduce((s, i) => s + i.gst, 0);
-  const itemTotalNet = ITEM_STATS.reduce((s, i) => s + i.net, 0);
+  
+  const { ITEM_STATS, itemTotalQty, itemTotalGross, itemTotalGST, itemTotalNet } = React.useMemo(() => {
+    const itemStatsMap = new Map<string, Omit<ItemStat, 'id'>>();
+    itemBills.forEach(b => { 
+      b.items?.forEach(item => { 
+        if (!itemStatsMap.has(item.menuItemId)) itemStatsMap.set(item.menuItemId, { name: item.menuItemName, categoryId: '', qty: 0, gross: 0, gst: 0, net: 0 }); 
+        const stat = itemStatsMap.get(item.menuItemId)!; 
+        stat.qty += item.quantity; 
+        stat.gross += item.totalPrice; 
+        const rate = item.gstRate || 0; 
+        const itemGst = rate > 0 ? item.totalPrice - item.totalPrice / (1 + rate / 100) : 0; 
+        stat.gst += itemGst; 
+        stat.net += item.totalPrice - itemGst; 
+      }); 
+    });
+    
+    let stats: ItemStat[] = Array.from(itemStatsMap.entries()).map(([id, stat]) => { 
+      const menuItem = menuItems.find(m => m.id === id); 
+      return { id, ...stat, categoryId: menuItem?.categoryId || '' }; 
+    });
+    
+    if (itemCategoryFilter !== 'all') stats = stats.filter(s => s.categoryId === itemCategoryFilter);
+    if (itemSearch.trim()) stats = stats.filter(s => s.name.toLowerCase().includes(itemSearch.toLowerCase()));
+    stats = stats.sort((a, b) => itemSortBy === 'qty' ? b.qty - a.qty : itemSortBy === 'gross' ? b.gross - a.gross : itemSortBy === 'net' ? b.net - a.net : itemSortBy === 'gst' ? b.gst - a.gst : a.name.localeCompare(b.name));
+    
+    const qty = stats.reduce((s, i) => s + i.qty, 0);
+    const gross = stats.reduce((s, i) => s + i.gross, 0);
+    const gst = stats.reduce((s, i) => s + i.gst, 0);
+    const net = stats.reduce((s, i) => s + i.net, 0);
+    
+    return { ITEM_STATS: stats, itemTotalQty: qty, itemTotalGross: gross, itemTotalGST: gst, itemTotalNet: net };
+  }, [itemBills, menuItems, itemCategoryFilter, itemSearch, itemSortBy]);
 
   const downloadCSV = (lines: string[], name: string) => { const blob = new Blob([lines.join('\n')], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${name}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`; a.click(); URL.revokeObjectURL(url); };
   const handleExportOverviewCSV = () => { const lines = ['RESTAURANT SALES REPORT', `Total Revenue,${totalRevenue.toFixed(2)}`, `Total Orders,${totalOrders}`, `Total Covers,${totalCovers}`, '', 'DAILY BREAKDOWN', 'Date,Revenue,Orders', ...DAILY_DATA.map(d => `${d.date},${d.revenue.toFixed(2)},${d.orders}`), '', 'GST SUMMARY', 'Rate,Taxable,CGST,SGST,Total', ...GST_DATA.map(g => `${g.rate},${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`)]; downloadCSV(lines, `sales-report-${datePreset}`); };

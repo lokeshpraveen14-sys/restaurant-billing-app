@@ -26,12 +26,31 @@ export default function OrderTaking() {
   const seatsParam = searchParams.get('seats');
   const initialSeats = seatsParam ? seatsParam.split(',').map(s => parseInt(s)).filter(s => !isNaN(s)) : undefined;
 
-  const { categories, items, searchQuery, selectedCategoryId, setSearch, setCategory, getFilteredItems } = useMenuStore();
-  const { orders, createOrder, addItemToOrder, removeItemFromOrder, updateItemQty, submitKOT, getOrdersByTable, activeOrder, setActiveOrder, ordersLoaded, voidOrder } = useOrderStore();
-  const { tables, updateTableStatus } = useTableStore();
-  const { currentUser } = useAuthStore();
-  const { ingredients } = useInventoryStore();
-  const { settings } = useSettingsStore();
+  const categories = useMenuStore(s => s.categories);
+  const items = useMenuStore(s => s.items);
+  const searchQuery = useMenuStore(s => s.searchQuery);
+  const selectedCategoryId = useMenuStore(s => s.selectedCategoryId);
+  const setSearch = useMenuStore(s => s.setSearch);
+  const setCategory = useMenuStore(s => s.setCategory);
+  const getFilteredItems = useMenuStore(s => s.getFilteredItems);
+  
+  const orders = useOrderStore(s => s.orders);
+  const createOrder = useOrderStore(s => s.createOrder);
+  const addItemToOrder = useOrderStore(s => s.addItemToOrder);
+  const removeItemFromOrder = useOrderStore(s => s.removeItemFromOrder);
+  const updateItemQty = useOrderStore(s => s.updateItemQty);
+  const submitKOT = useOrderStore(s => s.submitKOT);
+  const getOrdersByTable = useOrderStore(s => s.getOrdersByTable);
+  const activeOrder = useOrderStore(s => s.activeOrder);
+  const setActiveOrder = useOrderStore(s => s.setActiveOrder);
+  const ordersLoaded = useOrderStore(s => s.ordersLoaded);
+  const voidOrder = useOrderStore(s => s.voidOrder);
+  
+  const tables = useTableStore(s => s.tables);
+  const updateTableStatus = useTableStore(s => s.updateTableStatus);
+  const currentUser = useAuthStore(s => s.currentUser);
+  const ingredients = useInventoryStore(s => s.ingredients);
+  const settings = useSettingsStore(s => s.settings);
   const toast = useToast();
 
   const [orderType, setOrderType] = useState<OrderType>(tableId ? 'dine-in' : 'takeaway');

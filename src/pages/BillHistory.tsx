@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useBillStore } from '../store/billStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToast } from '../store/uiStore';
@@ -10,12 +10,17 @@ import TopBar from '../components/layout/TopBar';
 import { useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { useTableStore } from '../store/tableStore';
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 export default function BillHistory() {
-  const { fetchBillsByDateRange, voidBill, bills: localBills } = useBillStore();
-  const { settings } = useSettingsStore();
-  const { recreateOrderWithItems, setActiveOrder } = useOrderStore();
-  const { updateTableStatus } = useTableStore();
+  const fetchBillsByDateRange = useBillStore(s => s.fetchBillsByDateRange);
+  const voidBill = useBillStore(s => s.voidBill);
+  const localBills = useBillStore(s => s.bills);
+  const settings = useSettingsStore(s => s.settings);
+  const recreateOrderWithItems = useOrderStore(s => s.recreateOrderWithItems);
+  const setActiveOrder = useOrderStore(s => s.setActiveOrder);
+  const updateTableStatus = useTableStore(s => s.updateTableStatus);
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -29,16 +34,76 @@ export default function BillHistory() {
   const [loading, setLoading] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 50;
+  const invoiceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    bills.forEach(b => { counts[b.invoiceNumber] = (counts[b.invoiceNumber] || 0) + 1; });
+    return counts;
+  }, [bills]);
 
   useEffect(() => {
+    let isMounted = true;
+    const loadBills = async () => {
+      setLoading(true);
+      const end = new Date();
+      const start = new Date();
+
+      if (dateRange === 'today') {
+        start.setHours(0, 0, 0, 0);
+      } else if (dateRange === 'week') {
+        start.setDate(start.getDate() - 7);
+        start.setHours(0, 0, 0, 0);
+      } else if (dateRange === 'month') {
+        start.setMonth(start.getMonth() - 1);
+        start.setHours(0, 0, 0, 0);
+      } else if (dateRange === 'custom') {
+        const s = new Date(customStart); s.setHours(0, 0, 0, 0);
+        const e = new Date(customEnd); e.setHours(23, 59, 59, 999);
+        start.setTime(s.getTime());
+        end.setTime(e.getTime());
+      }
+
+      // Try Supabase first, fall back to local store
+      let fetchedBills: Bill[] = [];
+      try {
+        const supabaseBills = await fetchBillsByDateRange(start, end);
+        if (!isMounted) return;
+        // Merge local bills that are in range (covers offline-created bills not yet in DB)
+        const localFiltered = localBills.filter((b) => {
+          const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+          return d >= start && d <= end;
+        });
+
+        const allById = new Map<string, Bill>();
+        localFiltered.forEach(b => allById.set(b.id, b));
+        supabaseBills.forEach(b => allById.set(b.id, b)); // Supabase wins on conflict
+        fetchedBills = Array.from(allById.values());
+      } catch (err) {
+        if (!isMounted) return;
+        // Fallback to local bills only
+        fetchedBills = localBills.filter((b) => {
+          const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+          return d >= start && d <= end;
+        });
+      }
+
+      // Sort descending by date
+      fetchedBills.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setBills(fetchedBills);
+      setLoading(false);
+    };
+
     if (dateRange !== 'custom') loadBills();
+    // In custom mode, user must click Search to trigger it manually, so we don't auto load, 
+    // but the manual trigger needs its own handling if it can overlap. 
+    // Wait, the original code had: 
+    // <button onClick={loadBills}>Search</button>
+    // If we move it inside useEffect, we need a separate trigger state or keep it outside.
+    return () => { isMounted = false; };
   }, [dateRange]);
 
-  const loadBills = async () => {
+  // Expose manual load for 'custom' date range button and void operations
+  const loadBillsManual = async () => {
     setLoading(true);
-    setCurrentPage(1);
     const end = new Date();
     const start = new Date();
 
@@ -57,32 +122,24 @@ export default function BillHistory() {
       end.setTime(e.getTime());
     }
 
-    // Try Supabase first, fall back to local store
     let fetchedBills: Bill[] = [];
     try {
       const supabaseBills = await fetchBillsByDateRange(start, end);
-      // Merge local bills that are in range (covers offline-created bills not yet in DB)
       const localFiltered = localBills.filter((b) => {
         const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
         return d >= start && d <= end;
       });
-
-      // Deduplicate ONLY by UUID — each unique id is a distinct DB record.
-      // Bills with the same invoice_number but different UUIDs are DIFFERENT sales
-      // that collided due to the race condition bug. We show them all and flag them.
       const allById = new Map<string, Bill>();
       localFiltered.forEach(b => allById.set(b.id, b));
-      supabaseBills.forEach(b => allById.set(b.id, b)); // Supabase wins on conflict
+      supabaseBills.forEach(b => allById.set(b.id, b)); 
       fetchedBills = Array.from(allById.values());
     } catch (err) {
-      // Fallback to local bills only
       fetchedBills = localBills.filter((b) => {
         const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
         return d >= start && d <= end;
       });
     }
 
-    // Sort descending by date
     fetchedBills.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setBills(fetchedBills);
     setLoading(false);
@@ -220,7 +277,7 @@ export default function BillHistory() {
                 value={customEnd}
                 onChange={e => setCustomEnd(e.target.value)}
               />
-              <button className="btn btn-primary btn-sm" onClick={loadBills}>
+              <button className="btn btn-primary btn-sm" onClick={loadBillsManual}>
                 Search
               </button>
             </div>
@@ -257,94 +314,71 @@ export default function BillHistory() {
             </div>
           ) : (
             <>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Invoice No.</th>
-                    <th>Date & Time</th>
-                    <th>Table / Type</th>
-                    <th>Staff</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    // Pre-compute which invoice numbers appear more than once
-                    const invoiceCounts: Record<string, number> = {};
-                    bills.forEach(b => { invoiceCounts[b.invoiceNumber] = (invoiceCounts[b.invoiceNumber] || 0) + 1; });
-                    
-                    const paginatedBills = bills.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-                    
-                    return paginatedBills.map((bill) => (
-                      <tr key={bill.id} style={{ opacity: bill.status === 'void' ? 0.6 : 1 }}>
-                        <td style={{ fontWeight: 600 }}>
-                          {bill.invoiceNumber}
-                          {invoiceCounts[bill.invoiceNumber] > 1 && (
-                            <span title="This invoice number appears more than once due to a prior sync bug. Check items and void the incorrect one."
-                              style={{ marginLeft: 6, fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontWeight: 700, cursor: 'help' }}
-                            >⚠ DUP</span>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ fontSize: '0.875rem' }}>{new Date(bill.createdAt).toLocaleDateString('en-IN')}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </td>
-                        <td>
-                          {bill.tableNumber ? `Table ${bill.tableNumber}` : <span style={{ textTransform: 'capitalize' }}>{bill.orderType}</span>}
-                        </td>
-                        <td>{bill.staffName}</td>
-                        <td style={{ fontWeight: 700 }}>{formatAmount(bill.totalAmount)}</td>
-                        <td>
-                          {bill.status === 'void' ? (
-                            <span className="badge badge-error">Voided</span>
-                          ) : (
-                            <span className="badge badge-success">Paid</span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => setSelectedBill(bill)}
-                          >
-                            <Eye size={16} /> View
-                          </button>
-                        </td>
-                      </tr>
-                    ));
-                  })()}
-                </tbody>
-              </table>
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '12px 16px', fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+              <div style={{ flex: '1.5' }}>Invoice No.</div>
+              <div style={{ flex: '2' }}>Date & Time</div>
+              <div style={{ flex: '1.5' }}>Table / Type</div>
+              <div style={{ flex: '1.5' }}>Staff</div>
+              <div style={{ flex: '1', textAlign: 'right', paddingRight: 16 }}>Amount</div>
+              <div style={{ flex: '1' }}>Status</div>
+              <div style={{ flex: '1', textAlign: 'right' }}>Actions</div>
             </div>
-            
-            {/* Pagination Controls */}
-            {bills.length > ITEMS_PER_PAGE && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderTop: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                  Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, bills.length)} of {bills.length} bills
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button 
-                    className="btn btn-secondary btn-sm" 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            <div style={{ height: 'calc(100vh - 350px)' }}>
+              <AutoSizer>
+                {({ height, width }) => (
+                  <List
+                    height={height}
+                    itemCount={bills.length}
+                    itemSize={70}
+                    width={width}
+                    itemData={{ bills, invoiceCounts, setSelectedBill }}
                   >
-                    <CaretLeft weight="bold" /> Prev
-                  </button>
-                  <button 
-                    className="btn btn-secondary btn-sm" 
-                    disabled={currentPage >= Math.ceil(bills.length / ITEMS_PER_PAGE)}
-                    onClick={() => setCurrentPage(p => p + 1)}
-                  >
-                    Next <CaretRight weight="bold" />
-                  </button>
-                </div>
-              </div>
-            )}
+                    {({ index, style, data }) => {
+                      const bill = data.bills[index];
+                      const counts = data.invoiceCounts;
+                      return (
+                        <div style={{ ...style, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: '1px solid var(--border)', opacity: bill.status === 'void' ? 0.6 : 1 }}>
+                          <div style={{ flex: '1.5', fontWeight: 600 }}>
+                            {bill.invoiceNumber}
+                            {counts[bill.invoiceNumber] > 1 && (
+                              <span title="This invoice number appears more than once due to a prior sync bug. Check items and void the incorrect one."
+                                style={{ marginLeft: 6, fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontWeight: 700, cursor: 'help' }}
+                              >⚠ DUP</span>
+                            )}
+                          </div>
+                          <div style={{ flex: '2' }}>
+                            <div style={{ fontSize: '0.875rem' }}>{new Date(bill.createdAt).toLocaleDateString('en-IN')}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              {new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                          <div style={{ flex: '1.5', textTransform: 'capitalize' }}>
+                            {bill.tableNumber ? `Table ${bill.tableNumber}` : bill.orderType}
+                          </div>
+                          <div style={{ flex: '1.5' }}>{bill.staffName}</div>
+                          <div style={{ flex: '1', fontWeight: 700, textAlign: 'right', paddingRight: 16 }}>{formatAmount(bill.totalAmount)}</div>
+                          <div style={{ flex: '1' }}>
+                            {bill.status === 'void' ? (
+                              <span className="badge badge-error">Voided</span>
+                            ) : (
+                              <span className="badge badge-success">Paid</span>
+                            )}
+                          </div>
+                          <div style={{ flex: '1', textAlign: 'right' }}>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => data.setSelectedBill(bill)}
+                            >
+                              <Eye size={16} /> View
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  </List>
+                )}
+              </AutoSizer>
+            </div>
             
             </>
           )}

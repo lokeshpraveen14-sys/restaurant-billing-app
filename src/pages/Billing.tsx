@@ -18,12 +18,14 @@ import { PrinterRole } from '../types';
 export default function Billing() {
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get('order');
-  const { orders, updateOrderStatus } = useOrderStore();
+  const orders = useOrderStore(s => s.orders);
+  const updateOrderStatus = useOrderStore(s => s.updateOrderStatus);
   const order = orders.find((o) => o.id === orderId);
-  const { updateTableStatus } = useTableStore();
-  const { settings, incrementInvoiceCounter } = useSettingsStore();
-  const { addBill } = useBillStore();
-  const { addBillToShift } = useShiftStore();
+  const updateTableStatus = useTableStore(s => s.updateTableStatus);
+  const settings = useSettingsStore(s => s.settings);
+  const incrementInvoiceCounter = useSettingsStore(s => s.incrementInvoiceCounter);
+  const addBill = useBillStore(s => s.addBill);
+  const addBillToShift = useShiftStore(s => s.addBillToShift);
   const toast = useToast();
   const cartItems = order?.items.filter((i) => i.status !== 'void') || [];
 

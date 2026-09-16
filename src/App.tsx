@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore, hasPermission } from './store/authStore';
 import { useUIStore } from './store/uiStore';
@@ -14,25 +14,38 @@ import { useStaffStore } from './store/staffStore';
 import Sidebar from './components/layout/Sidebar';
 import ToastContainer from './components/ui/ToastContainer';
 
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import TableManagement from './pages/TableManagement';
-import OrderTaking from './pages/OrderTaking';
-import KitchenDisplay from './pages/KitchenDisplay';
-import Billing from './pages/Billing';
-import MenuManagement from './pages/MenuManagement';
-import Inventory from './pages/Inventory';
-import Reports from './pages/Reports';
-import GstFiling from './pages/GstFiling';
-import Settings from './pages/Settings';
-import BakeryCounter from './pages/BakeryCounter';
-import JuiceCounter from './pages/JuiceCounter';
-import StaffManagement from './pages/StaffManagement';
-import BillHistory from './pages/BillHistory';
-import ShiftManagement from './pages/ShiftManagement';
-import Analytics from './pages/Analytics';
-import HeadCount from './pages/HeadCount';
-import Accounting from './pages/Accounting';
+// Lazy loaded pages
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const TableManagement = lazy(() => import('./pages/TableManagement'));
+const OrderTaking = lazy(() => import('./pages/OrderTaking'));
+const KitchenDisplay = lazy(() => import('./pages/KitchenDisplay'));
+const Billing = lazy(() => import('./pages/Billing'));
+const MenuManagement = lazy(() => import('./pages/MenuManagement'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Reports = lazy(() => import('./pages/Reports'));
+const GstFiling = lazy(() => import('./pages/GstFiling'));
+const Settings = lazy(() => import('./pages/Settings'));
+const BakeryCounter = lazy(() => import('./pages/BakeryCounter'));
+const JuiceCounter = lazy(() => import('./pages/JuiceCounter'));
+const StaffManagement = lazy(() => import('./pages/StaffManagement'));
+const BillHistory = lazy(() => import('./pages/BillHistory'));
+const ShiftManagement = lazy(() => import('./pages/ShiftManagement'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const HeadCount = lazy(() => import('./pages/HeadCount'));
+const Accounting = lazy(() => import('./pages/Accounting'));
+
+function PageSkeleton() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%', color: 'var(--text-muted)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+        <div className="spinner" style={{ width: 32, height: 32, border: '3px solid var(--border)', borderTopColor: 'var(--brand-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+        <span>Loading...</span>
+      </div>
+    </div>
+  );
+}
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, mobileSidebarOpen, setMobileSidebar } = useUIStore();
@@ -50,7 +63,9 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       )}
 
       <main className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-        {children}
+        <Suspense fallback={<PageSkeleton />}>
+          {children}
+        </Suspense>
       </main>
 
       <ToastContainer />
@@ -124,7 +139,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+        <Route path="/login" element={<Suspense fallback={<PageSkeleton />}>{isAuthenticated ? <Navigate to="/" replace /> : <Login />}</Suspense>} />
 
         <Route
           path="/*"

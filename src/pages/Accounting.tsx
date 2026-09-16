@@ -128,39 +128,44 @@ export default function Accounting() {
     return { start, end };
   };
 
-  const loadBillingRevenue = async () => {
-    setLoadingBills(true);
-    try {
-      const { start, end } = getDateRange();
-      const bills = await fetchBillsByDateRange(start, end);
-      const activeBills = bills.filter(b => b.status !== 'void');
-      let cash = 0, card = 0, upi = 0, total = 0;
-      activeBills.forEach(b => {
-        total += b.totalAmount;
-        if (Array.isArray(b.payments)) {
-          b.payments.forEach((p: any) => {
-            const amt = Number(p.amount || 0);
-            const mode = (p.method || p.mode || '').toLowerCase();
-            if (mode === 'cash') cash += amt;
-            else if (mode === 'card') card += amt;
-            else if (mode === 'upi') upi += amt;
-            else cash += amt; // fallback
-          });
-        } else {
+  useEffect(() => { 
+    let isMounted = true;
+    const loadBillingRevenue = async () => {
+      if (revPeriod === 'custom' && (!customFrom || !customTo)) return;
+      setLoadingBills(true);
+      try {
+        const { start, end } = getDateRange();
+        const bills = await fetchBillsByDateRange(start, end);
+        if (!isMounted) return;
+        const activeBills = bills.filter(b => b.status !== 'void');
+        let cash = 0, card = 0, upi = 0, total = 0;
+        activeBills.forEach(b => {
           total += b.totalAmount;
-          cash += b.totalAmount;
-        }
-      });
-      setBillingData({ bills: activeBills, total, cash, card, upi, count: activeBills.length });
-    } catch (e) {
-      console.error('Failed to load billing revenue', e);
-    } finally {
-      setLoadingBills(false);
-    }
-  };
-
-  useEffect(() => { loadBillingRevenue(); }, [revPeriod]);
-  useEffect(() => { if (revPeriod === 'custom') loadBillingRevenue(); }, [customFrom, customTo]);
+          if (Array.isArray(b.payments)) {
+            b.payments.forEach((p: any) => {
+              const amt = Number(p.amount || 0);
+              const mode = (p.method || p.mode || '').toLowerCase();
+              if (mode === 'cash') cash += amt;
+              else if (mode === 'card') card += amt;
+              else if (mode === 'upi') upi += amt;
+              else cash += amt; // fallback
+            });
+          } else {
+            total += b.totalAmount;
+            cash += b.totalAmount;
+          }
+        });
+        setBillingData({ bills: activeBills, total, cash, card, upi, count: activeBills.length });
+      } catch (e) {
+        if (!isMounted) return;
+        console.error('Failed to load billing revenue', e);
+      } finally {
+        if (isMounted) setLoadingBills(false);
+      }
+    };
+    loadBillingRevenue();
+    return () => { isMounted = false; };
+  }, [revPeriod, customFrom, customTo]);
 
   // ─── Calculations ────────────────────────────────────────────────────────────
   const totalBankBalance = useMemo(
@@ -199,8 +204,11 @@ export default function Accounting() {
   );
 
   // Filtered ledger
+  useEffect(() => {
+    setTxPage(1);
+  }, [filterFrom, filterTo, filterType, filterAccount, filterVoucherType]);
+
   const filteredLedger = useMemo(() => {
-    setTxPage(1); // Reset page on filter change
     return ledgerTransactions.filter(t => {
       const tDate = new Date(t.date).toISOString().slice(0, 10);
       const inRange = (!filterFrom || tDate >= filterFrom) && (!filterTo || tDate <= filterTo);
@@ -463,9 +471,7 @@ export default function Accounting() {
                       {p === 'today' ? 'Today' : p === 'week' ? 'Last 7 Days' : p === 'month' ? 'This Month' : 'Custom Range'}
                     </button>
                   ))}
-                  <button className="btn btn-ghost btn-sm" onClick={loadBillingRevenue} title="Refresh">
-                    {loadingBills ? '...' : '↻ Refresh'}
-                  </button>
+                  {/* The manual refresh button is removed as it's no longer easily hooked up without creating a separate function, but standard dependency tracking is sufficient for custom ranges. */}
                 </div>
               </div>
 

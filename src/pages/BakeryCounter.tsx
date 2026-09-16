@@ -24,13 +24,19 @@ interface CartEntry {
 }
 
 export default function BakeryCounter() {
-  const { items, categories } = useMenuStore();
-  const { addBill } = useBillStore();
-  const { settings, incrementInvoiceCounter } = useSettingsStore();
+  const items = useMenuStore(s => s.items);
+  const categories = useMenuStore(s => s.categories);
+  const addBill = useBillStore(s => s.addBill);
+  const settings = useSettingsStore(s => s.settings);
+  const incrementInvoiceCounter = useSettingsStore(s => s.incrementInvoiceCounter);
   const toast = useToast();
-  const bakeryCategories = categories.filter((c) => c.type === 'bakery');
-  const bakeryCategoryIds = bakeryCategories.map((c) => c.id);
-  const bakeryItems = items.filter((i) => i.isBakery || bakeryCategoryIds.includes(i.categoryId));
+  
+  const { bakeryCategories, bakeryItems } = React.useMemo(() => {
+    const bCats = categories.filter((c) => c.type === 'bakery');
+    const bCatIds = bCats.map((c) => c.id);
+    const bItems = items.filter((i) => i.isBakery || bCatIds.includes(i.categoryId));
+    return { bakeryCategories: bCats, bakeryItems: bItems };
+  }, [categories, items]);
 
   const [cart, setCart] = useState<CartEntry[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);

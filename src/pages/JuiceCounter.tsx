@@ -24,15 +24,20 @@ interface CartEntry {
 }
 
 export default function JuiceCounter() {
-  const { items, categories } = useMenuStore();
-  const { addBill } = useBillStore();
-  const { addBillToShift } = useShiftStore();
-  const { settings, incrementInvoiceCounter } = useSettingsStore();
+  const items = useMenuStore(s => s.items);
+  const categories = useMenuStore(s => s.categories);
+  const addBill = useBillStore(s => s.addBill);
+  const addBillToShift = useShiftStore(s => s.addBillToShift);
+  const settings = useSettingsStore(s => s.settings);
+  const incrementInvoiceCounter = useSettingsStore(s => s.incrementInvoiceCounter);
   const toast = useToast();
 
-  const juiceCategories = categories.filter((c) => c.type === 'juice');
-  const juiceCategoryIds = juiceCategories.map((c) => c.id);
-  const juiceItems = items.filter((i) => i.isJuice || juiceCategoryIds.includes(i.categoryId));
+  const { juiceCategories, juiceItems } = React.useMemo(() => {
+    const jCats = categories.filter((c) => c.type === 'juice');
+    const jCatIds = jCats.map((c) => c.id);
+    const jItems = items.filter((i) => i.isJuice || jCatIds.includes(i.categoryId));
+    return { juiceCategories: jCats, juiceItems: jItems };
+  }, [categories, items]);
 
   const [cart, setCart] = useState<CartEntry[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);

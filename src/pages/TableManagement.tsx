@@ -20,8 +20,15 @@ function formatElapsed(since: Date | undefined): string {
 }
 
 export default function TableManagement() {
-  const { tables, getTablesBySection, updateTableStatus, addTable } = useTableStore();
-  const { getOrdersByTable, voidOrder, updateOrderStatus } = useOrderStore();
+  const tables = useTableStore(s => s.tables);
+  const getTablesBySection = useTableStore(s => s.getTablesBySection);
+  const updateTableStatus = useTableStore(s => s.updateTableStatus);
+  const addTable = useTableStore(s => s.addTable);
+  
+  const getOrdersByTable = useOrderStore(s => s.getOrdersByTable);
+  const voidOrder = useOrderStore(s => s.voidOrder);
+  const updateOrderStatus = useOrderStore(s => s.updateOrderStatus);
+
   const navigate = useNavigate();
   const toast = useToast();
   const [activeSection, setActiveSection] = useState('All');

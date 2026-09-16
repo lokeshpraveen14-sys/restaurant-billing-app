@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useOrderStore } from '../store/orderStore';
 import { supabase } from '../lib/supabase';
 import { Order, OrderItem, OrderType, OrderStatus } from '../types';
@@ -25,18 +25,22 @@ function mapDbOrder(o: any): Order {
   };
 }
 
-function useElapsed(since: Date) {
+function useElapsed(sinceTime: number) {
   const [elapsed, setElapsed] = useState(0);
+  
   useEffect(() => {
     const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+      setElapsed(Math.floor((Date.now() - sinceTime) / 1000));
     }, 1000);
+    // run immediately once
+    setElapsed(Math.floor((Date.now() - sinceTime) / 1000));
     return () => clearInterval(interval);
-  }, [since]);
+  }, [sinceTime]);
+  
   return elapsed;
 }
 
-function KDSTimer({ since }: { since: Date }) {
+const KDSTimer = memo(({ since }: { since: number }) => {
   const elapsed = useElapsed(since);
   const mins = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
@@ -46,13 +50,13 @@ function KDSTimer({ since }: { since: Date }) {
       <span className="kds-timer">{String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}</span>
     </div>
   );
-}
+});
 
-function KDSCard({ order, onUpdateItemStatus, onUpdateOrderStatus }: {
+const KDSCard = memo(({ order, onUpdateItemStatus, onUpdateOrderStatus }: {
   order: Order;
   onUpdateItemStatus: (orderId: string, itemId: string, status: OrderItem['status']) => void;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
-}) {
+}) => {
   const elapsed = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
   const urgency = elapsed >= 20 ? 'urgent' : elapsed >= 10 ? 'warn' : 'fresh';
   const allReady = order.items.every((i) => i.status === 'ready' || i.status === 'served' || i.status === 'void');
@@ -66,7 +70,7 @@ function KDSCard({ order, onUpdateItemStatus, onUpdateOrderStatus }: {
           </div>
           <div className="kds-table">{order.items.length} items • {order.staffName}</div>
         </div>
-        <KDSTimer since={order.createdAt} />
+        <KDSTimer since={new Date(order.createdAt).getTime()} />
       </div>
 
       <div className="kds-items">
@@ -134,10 +138,11 @@ function KDSCard({ order, onUpdateItemStatus, onUpdateOrderStatus }: {
       </div>
     </div>
   );
-}
+});
 
 export default function KitchenDisplay() {
-  const { updateItemStatus, updateOrderStatus } = useOrderStore();
+  const updateItemStatus = useOrderStore(s => s.updateItemStatus);
+  const updateOrderStatus = useOrderStore(s => s.updateOrderStatus);
 
   // KDS manages its own independent orders state fetched directly from Supabase
   // This ensures it ALWAYS shows the latest data regardless of other devices' local state
@@ -146,7 +151,7 @@ export default function KitchenDisplay() {
   const [connected, setConnected] = useState(false);
   const channelRef = useRef<any>(null);
 
-  const fetchKitchenOrders = async () => {
+  const fetchKitchenOrders = useCallback(async () => {
     const { data, error } = await supabase
       .from('orders')
       .select('*')
@@ -156,7 +161,7 @@ export default function KitchenDisplay() {
       setKdsOrders(data.map(mapDbOrder));
       setLastSync(new Date());
     }
-  };
+  }, []);
 
   useEffect(() => {
     // 1. Fetch immediately
@@ -209,7 +214,7 @@ export default function KitchenDisplay() {
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, []);
+  }, [fetchKitchenOrders]);
 
   const activeOrders = kdsOrders.filter(o => ['kot_sent', 'preparing'].includes(o.status));
 
