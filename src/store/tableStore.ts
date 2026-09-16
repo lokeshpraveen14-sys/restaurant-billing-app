@@ -5,24 +5,7 @@ import { supabase } from '../lib/supabase';
 
 const INITIAL_TABLES: Table[] = [
   // Main Hall
-  { id: 't1', number: 'T1', capacity: 2, status: 'free', section: 'Main Hall' },
-  { id: 't2', number: 'T2', capacity: 2, status: 'free', section: 'Main Hall' },
-  { id: 't3', number: 'T3', capacity: 4, status: 'free', section: 'Main Hall' },
-  { id: 't4', number: 'T4', capacity: 4, status: 'free', section: 'Main Hall' },
-  { id: 't5', number: 'T5', capacity: 6, status: 'free', section: 'Main Hall' },
-  { id: 't6', number: 'T6', capacity: 4, status: 'free', section: 'Main Hall' },
-  { id: 't7', number: 'T7', capacity: 2, status: 'free', section: 'Main Hall' },
-  { id: 't8', number: 'T8', capacity: 4, status: 'free', section: 'Main Hall' },
-  // Garden
-  { id: 't9', number: 'G1', capacity: 4, status: 'free', section: 'Garden' },
-  { id: 't10', number: 'G2', capacity: 4, status: 'free', section: 'Garden' },
-  { id: 't11', number: 'G3', capacity: 6, status: 'free', section: 'Garden' },
-  { id: 't12', number: 'G4', capacity: 8, status: 'free', section: 'Garden' },
-  // AC Dining
-  { id: 't13', number: 'A1', capacity: 2, status: 'free', section: 'AC Dining' },
-  { id: 't14', number: 'A2', capacity: 4, status: 'free', section: 'AC Dining' },
-  { id: 't15', number: 'A3', capacity: 4, status: 'free', section: 'AC Dining' },
-  { id: 't16', number: 'A4', capacity: 6, status: 'free', section: 'AC Dining' },
+
 ];
 
 interface TableState {
@@ -48,20 +31,20 @@ export const useTableStore = create<TableState>()(
           tables: state.tables.map((t) =>
             t.id === tableId
               ? {
-                  ...t,
-                  status,
-                  ...extras,
-                  ...(status === 'occupied' && !t.occupiedSince
-                    ? { occupiedSince: new Date() }
-                    : {}),
-                  ...(status === 'free'
-                    ? { occupiedSince: undefined, currentOrderId: undefined, reservedFor: undefined }
-                    : {}),
-                }
+                ...t,
+                status,
+                ...extras,
+                ...(status === 'occupied' && !t.occupiedSince
+                  ? { occupiedSince: new Date() }
+                  : {}),
+                ...(status === 'free'
+                  ? { occupiedSince: undefined, currentOrderId: undefined, reservedFor: undefined }
+                  : {}),
+              }
               : t
           ),
         }));
-        
+
         const updatedTable = get().tables.find(t => t.id === tableId);
         if (updatedTable) {
           await supabase.from('restaurant_tables').update({
@@ -81,10 +64,10 @@ export const useTableStore = create<TableState>()(
           ...tableData,
           status: 'free' as TableStatus,
         };
-        
+
         // Optimistic UI update
         set((state) => ({ tables: [...state.tables, newTable] }));
-        
+
         // Push to Supabase
         try {
           await supabase.from('restaurant_tables').insert([{
@@ -109,7 +92,7 @@ export const useTableStore = create<TableState>()(
           if (data.number !== undefined) updateData.table_number = data.number;
           if (data.capacity !== undefined) updateData.capacity = data.capacity;
           if (data.section !== undefined) updateData.section = data.section;
-          
+
           if (Object.keys(updateData).length > 0) {
             await supabase.from('restaurant_tables').update(updateData).eq('id', tableId);
           }
