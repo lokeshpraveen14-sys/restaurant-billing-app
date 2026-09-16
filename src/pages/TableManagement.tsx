@@ -3,10 +3,9 @@ import { useTableStore } from '../store/tableStore';
 import { useOrderStore } from '../store/orderStore';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../store/uiStore';
-import { Table, Plus, Users, GitMerge, ArrowsSplit, MapTrifold, SquaresFour, PencilSimple, Trash } from '@phosphor-icons/react';
+import { Table, Plus, Users, GitMerge, ArrowsSplit, SquaresFour, PencilSimple, Trash } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { TableStatus, Table as TableType } from '../types';
-import FloorPlanMap from '../components/tables/FloorPlanMap';
 
 const STATUS_LABELS: Record<TableStatus, string> = {
   free: 'Free', occupied: 'Occupied', reserved: 'Reserved', billing: 'Billing', cleaning: 'Cleaning', merged: 'Merged',
@@ -24,6 +23,7 @@ export default function TableManagement() {
   const getTablesBySection = useTableStore(s => s.getTablesBySection);
   const updateTableStatus = useTableStore(s => s.updateTableStatus);
   const addTable = useTableStore(s => s.addTable);
+  const deleteTable = useTableStore(s => s.deleteTable);
   
   const getOrdersByTable = useOrderStore(s => s.getOrdersByTable);
   const voidOrder = useOrderStore(s => s.voidOrder);
@@ -32,9 +32,6 @@ export default function TableManagement() {
   const navigate = useNavigate();
   const toast = useToast();
   const [activeSection, setActiveSection] = useState('All');
-  
-  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
-  const [isEditMode, setIsEditMode] = useState(false);
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTable, setNewTable] = useState({
@@ -48,8 +45,6 @@ export default function TableManagement() {
   const [reservationDetails, setReservationDetails] = useState('');
   const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order' | 'merge'>('seat');
   const [editTableData, setEditTableData] = useState({ number: '', capacity: '4', section: '' });
-
-  const [geometryModalTable, setGeometryModalTable] = useState<TableType | null>(null);
   const [mergeSelectedChild, setMergeSelectedChild] = useState('');
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
 
@@ -169,20 +164,6 @@ export default function TableManagement() {
     }
   };
 
-  const handleGeometrySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!geometryModalTable) return;
-    
-    const fd = new FormData(e.target as HTMLFormElement);
-    useTableStore.getState().updateTable(geometryModalTable.id, {
-      shape: fd.get('shape') as any,
-      width: parseInt(fd.get('width') as string),
-      height: parseInt(fd.get('height') as string),
-      rotation: parseInt(fd.get('rotation') as string),
-    });
-    toast.success('Updated', 'Table geometry saved');
-    setGeometryModalTable(null);
-  };
 
   const handleMergeSubmit = () => {
     if (!actionModal || !mergeSelectedChild) return;
@@ -207,20 +188,20 @@ export default function TableManagement() {
     toast.success('Un-merged', 'Tables are now separated');
   };
 
+  const handleDeleteTable = async (tableId: string) => {
+    if (confirm('Are you sure you want to delete this table? This cannot be undone.')) {
+      await deleteTable(tableId);
+      toast.success('Table Deleted', 'The table has been removed successfully.');
+      setActionModal(null);
+    }
+  };
+
   return (
     <>
       <TopBar
         title="Table Management"
         actions={
           <div style={{ display: 'flex', gap: '8px' }}>
-            {viewMode === 'map' && (
-              <button 
-                className={`btn ${isEditMode ? 'btn-primary' : 'btn-outline'} btn-sm`} 
-                onClick={() => setIsEditMode(!isEditMode)}
-              >
-                <PencilSimple size={16} /> {isEditMode ? 'Done' : 'Edit Layout'}
-              </button>
-            )}
             <button className="btn btn-primary btn-sm" onClick={() => setIsAddModalOpen(true)}>
               <Plus size={16} /> Add Table
             </button>
@@ -257,21 +238,6 @@ export default function TableManagement() {
               </button>
             ))}
           </div>
-          
-          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-secondary)', padding: 4, borderRadius: 8 }}>
-            <button 
-              onClick={() => { setViewMode('grid'); setIsEditMode(false); }}
-              style={{ padding: '6px 12px', border: 'none', background: viewMode === 'grid' ? 'var(--surface)' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', boxShadow: viewMode === 'grid' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', fontWeight: viewMode === 'grid' ? 600 : 400 }}
-            >
-              <SquaresFour size={16} /> Grid
-            </button>
-            <button 
-              onClick={() => setViewMode('map')}
-              style={{ padding: '6px 12px', border: 'none', background: viewMode === 'map' ? 'var(--surface)' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', boxShadow: viewMode === 'map' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', fontWeight: viewMode === 'map' ? 600 : 400 }}
-            >
-              <MapTrifold size={16} /> Map
-            </button>
-          </div>
         </div>
 
         {/* Legend */}
@@ -284,15 +250,6 @@ export default function TableManagement() {
           ))}
         </div>
 
-        {/* Floor Plan / Grid */}
-        {viewMode === 'map' ? (
-          <FloorPlanMap 
-            tables={displayTables} 
-            isEditMode={isEditMode} 
-            onTableClick={handleTableClick} 
-            onEditTableConfig={(t) => setGeometryModalTable(t)}
-          />
-        ) : (
           <div className="grid grid-tables" style={{ gap: 'var(--space-4)' }}>
             {displayTables.filter(t => t.status !== 'merged').map((table) => {
               const activeOrders = getOrdersByTable(table.id, table.number);
@@ -341,7 +298,6 @@ export default function TableManagement() {
             );
           })}
         </div>
-        )}
       </div>
 
       {isAddModalOpen && (
@@ -596,6 +552,17 @@ export default function TableManagement() {
                           </datalist>
                         </div>
                       </div>
+                      
+                      {/* Delete Table Action */}
+                      <div style={{ marginTop: 16 }}>
+                        <button 
+                          className="btn btn-outline btn-sm" 
+                          style={{ width: '100%', color: 'var(--danger)', borderColor: 'var(--danger)' }} 
+                          onClick={() => handleDeleteTable(actionModal.tableId)}
+                        >
+                          <Trash size={16} /> Delete Table
+                        </button>
+                      </div>
                     </>
                   )}
 
@@ -642,45 +609,6 @@ export default function TableManagement() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Geometry Edit Modal */}
-      {geometryModalTable && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-          <div className="card" style={{ width: 350, maxWidth: '90vw' }}>
-            <div className="card-header">
-              <div className="card-title">Edit Geometry: {geometryModalTable.number}</div>
-            </div>
-            <form onSubmit={handleGeometrySubmit} style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Shape</label>
-                <select name="shape" className="input" defaultValue={geometryModalTable.shape || 'square'}>
-                  <option value="square">Square</option>
-                  <option value="rectangle">Rectangle</option>
-                  <option value="round">Round</option>
-                </select>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Width (px)</label>
-                  <input name="width" type="number" className="input" defaultValue={geometryModalTable.width || 60} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Height (px)</label>
-                  <input name="height" type="number" className="input" defaultValue={geometryModalTable.height || 60} />
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>Rotation (degrees)</label>
-                <input name="rotation" type="number" className="input" defaultValue={geometryModalTable.rotation || 0} />
-              </div>
-              <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setGeometryModalTable(null)}>Cancel</button>
-              </div>
-            </form>
           </div>
         </div>
       )}

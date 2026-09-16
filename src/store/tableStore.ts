@@ -35,6 +35,7 @@ interface TableState {
   updateTablePosition: (tableId: string, posX: number, posY: number) => void;
   mergeTables: (tableIds: string[]) => void;
   splitTable: (tableId: string) => void;
+  deleteTable: (tableId: string) => Promise<void>;
   getTablesBySection: () => Record<string, Table[]>;
   initTableSync: () => void;
 }
@@ -190,6 +191,17 @@ export const useTableStore = create<TableState>()(
         childIds.forEach(id => {
           get().updateTableStatus(id, 'free', { mergedInto: undefined });
         });
+      },
+
+      deleteTable: async (tableId: string) => {
+        set((state) => ({
+          tables: state.tables.filter((t) => t.id !== tableId),
+        }));
+        try {
+          await supabase.from('restaurant_tables').delete().eq('id', tableId);
+        } catch (error) {
+          console.error('Failed to delete table:', error);
+        }
       },
 
       getTablesBySection: () => {
