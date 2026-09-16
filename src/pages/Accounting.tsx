@@ -5,7 +5,7 @@ import { useToast } from '../store/uiStore';
 import {
   Bank, Wallet, Buildings, FileText, Plus, Trash, PencilSimple,
   CurrencyInr, X, ArrowUp, ArrowDown, BookOpen, Receipt, HandCoins,
-  ChartPie, Funnel, CaretDown, CaretUp, CheckCircle, ShoppingCart, Info
+  ChartPie, Funnel, CaretDown, CaretUp, CheckCircle, ShoppingCart, Info, CaretLeft, CaretRight
 } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { formatAmount } from '../lib/gst';
@@ -61,6 +61,9 @@ export default function Accounting() {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterAccount, setFilterAccount] = useState<string>('all');
   const [filterVoucherType, setFilterVoucherType] = useState<string>('all');
+  
+  const [txPage, setTxPage] = useState(1);
+  const TX_PAGE_SIZE = 50;
 
   // Forms
   const [bankForm, setBankForm] = useState({ accountName: '', accountNumber: '', bankName: '', openingBalance: 0, accountType: 'current' as 'current' | 'savings' | 'cash' });
@@ -197,6 +200,7 @@ export default function Accounting() {
 
   // Filtered ledger
   const filteredLedger = useMemo(() => {
+    setTxPage(1); // Reset page on filter change
     return ledgerTransactions.filter(t => {
       const tDate = new Date(t.date).toISOString().slice(0, 10);
       const inRange = (!filterFrom || tDate >= filterFrom) && (!filterTo || tDate <= filterTo);
@@ -763,9 +767,11 @@ export default function Accounting() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLedger.map(tx => {
-                    const entityName = tx.accountType === 'vendor'
-                      ? vendors.find(v => v.id === tx.accountId)?.name
+                  {(() => {
+                    const paginatedTx = filteredLedger.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
+                    return paginatedTx.map(tx => {
+                      const entityName = tx.accountType === 'vendor'
+                        ? vendors.find(v => v.id === tx.accountId)?.name
                       : tx.accountType === 'bank'
                         ? bankAccounts.find(b => b.id === tx.accountId)?.accountName
                         : 'Cash';
@@ -822,7 +828,8 @@ export default function Accounting() {
                         </td>
                       </tr>
                     );
-                  })}
+                  });
+                })()}
                   {filteredLedger.length === 0 && (
                     <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No entries in selected range</td></tr>
                   )}
@@ -843,6 +850,31 @@ export default function Accounting() {
                 )}
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {filteredLedger.length > TX_PAGE_SIZE && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                  Showing {((txPage - 1) * TX_PAGE_SIZE) + 1} to {Math.min(txPage * TX_PAGE_SIZE, filteredLedger.length)} of {filteredLedger.length} entries
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    disabled={txPage === 1}
+                    onClick={() => setTxPage(p => Math.max(1, p - 1))}
+                  >
+                    <CaretLeft weight="bold" /> Prev
+                  </button>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    disabled={txPage >= Math.ceil(filteredLedger.length / TX_PAGE_SIZE)}
+                    onClick={() => setTxPage(p => p + 1)}
+                  >
+                    Next <CaretRight weight="bold" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

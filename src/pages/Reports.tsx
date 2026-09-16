@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatAmount, GST_STATE_CODES } from '../lib/gst';
-import { ChartBar, Download, Calendar, TrendUp, Package, FilePdf } from '@phosphor-icons/react';
+import { ChartBar, Download, Calendar, TrendUp, Package, FilePdf, CaretLeft, CaretRight } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useBillStore } from '../store/billStore';
 import { useAuthStore } from '../store/authStore';
@@ -52,6 +52,8 @@ export default function Reports() {
   const [itemCategoryFilter, setItemCategoryFilter] = useState<string>('all');
   const [itemSearch, setItemSearch] = useState('');
   const [itemSortBy, setItemSortBy] = useState<'qty' | 'gross' | 'net' | 'gst' | 'name'>('qty');
+  const [itemPage, setItemPage] = useState(1);
+  const ITEM_PAGE_SIZE = 50;
 
   const { fetchBillsByDateRange, bills: localBills } = useBillStore();
   const { categories, items: menuItems } = useMenuStore();
@@ -84,7 +86,7 @@ export default function Reports() {
   };
 
   const loadBills = async () => { setLoading(true); const { start, end } = getDateRange(datePreset, customFrom, customTo); setBills(await fetchFiltered(start, end)); setLoading(false); };
-  const loadItemBills = async () => { setItemLoading(true); const { start, end } = getDateRange(itemDatePreset, itemCustomFrom, itemCustomTo); setItemBills(await fetchFiltered(start, end)); setItemLoading(false); };
+  const loadItemBills = async () => { setItemLoading(true); setItemPage(1); const { start, end } = getDateRange(itemDatePreset, itemCustomFrom, itemCustomTo); setItemBills(await fetchFiltered(start, end)); setItemLoading(false); };
 
   // Overview
   const totalRevenue = bills.reduce((s, b) => s + b.totalAmount, 0);
@@ -226,6 +228,7 @@ export default function Reports() {
               {itemLoading ? (
                 <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
               ) : (
+                <>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="data-table">
                     <thead>
@@ -251,27 +254,31 @@ export default function Reports() {
                       </tr>
                     </thead>
                     <tbody>
-                      {ITEM_STATS.map((item, i) => {
-                        const cat = categories.find(c => c.id === item.categoryId);
-                        return (
-                          <tr key={item.id}>
-                            <td style={{ color: 'var(--text-muted)', fontWeight: 600 }}>#{i + 1}</td>
-                            <td style={{ fontWeight: 600 }}>{item.name}</td>
-                            <td><span className="badge badge-muted" style={{ fontSize: '0.7rem' }}>{cat?.name || '—'}</span></td>
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                                <div style={{ width: 50, height: 5, background: 'var(--border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                                  <div style={{ width: `${Math.min(100, (item.qty / (ITEM_STATS[0]?.qty || 1)) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: 'inherit' }} />
+                      {(() => {
+                        const paginatedItems = ITEM_STATS.slice((itemPage - 1) * ITEM_PAGE_SIZE, itemPage * ITEM_PAGE_SIZE);
+                        return paginatedItems.map((item, i) => {
+                          const cat = categories.find(c => c.id === item.categoryId);
+                          const absoluteIndex = ((itemPage - 1) * ITEM_PAGE_SIZE) + i + 1;
+                          return (
+                            <tr key={item.id}>
+                              <td style={{ color: 'var(--text-muted)', fontWeight: 600 }}>#{absoluteIndex}</td>
+                              <td style={{ fontWeight: 600 }}>{item.name}</td>
+                              <td><span className="badge badge-muted" style={{ fontSize: '0.7rem' }}>{cat?.name || '—'}</span></td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                                  <div style={{ width: 50, height: 5, background: 'var(--border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                                    <div style={{ width: `${Math.min(100, (item.qty / (ITEM_STATS[0]?.qty || 1)) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: 'inherit' }} />
+                                  </div>
+                                  <span style={{ fontWeight: 700 }}>{item.qty}</span>
                                 </div>
-                                <span style={{ fontWeight: 700 }}>{item.qty}</span>
-                              </div>
-                            </td>
-                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.gross)}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--status-billing)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.gst)}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--status-free)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.net)}</td>
-                          </tr>
-                        );
-                      })}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.gross)}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--status-billing)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.gst)}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--status-free)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(item.net)}</td>
+                            </tr>
+                          );
+                        });
+                      })()}
                       {ITEM_STATS.length === 0 && (
                         <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>No sales data for selected filters</td></tr>
                       )}
@@ -287,6 +294,32 @@ export default function Reports() {
                     </tbody>
                   </table>
                 </div>
+                
+                {/* Pagination Controls */}
+                {ITEM_STATS.length > ITEM_PAGE_SIZE && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                      Showing {((itemPage - 1) * ITEM_PAGE_SIZE) + 1} to {Math.min(itemPage * ITEM_PAGE_SIZE, ITEM_STATS.length)} of {ITEM_STATS.length} items
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        disabled={itemPage === 1}
+                        onClick={() => setItemPage(p => Math.max(1, p - 1))}
+                      >
+                        <CaretLeft weight="bold" /> Prev
+                      </button>
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        disabled={itemPage >= Math.ceil(ITEM_STATS.length / ITEM_PAGE_SIZE)}
+                        onClick={() => setItemPage(p => p + 1)}
+                      >
+                        Next <CaretRight weight="bold" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </div>
           </>

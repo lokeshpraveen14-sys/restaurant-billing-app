@@ -5,7 +5,7 @@ import { useToast } from '../store/uiStore';
 import { Bill } from '../types';
 import { formatAmount } from '../lib/gst';
 import { printReceipt, buildBillReceipt } from '../lib/printer';
-import { Receipt, Eye, XCircle, Calendar, WarningCircle, Printer, PencilSimple } from '@phosphor-icons/react';
+import { Receipt, Eye, XCircle, Calendar, WarningCircle, Printer, PencilSimple, CaretLeft, CaretRight } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
@@ -18,10 +18,10 @@ export default function BillHistory() {
   const { updateTableStatus } = useTableStore();
   const toast = useToast();
   const navigate = useNavigate();
-  
+
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('today');
   const [customStart, setCustomStart] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30); d.setHours(0,0,0,0);
+    const d = new Date(); d.setDate(d.getDate() - 30); d.setHours(0, 0, 0, 0);
     return d.toISOString().slice(0, 10);
   });
   const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().slice(0, 10));
@@ -29,15 +29,19 @@ export default function BillHistory() {
   const [loading, setLoading] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
+
   useEffect(() => {
     if (dateRange !== 'custom') loadBills();
   }, [dateRange]);
 
   const loadBills = async () => {
     setLoading(true);
+    setCurrentPage(1);
     const end = new Date();
     const start = new Date();
-    
+
     if (dateRange === 'today') {
       start.setHours(0, 0, 0, 0);
     } else if (dateRange === 'week') {
@@ -48,7 +52,7 @@ export default function BillHistory() {
       start.setHours(0, 0, 0, 0);
     } else if (dateRange === 'custom') {
       const s = new Date(customStart); s.setHours(0, 0, 0, 0);
-      const e = new Date(customEnd);   e.setHours(23, 59, 59, 999);
+      const e = new Date(customEnd); e.setHours(23, 59, 59, 999);
       start.setTime(s.getTime());
       end.setTime(e.getTime());
     }
@@ -77,7 +81,7 @@ export default function BillHistory() {
         return d >= start && d <= end;
       });
     }
-    
+
     // Sort descending by date
     fetchedBills.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setBills(fetchedBills);
@@ -89,7 +93,7 @@ export default function BillHistory() {
     if (!window.confirm('Are you sure you want to void this bill? This action cannot be undone and will remove it from revenue calculations.')) {
       return;
     }
-    
+
     await voidBill(billId);
     toast.success('Bill Voided', 'The bill has been successfully voided.');
     setSelectedBill(null);
@@ -142,23 +146,23 @@ export default function BillHistory() {
   const handleReprint = async (bill: Bill, printerId: string) => {
     const lines = buildBillReceipt({
       restaurantName: settings.restaurantName,
-      address:        settings.address,
-      gstin:          settings.gstin,
-      invoiceNumber:  bill.invoiceNumber,
-      tableNumber:    bill.tableNumber,
-      orderType:      bill.orderType,
-      staffName:      bill.staffName,
-      items:          bill.items,
-      subtotal:       bill.subtotal,
-      totalGST:       bill.totalGST,
-      serviceCharge:  bill.serviceCharge,
-      parcelCharge:   bill.parcelCharge,
+      address: settings.address,
+      gstin: settings.gstin,
+      invoiceNumber: bill.invoiceNumber,
+      tableNumber: bill.tableNumber,
+      orderType: bill.orderType,
+      staffName: bill.staffName,
+      items: bill.items,
+      subtotal: bill.subtotal,
+      totalGST: bill.totalGST,
+      serviceCharge: bill.serviceCharge,
+      parcelCharge: bill.parcelCharge,
       discountAmount: bill.discountAmount,
-      roundOff:       bill.roundOff,
-      totalAmount:    bill.totalAmount,
-      paymentMode:    bill.payments?.[0]?.mode || 'cash',
-      amountPaid:     bill.amountPaid,
-      changeDue:      bill.changeDue,
+      roundOff: bill.roundOff,
+      totalAmount: bill.totalAmount,
+      paymentMode: bill.payments?.[0]?.mode || 'cash',
+      amountPaid: bill.amountPaid,
+      changeDue: bill.changeDue,
     });
     const result = await printReceipt(lines, printerId);
     if (result.success) {
@@ -195,7 +199,7 @@ export default function BillHistory() {
                 onClick={() => setDateRange(r)}
                 style={{ padding: '6px 14px', fontSize: '0.8125rem', textTransform: 'capitalize' }}
               >
-                {r === 'today' ? 'Today' : r === 'custom' ? '📅 Custom' : `This ${r.charAt(0).toUpperCase() + r.slice(1)}`}
+                {r === 'today' ? 'Today' : r === 'custom' ? ' Custom' : `This ${r.charAt(0).toUpperCase() + r.slice(1)}`}
               </button>
             ))}
           </div>
@@ -240,7 +244,7 @@ export default function BillHistory() {
               </span>
             )}
           </div>
-          
+
           {loading ? (
             <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>
               Loading bills...
@@ -249,9 +253,10 @@ export default function BillHistory() {
             <div className="empty-state" style={{ padding: 'var(--space-8)' }}>
               <div className="empty-state-icon"><Receipt size={28} /></div>
               <div className="empty-state-title">No bills found</div>
-              <div className="empty-state-desc">No bills generated in the selected date range.</div>
+              <div className="empty-state-desc">No bills for the selected date range</div>
             </div>
           ) : (
+            <>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
                 <thead>
@@ -270,7 +275,10 @@ export default function BillHistory() {
                     // Pre-compute which invoice numbers appear more than once
                     const invoiceCounts: Record<string, number> = {};
                     bills.forEach(b => { invoiceCounts[b.invoiceNumber] = (invoiceCounts[b.invoiceNumber] || 0) + 1; });
-                    return bills.map((bill) => (
+                    
+                    const paginatedBills = bills.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+                    
+                    return paginatedBills.map((bill) => (
                       <tr key={bill.id} style={{ opacity: bill.status === 'void' ? 0.6 : 1 }}>
                         <td style={{ fontWeight: 600 }}>
                           {bill.invoiceNumber}
@@ -312,6 +320,33 @@ export default function BillHistory() {
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {bills.length > ITEMS_PER_PAGE && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                  Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, bills.length)} of {bills.length} bills
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  >
+                    <CaretLeft weight="bold" /> Prev
+                  </button>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    disabled={currentPage >= Math.ceil(bills.length / ITEMS_PER_PAGE)}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                  >
+                    Next <CaretRight weight="bold" />
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            </>
           )}
         </div>
       </div>
@@ -331,7 +366,7 @@ export default function BillHistory() {
                 <XCircle size={24} />
               </button>
             </div>
-            
+
             <div className="card-body" style={{ overflowY: 'auto', flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: '0.875rem' }}>
                 <div>
@@ -395,7 +430,7 @@ export default function BillHistory() {
                 </div>
               </div>
             </div>
-            
+
             <div className="card-footer" style={{ borderTop: '1px solid var(--border)', padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {/* Reprint Section */}
               {enabledPrinters.length > 0 && selectedBill.status !== 'void' && (

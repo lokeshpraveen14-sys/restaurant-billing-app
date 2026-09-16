@@ -8,7 +8,7 @@ import { formatAmount } from '../lib/gst';
 import { Plus, Minus, Printer, Drop, ShoppingCart, X } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { OrderItem, Bill } from '../types';
-import { calculateGSTBreakdown, gstRoundOff, generateInvoiceNumber } from '../lib/gst';
+import { calculateGSTBreakdown, gstRoundOff, getNextInvoiceNumber, generateInvoiceNumber } from '../lib/gst';
 import { printReceipt, buildBillReceipt, buildKotReceipt, BillPrintData, KotPrintData } from '../lib/printer';
 import { PrinterRole } from '../types';
 
@@ -157,11 +157,16 @@ export default function JuiceCounter() {
   const totalGST = gstBreakdown.reduce((s, g) => s + g.cgst + g.sgst, 0);
   const { rounded } = gstRoundOff(subtotal + totalGST);
 
-  const generateBill = () => {
+  const generateBill = async () => {
     if (!window.confirm('Generate and save bill for these items?')) return;
 
-    const counter = incrementInvoiceCounter();
-    const invoiceNumber = generateInvoiceNumber(settings.invoicePrefix, counter);
+    const invoiceNumber = await getNextInvoiceNumber(
+      settings.invoicePrefix,
+      () => {
+        const counter = incrementInvoiceCounter();
+        return generateInvoiceNumber(settings.invoicePrefix, counter);
+      }
+    );
 
     const mappedItems: OrderItem[] = cart.map((c) => ({
       id: crypto.randomUUID(),

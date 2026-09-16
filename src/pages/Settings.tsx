@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
 import { useMenuStore } from '../store/menuStore';
 import { useToast } from '../store/uiStore';
-import { Gear, Printer, CreditCard, Building, Percent } from '@phosphor-icons/react';
+import { Gear, Printer, CreditCard, Building, Percent, ArrowsClockwise, Warning } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { supabase } from '../lib/supabase';
 
@@ -23,11 +23,32 @@ export default function Settings() {
     toast.success('Settings saved', 'All changes have been applied');
   };
 
+  const handleHardRefresh = () => {
+    if (window.confirm('This will clear local cache and reload the application to ensure you have the latest version. Proceed?')) {
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach(name => {
+            caches.delete(name);
+          });
+        });
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          for (let registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+      window.location.reload();
+    }
+  };
+
   const tabs = [
     { id: 'restaurant', label: 'Restaurant', icon: <Building size={16} /> },
     { id: 'billing', label: 'Billing & Tax', icon: <CreditCard size={16} /> },
     { id: 'gst', label: 'GST Config', icon: <Percent size={16} /> },
     { id: 'printing', label: 'Printing', icon: <Printer size={16} /> },
+    { id: 'system', label: 'System', icon: <Gear size={16} /> },
   ];
 
   const updateCategoryGst = (catId: string, rate: number) => {
@@ -408,6 +429,28 @@ export default function Settings() {
                   </>
                 );
               })()}
+
+              {activeTab === 'system' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ background: 'var(--bg-elevated)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: 'var(--text-primary)', fontWeight: 600 }}>
+                      <ArrowsClockwise size={20} />
+                      Hard Refresh / Update App
+                    </div>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+                      If you are experiencing bugs or the app feels out of sync, clicking this button will clear the browser's application cache and force-download the latest code updates from the server.
+                    </div>
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={handleHardRefresh}
+                      style={{ color: 'var(--status-billing)', borderColor: 'var(--status-billing)' }}
+                    >
+                      <Warning size={16} /> Force Reload & Update
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => setForm({ ...settings })}>Reset</button>
                 <button className="btn btn-primary" onClick={handleSave}>
