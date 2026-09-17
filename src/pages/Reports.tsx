@@ -70,7 +70,7 @@ export default function Reports() {
   const fetchFiltered = async (start: Date, end: Date): Promise<Bill[]> => {
     let result: Bill[] = [];
     try {
-      const supabaseBills = await fetchBillsByDateRange(start, end);
+      const { bills: supabaseBills } = await fetchBillsByDateRange(start, end, 1, 5000);
       const localFiltered = localBills.filter(b => { const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt); return d >= start && d <= end; });
       const allById: Record<string, Bill> = {};
       localFiltered.forEach(b => { allById[b.id] = b; });

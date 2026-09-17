@@ -9,7 +9,7 @@ interface BillState {
   bills: Bill[];
   addBill: (bill: Bill) => Promise<void>;
   voidBill: (billId: string) => Promise<void>;
-  fetchBillsByDateRange: (startDate: Date, endDate: Date) => Promise<Bill[]>;
+  fetchBillsByDateRange: (startDate: Date, endDate: Date, page?: number, limit?: number) => Promise<{ bills: Bill[]; total: number }>;
   initBillSync: () => void;
 }
 
@@ -81,35 +81,25 @@ export const useBillStore = create<BillState>()(
     }
   },
 
-  fetchBillsByDateRange: async (startDate: Date, endDate: Date) => {
-    let allData: any[] = [];
-    let from = 0;
-    const limit = 1000;
-    let hasMore = true;
+  fetchBillsByDateRange: async (startDate: Date, endDate: Date, page = 1, limit = 50) => {
+    // Server-side pagination: only fetch one page at a time to reduce egress
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('bills')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-        .order('created_at', { ascending: false })
-        .range(from, from + limit - 1);
+    const { data, error, count } = await supabase
+      .from('bills')
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at', { count: 'exact' })
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString())
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
-      if (error || !data) {
-        console.error('Failed to fetch bills:', error);
-        break;
-      }
-
-      allData = [...allData, ...data];
-      if (data.length < limit) {
-        hasMore = false;
-      } else {
-        from += limit;
-      }
+    if (error || !data) {
+      console.error('Failed to fetch bills:', error);
+      return { bills: [], total: 0 };
     }
 
-    const mapped = allData.map((b) => ({
+    const mapped = data.map((b) => ({
       id: b.id,
       invoiceNumber: b.invoice_number,
       orderId: b.order_id,
@@ -146,23 +136,20 @@ export const useBillStore = create<BillState>()(
       outletGSTIN: b.outlet_gstin || '',
     }));
 
-    // Return all rows as-is — each row has a unique UUID (b.id) representing a unique DB record.
-    // Duplicate invoice numbers from the old bug will be flagged visually in BillHistory.
-    return mapped;
+    return { bills: mapped, total: count ?? 0 };
   },
 
   initBillSync: async () => {
-    // Fetch recent bills initially so dashboard populates correctly
-    // Limit to 3 days to prevent massive payloads and 1000 row limits cutting off today's bills
+    // Fetch only today's bills on startup to minimise egress
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 3);
     startDate.setHours(0, 0, 0, 0);
 
     const { data, error } = await supabase
       .from('bills')
-      .select('*')
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at')
       .gte('created_at', startDate.toISOString())
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(200);
 
     if (!error && data) {
       const dbBills = data.map(b => ({
@@ -230,64 +217,10 @@ export const useBillStore = create<BillState>()(
       dbBills.forEach(b => useSettingsStore.getState().syncInvoiceCounter(b.invoiceNumber));
     }
 
-    // Real-time subscription for bills
-    supabase.channel('public:bills')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bills' }, payload => {
-        const b = payload.new;
-        set((state) => {
-          // Avoid duplicate if we created it locally — check both UUID and invoice number
-          if (state.bills.some(existing => existing.id === b.id || existing.invoiceNumber === b.invoice_number)) return state;
-
-          const mappedBill = {
-            id: b.id,
-            invoiceNumber: b.invoice_number,
-            orderId: b.order_id,
-            tableId: b.table_id || undefined,
-            tableNumber: b.table_number || undefined,
-            orderType: b.order_type as any,
-            items: b.items as any,
-            subtotal: Number(b.subtotal),
-            gstBreakdown: [],
-            totalGST: Number(b.total_gst),
-            cgstAmount: Number(b.cgst_amount || 0),
-            sgstAmount: Number(b.sgst_amount || 0),
-            igstAmount: Number(b.igst_amount || 0),
-            serviceCharge: Number(b.service_charge),
-            serviceChargePercent: 0,
-            discountType: 'flat' as const,
-            discountValue: 0,
-            discountAmount: Number(b.discount_amount),
-            roundOff: 0,
-            totalAmount: Number(b.total_amount),
-            payments: b.payments as any,
-            amountPaid: Number(b.total_amount),
-            changeDue: 0,
-            staffName: b.staff_name,
-            status: b.status || 'paid',
-            guestCount: b.guest_count,
-            customerGstin: b.customer_gstin || undefined,
-            placeOfSupply: b.place_of_supply || undefined,
-            hsnCodes: b.hsn_codes || undefined,
-            isGstBill: b.is_gst_bill !== false,
-            createdAt: new Date(b.created_at),
-            outletName: '',
-            outletAddress: '',
-            outletGSTIN: b.outlet_gstin || '',
-          };
-
-          return { bills: [...state.bills, mappedBill] };
-        });
-
-        // Sync invoice counter for new incoming bills
-        useSettingsStore.getState().syncInvoiceCounter(b.invoice_number);
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bills' }, payload => {
-        const b = payload.new;
-        set((state) => ({
-          bills: state.bills.map((bill) => bill.id === b.id ? { ...bill, status: b.status } : bill)
-        }));
-      })
-      .subscribe();
+    // NOTE: Bills realtime subscription removed to save Supabase realtime quota.
+    // New bills are added to local store immediately via addBill(), so cross-device
+    // sync for bills isn't needed during active service. BillHistory always re-fetches
+    // from Supabase on demand.
   }
     }),
     {

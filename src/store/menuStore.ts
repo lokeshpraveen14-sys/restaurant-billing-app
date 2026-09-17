@@ -279,38 +279,9 @@ export const useMenuStore = create<MenuState>()(
           });
         }
 
-        supabase.channel('public:menu_items')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, payload => {
-            if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-              const dbItem = payload.new;
-              set((state) => {
-                const newItems = [...state.items];
-                const idx = newItems.findIndex(i => i.id === dbItem.id);
-                const mappedItem = {
-                  id: dbItem.id,
-                  categoryId: dbItem.category_id,
-                  name: dbItem.name,
-                  description: dbItem.description || undefined,
-                  basePrice: dbItem.base_price,
-                  isVeg: dbItem.is_veg,
-                  isSpecial: dbItem.is_special,
-                  available: dbItem.available,
-                  gstRate: dbItem.gst_rate,
-                  pricePerKg: dbItem.price_per_kg || undefined,
-                  variants: dbItem.variants || [],
-                  addons: idx >= 0 ? newItems[idx].addons : [],
-                  spiceLevel: idx >= 0 ? newItems[idx].spiceLevel : undefined,
-                  isBakery: idx >= 0 ? newItems[idx].isBakery : undefined
-                };
-
-                if (idx >= 0) newItems[idx] = mappedItem;
-                else newItems.push(mappedItem);
-
-                return { items: newItems };
-              });
-            }
-          })
-          .subscribe();
+        // NOTE: menu_items realtime removed to save Supabase realtime quota.
+        // Menu data is fetched fresh each time the app starts. Changes made on
+        // one device appear on other devices after a page refresh.
       }
     }),
     { name: 'railway-coach-menu' }

@@ -135,7 +135,7 @@ export default function Accounting() {
       setLoadingBills(true);
       try {
         const { start, end } = getDateRange();
-        const bills = await fetchBillsByDateRange(start, end);
+        const { bills } = await fetchBillsByDateRange(start, end, 1, 5000);
         if (!isMounted) return;
         const activeBills = bills.filter(b => b.status !== 'void');
         let cash = 0, card = 0, upi = 0, total = 0;

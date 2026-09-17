@@ -76,6 +76,7 @@ export default function BillHistory() {
   const [loading, setLoading] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalBills, setTotalBills] = useState(0);
   const itemsPerPage = 50;
 
   const invoiceCounts = useMemo(() => {
@@ -110,32 +111,23 @@ export default function BillHistory() {
       }
 
       // Try Supabase first, fall back to local store
-      let fetchedBills: Bill[] = [];
       try {
-        const supabaseBills = await fetchBillsByDateRange(start, end);
+        const result = await fetchBillsByDateRange(start, end, 1, itemsPerPage);
         if (!isMounted) return;
-        // Merge local bills that are in range (covers offline-created bills not yet in DB)
-        const localFiltered = localBills.filter((b) => {
-          const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-          return d >= start && d <= end;
-        });
-
-        const allById = new Map<string, Bill>();
-        localFiltered.forEach(b => allById.set(b.id, b));
-        supabaseBills.forEach(b => allById.set(b.id, b)); // Supabase wins on conflict
-        fetchedBills = Array.from(allById.values());
+        setBills(result.bills);
+        setTotalBills(result.total);
       } catch (err) {
         if (!isMounted) return;
-        // Fallback to local bills only
-        fetchedBills = localBills.filter((b) => {
-          const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-          return d >= start && d <= end;
-        });
+        // Fallback to local bills only (offline)
+        const localFiltered = localBills
+          .filter((b) => {
+            const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+            return d >= start && d <= end;
+          })
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setBills(localFiltered);
+        setTotalBills(localFiltered.length);
       }
-
-      // Sort descending by date
-      fetchedBills.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setBills(fetchedBills);
       setCurrentPage(1);
       setLoading(false);
     };
@@ -150,7 +142,7 @@ export default function BillHistory() {
   }, [dateRange]);
 
   // Expose manual load for 'custom' date range button and void operations
-  const loadBillsManual = async () => {
+  const loadBillsManual = async (page = 1) => {
     setLoading(true);
     const end = new Date();
     const start = new Date();
@@ -173,27 +165,22 @@ export default function BillHistory() {
       end.setTime(e.getTime());
     }
 
-    let fetchedBills: Bill[] = [];
     try {
-      const supabaseBills = await fetchBillsByDateRange(start, end);
-      const localFiltered = localBills.filter((b) => {
-        const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-        return d >= start && d <= end;
-      });
-      const allById = new Map<string, Bill>();
-      localFiltered.forEach(b => allById.set(b.id, b));
-      supabaseBills.forEach(b => allById.set(b.id, b)); 
-      fetchedBills = Array.from(allById.values());
+      const result = await fetchBillsByDateRange(start, end, page, itemsPerPage);
+      setBills(result.bills);
+      setTotalBills(result.total);
+      setCurrentPage(page);
     } catch (err) {
-      fetchedBills = localBills.filter((b) => {
-        const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-        return d >= start && d <= end;
-      });
+      const localFiltered = localBills
+        .filter((b) => {
+          const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+          return d >= start && d <= end;
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setBills(localFiltered);
+      setTotalBills(localFiltered.length);
+      setCurrentPage(1);
     }
-
-    fetchedBills.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    setBills(fetchedBills);
-    setCurrentPage(1);
     setLoading(false);
   };
 
@@ -206,7 +193,7 @@ export default function BillHistory() {
     await voidBill(billId);
     toast.success('Bill Voided', 'The bill has been successfully voided.');
     setSelectedBill(null);
-    loadBillsManual();
+    loadBillsManual(currentPage);
   };
 
   const handleReviseBill = async (bill: Bill) => {
@@ -329,7 +316,7 @@ export default function BillHistory() {
                 value={customEnd}
                 onChange={e => setCustomEnd(e.target.value)}
               />
-              <button className="btn btn-primary btn-sm" onClick={loadBillsManual}>
+              <button className="btn btn-primary btn-sm" onClick={() => loadBillsManual(1)}>
                 Search
               </button>
             </div>
@@ -376,7 +363,7 @@ export default function BillHistory() {
               <div style={{ flex: '1', textAlign: 'right' }}>Actions</div>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 'calc(100vh - 350px)' }}>
-              {bills.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((bill, index) => (
+              {bills.map((bill, index) => (
                 <Row
                   key={bill.id || index}
                   index={(currentPage - 1) * itemsPerPage + index}
@@ -385,26 +372,26 @@ export default function BillHistory() {
                 />
               ))}
             </div>
-            {bills.length > itemsPerPage && (
+            {totalBills > itemsPerPage && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, bills.length)} of {bills.length} bills
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalBills)} of {totalBills} bills
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button 
-                    className="btn btn-ghost btn-sm" 
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => loadBillsManual(currentPage - 1)}
+                    disabled={currentPage === 1 || loading}
                   >
                     Previous
                   </button>
                   <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', fontSize: '0.875rem', fontWeight: 500 }}>
-                    Page {currentPage} of {Math.ceil(bills.length / itemsPerPage)}
+                    Page {currentPage} of {Math.ceil(totalBills / itemsPerPage)}
                   </div>
-                  <button 
-                    className="btn btn-ghost btn-sm" 
-                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(bills.length / itemsPerPage), p + 1))}
-                    disabled={currentPage === Math.ceil(bills.length / itemsPerPage)}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => loadBillsManual(currentPage + 1)}
+                    disabled={currentPage >= Math.ceil(totalBills / itemsPerPage) || loading}
                   >
                     Next
                   </button>
