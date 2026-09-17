@@ -55,7 +55,8 @@ async function syncUserToDB(user: User) {
     pin: user.pin,
     active: user.active,
     created_at: new Date(user.createdAt).toISOString(),
-  });
+  }, { onConflict: 'id' });
+  
   if (error) console.error('Failed to sync user to DB:', error);
 }
 
@@ -177,19 +178,47 @@ export const useAuthStore = create<AuthState>()(
             });
           })
           .subscribe();
+
+        // Real-time: listen for role permissions changes from app_settings
+        const existing = supabase.getChannels().find(c => c.topic === 'realtime:public:app_settings');
+        if (!existing) {
+          supabase.channel('public:app_settings')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+              if (payload.new && (payload.new as any).id === 'roles') {
+                const saved = (payload.new as any).printers as Record<UserRole, PermissionModule[]>;
+                if (saved) {
+                  set({ rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS, ...saved } });
+                }
+              }
+            })
+            .subscribe();
+        } else {
+          // If already subscribed (e.g. by settingsStore), we can't easily add another handler to the same channel
+          // without storing the channel reference. Instead, we'll create a dedicated channel for auth
+          supabase.channel('auth_app_settings')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+              if (payload.new && (payload.new as any).id === 'roles') {
+                const saved = (payload.new as any).printers as Record<UserRole, PermissionModule[]>;
+                if (saved) {
+                  set({ rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS, ...saved } });
+                }
+              }
+            })
+            .subscribe();
+        }
       },
 
       updateRolePermissions: async (role, modules) => {
         set((state) => ({
           rolePermissions: { ...state.rolePermissions, [role]: modules }
         }));
-        // Persist to Supabase app_settings so all devices get the same permissions
+        // Persist to Supabase app_settings (using id 'roles' and storing JSON in printers column)
         try {
           const current = get().rolePermissions;
           const updated = { ...current, [role]: modules };
           await supabase.from('app_settings').upsert(
-            { key: 'role_permissions', value: JSON.stringify(updated) },
-            { onConflict: 'key' }
+            { id: 'roles', printers: updated, updated_at: new Date().toISOString() },
+            { onConflict: 'id' }
           );
         } catch (e) {
           console.error('Failed to save role permissions:', e);
@@ -200,11 +229,11 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data } = await supabase
             .from('app_settings')
-            .select('value')
-            .eq('key', 'role_permissions')
+            .select('printers')
+            .eq('id', 'roles')
             .single();
-          if (data?.value) {
-            const saved = JSON.parse(data.value) as Record<UserRole, PermissionModule[]>;
+          if (data?.printers) {
+            const saved = data.printers as Record<UserRole, PermissionModule[]>;
             set({ rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS, ...saved } });
           }
         } catch (e) {
