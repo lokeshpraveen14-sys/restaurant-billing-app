@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore, hasPermission } from './store/authStore';
+import { useAuthStore, hasPermission, useHasPermission } from './store/authStore';
 import { useUIStore } from './store/uiStore';
 import { useTableStore } from './store/tableStore';
 import { useMenuStore } from './store/menuStore';
@@ -81,13 +81,16 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 function RequirePermission({ module, children }: { module: string, children: React.ReactNode }) {
   const currentUser = useAuthStore((s) => s.currentUser);
+  const allowed = useHasPermission(module);
   if (!currentUser) return <Navigate to="/login" replace />;
   
-  if (!hasPermission(currentUser.role, module)) {
+  if (!allowed) {
     // Redirect unauthorized users to their most appropriate default page
-    if (currentUser.role === 'manager' || currentUser.role === 'waiter') return <Navigate to="/tables" replace />;
-    if (currentUser.role === 'cashier') return <Navigate to="/billing" replace />;
-    if (currentUser.role === 'kitchen') return <Navigate to="/kitchen" replace />;
+    const perms = useAuthStore.getState().rolePermissions[currentUser.role] ?? [];
+    if (perms.includes('tables' as any)) return <Navigate to="/tables" replace />;
+    if (perms.includes('billing' as any)) return <Navigate to="/billing" replace />;
+    if (perms.includes('kitchen' as any)) return <Navigate to="/kitchen" replace />;
+    if (perms.includes('orders' as any)) return <Navigate to="/order" replace />;
     return <Navigate to="/login" replace />;
   }
   
@@ -106,6 +109,7 @@ export default function App() {
   const initAccountingSync = useAccountingStore((s) => s.initAccountingSync);
   const initStaffSync = useStaffStore((s) => s.initStaffSync);
   const initUserSync = useAuthStore((s) => s.initUserSync);
+  const loadRolePermissions = useAuthStore((s) => s.loadRolePermissions);
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -121,6 +125,7 @@ export default function App() {
     initAccountingSync();
     initStaffSync();
     initUserSync();
+    loadRolePermissions();
     
     // Auto-refresh when tablet wakes up from sleep
     const handleVisibilityChange = () => {

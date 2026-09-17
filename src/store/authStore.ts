@@ -3,6 +3,28 @@ import { persist } from 'zustand/middleware';
 import { User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 
+export type PermissionModule = 'admin' | 'tables' | 'orders' | 'kitchen' | 'billing' | 'menu' | 'inventory' | 'reports' | 'customers';
+
+export const ALL_MODULES: { id: PermissionModule; label: string; description: string }[] = [
+  { id: 'admin', label: 'Dashboard & Admin', description: 'Dashboard, settings, staff management, shift management, accounting, head count' },
+  { id: 'tables', label: 'Table Management', description: 'View and manage restaurant tables' },
+  { id: 'orders', label: 'Order Taking', description: 'Create and manage customer orders' },
+  { id: 'kitchen', label: 'Kitchen Display', description: 'View and update KOT orders' },
+  { id: 'billing', label: 'Billing & Counters', description: 'Process bills, bakery and juice counters' },
+  { id: 'menu', label: 'Menu Management', description: 'Add, edit and delete menu items' },
+  { id: 'inventory', label: 'Inventory', description: 'Manage stock and inventory' },
+  { id: 'reports', label: 'Reports & Analytics', description: 'View sales reports, bill history, GST filing, analytics' },
+  { id: 'customers', label: 'Customers', description: 'Access customer records' },
+];
+
+export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, PermissionModule[]> = {
+  admin: ['admin', 'tables', 'orders', 'kitchen', 'billing', 'menu', 'inventory', 'reports', 'customers'],
+  manager: ['tables', 'orders', 'billing', 'inventory', 'menu', 'customers', 'kitchen', 'reports'],
+  cashier: ['billing', 'orders', 'customers'],
+  waiter: ['tables', 'orders', 'menu'],
+  kitchen: ['kitchen'],
+};
+
 // Fallback demo users — used only while Supabase loads, or if offline
 export const DEMO_USERS: User[] = [
   { id: '1', name: 'Admin User', email: 'admin@railwaycoach.com', role: 'admin', pin: '1234', active: true, createdAt: new Date() },
@@ -47,6 +69,7 @@ interface AuthState {
   isAuthenticated: boolean;
   allUsers: User[];
   usersLoaded: boolean;
+  rolePermissions: Record<UserRole, PermissionModule[]>;
 
   login: (pin: string) => boolean;
   logout: () => void;
@@ -56,6 +79,8 @@ interface AuthState {
   deleteUser: (id: string) => void;
   fetchUsers: () => Promise<void>;
   initUserSync: () => void;
+  updateRolePermissions: (role: UserRole, modules: PermissionModule[]) => void;
+  loadRolePermissions: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -65,6 +90,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       allUsers: DEMO_USERS,
       usersLoaded: false,
+      rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS },
 
       login: (pin: string) => {
         const user = get().allUsers.find((u) => u.pin === pin && u.active);
@@ -152,28 +178,66 @@ export const useAuthStore = create<AuthState>()(
           })
           .subscribe();
       },
+
+      updateRolePermissions: async (role, modules) => {
+        set((state) => ({
+          rolePermissions: { ...state.rolePermissions, [role]: modules }
+        }));
+        // Persist to Supabase app_settings so all devices get the same permissions
+        try {
+          const current = get().rolePermissions;
+          const updated = { ...current, [role]: modules };
+          await supabase.from('app_settings').upsert(
+            { key: 'role_permissions', value: JSON.stringify(updated) },
+            { onConflict: 'key' }
+          );
+        } catch (e) {
+          console.error('Failed to save role permissions:', e);
+        }
+      },
+
+      loadRolePermissions: async () => {
+        try {
+          const { data } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'role_permissions')
+            .single();
+          if (data?.value) {
+            const saved = JSON.parse(data.value) as Record<UserRole, PermissionModule[]>;
+            set({ rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS, ...saved } });
+          }
+        } catch (e) {
+          // offline or not saved yet — use defaults
+        }
+      },
     }),
     {
       name: 'railway-coach-auth',
-      // Don't persist allUsers — always load fresh from Supabase on startup.
-      // Only persist session so page refresh keeps the user logged in.
       partialize: (state) => ({
         currentUser: state.currentUser,
         isAuthenticated: state.isAuthenticated,
+        rolePermissions: state.rolePermissions,
       }),
     }
   )
 );
 
-export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin: ['all'],
-  manager: ['tables', 'orders', 'billing', 'inventory', 'menu', 'customers', 'kitchen'],
-  cashier: ['billing', 'orders', 'customers'],
-  waiter: ['tables', 'orders', 'menu'],
-  kitchen: ['kitchen'],
-};
+// Keep static constant for backward compat (used in places that can't use hooks)
+export const ROLE_PERMISSIONS: Record<UserRole, string[]> = DEFAULT_ROLE_PERMISSIONS;
 
+// Static check — used in non-hook contexts only. Reads from persisted store.
 export function hasPermission(role: UserRole, module: string): boolean {
-  const perms = ROLE_PERMISSIONS[role];
-  return perms.includes('all') || perms.includes(module);
+  const perms = useAuthStore.getState().rolePermissions[role] ?? DEFAULT_ROLE_PERMISSIONS[role] ?? [];
+  return role === 'admin' || perms.includes(module as PermissionModule);
+}
+
+// React hook version for reactive UI updates
+export function useHasPermission(module: string): boolean {
+  const currentUser = useAuthStore(s => s.currentUser);
+  const rolePermissions = useAuthStore(s => s.rolePermissions);
+  if (!currentUser) return false;
+  if (currentUser.role === 'admin') return true;
+  const perms = rolePermissions[currentUser.role] ?? DEFAULT_ROLE_PERMISSIONS[currentUser.role] ?? [];
+  return perms.includes(module as PermissionModule);
 }

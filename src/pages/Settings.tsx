@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
 import { useMenuStore } from '../store/menuStore';
 import { useToast } from '../store/uiStore';
-import { Gear, Printer, CreditCard, Building, Percent, ArrowsClockwise, Warning } from '@phosphor-icons/react';
+import { Gear, Printer, CreditCard, Building, Percent, ArrowsClockwise, Warning, ShieldCheck } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { supabase } from '../lib/supabase';
+import { useAuthStore, ALL_MODULES, DEFAULT_ROLE_PERMISSIONS, PermissionModule } from '../store/authStore';
+import { UserRole } from '../types';
 
 const GST_RATES = [0, 5, 12, 18, 28] as const;
 
@@ -15,6 +17,8 @@ export default function Settings() {
   const [form, setForm] = useState({ ...settings });
   const [activeTab, setActiveTab] = useState('restaurant');
   const [bridgePrinting, setBridgePrinting] = useState(false);
+  const { rolePermissions, updateRolePermissions } = useAuthStore();
+  const [selectedRole, setSelectedRole] = useState<UserRole>('manager');
 
   const handleSave = () => {
     updateSettings(form);
@@ -48,8 +52,25 @@ export default function Settings() {
     { id: 'billing', label: 'Billing & Tax', icon: <CreditCard size={16} /> },
     { id: 'gst', label: 'GST Config', icon: <Percent size={16} /> },
     { id: 'printing', label: 'Printing', icon: <Printer size={16} /> },
+    { id: 'permissions', label: 'Role Permissions', icon: <ShieldCheck size={16} /> },
     { id: 'system', label: 'System', icon: <Gear size={16} /> },
   ];
+
+  const NON_ADMIN_ROLES: { id: UserRole; label: string; color: string }[] = [
+    { id: 'manager', label: 'Manager', color: '#7c3aed' },
+    { id: 'cashier', label: 'Cashier', color: '#0ea5e9' },
+    { id: 'waiter', label: 'Waiter', color: '#10b981' },
+    { id: 'kitchen', label: 'Kitchen', color: '#f59e0b' },
+  ];
+
+  const togglePermission = (role: UserRole, module: PermissionModule) => {
+    const current = rolePermissions[role] ?? DEFAULT_ROLE_PERMISSIONS[role] ?? [];
+    const next = current.includes(module)
+      ? current.filter(m => m !== module)
+      : [...current, module];
+    updateRolePermissions(role, next);
+    toast.success('Permission updated', `${role} role updated successfully`);
+  };
 
   const updateCategoryGst = (catId: string, rate: number) => {
     setForm({
@@ -427,6 +448,140 @@ export default function Settings() {
                       </div>
                     </div>
                   </>
+                );
+              })()}
+
+              {activeTab === 'permissions' && (() => {
+                const roleInfo = NON_ADMIN_ROLES.find(r => r.id === selectedRole)!;
+                const currentPerms = rolePermissions[selectedRole] ?? DEFAULT_ROLE_PERMISSIONS[selectedRole] ?? [];
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    {/* Header */}
+                    <div style={{ padding: '16px 20px', background: 'linear-gradient(135deg, var(--brand-color) 0%, var(--brand-color-dark, #4f46e5) 100%)', borderRadius: 12, color: '#fff' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                        <ShieldCheck size={24} />
+                        <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Role-Based Access Control</span>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>Admin always has full access. Configure which pages each role can access.</div>
+                    </div>
+
+                    {/* Role selector */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {NON_ADMIN_ROLES.map(r => (
+                        <button
+                          key={r.id}
+                          onClick={() => setSelectedRole(r.id)}
+                          style={{
+                            padding: '8px 18px',
+                            borderRadius: 20,
+                            border: `2px solid ${r.color}`,
+                            background: selectedRole === r.id ? r.color : 'transparent',
+                            color: selectedRole === r.id ? '#fff' : r.color,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontSize: '0.875rem',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Permission grid */}
+                    <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                      <div style={{ padding: '12px 20px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: roleInfo.color, display: 'inline-block' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{roleInfo.label} Permissions</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {currentPerms.length} of {ALL_MODULES.length} modules enabled
+                        </span>
+                      </div>
+                      {ALL_MODULES.map((mod, idx) => {
+                        const enabled = currentPerms.includes(mod.id);
+                        return (
+                          <div
+                            key={mod.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '14px 20px',
+                              borderBottom: idx < ALL_MODULES.length - 1 ? '1px solid var(--border)' : 'none',
+                              background: enabled ? 'var(--bg-primary)' : 'transparent',
+                              transition: 'background 0.15s',
+                            }}
+                          >
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: enabled ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                                {mod.label}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                {mod.description}
+                              </div>
+                            </div>
+                            {/* Toggle switch */}
+                            <button
+                              onClick={() => togglePermission(selectedRole, mod.id)}
+                              style={{
+                                width: 48,
+                                height: 26,
+                                borderRadius: 13,
+                                border: 'none',
+                                background: enabled ? roleInfo.color : 'var(--border)',
+                                cursor: 'pointer',
+                                position: 'relative',
+                                transition: 'background 0.2s',
+                                flexShrink: 0,
+                                marginLeft: 16,
+                              }}
+                              title={enabled ? 'Click to revoke access' : 'Click to grant access'}
+                            >
+                              <span style={{
+                                position: 'absolute',
+                                top: 3,
+                                left: enabled ? 25 : 3,
+                                width: 20,
+                                height: 20,
+                                borderRadius: '50%',
+                                background: '#fff',
+                                transition: 'left 0.2s',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                              }} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Quick presets */}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginRight: 4 }}>Quick presets:</span>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { updateRolePermissions(selectedRole, [...ALL_MODULES.map(m => m.id)]); toast.success('All enabled', `${selectedRole} given full access`); }}
+                      >
+                        Enable All
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { updateRolePermissions(selectedRole, []); toast.success('All disabled', `${selectedRole} access revoked`); }}
+                        style={{ color: 'var(--danger)' }}
+                      >
+                        Disable All
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { updateRolePermissions(selectedRole, [...(DEFAULT_ROLE_PERMISSIONS[selectedRole] ?? [])]); toast.success('Reset done', `${selectedRole} permissions restored to default`); }}
+                      >
+                        Reset to Default
+                      </button>
+                    </div>
+
+                    <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                      <strong>Note:</strong> Changes take effect immediately for all devices. Users currently logged in will see updated permissions on their next page navigation.
+                    </div>
+                  </div>
                 );
               })()}
 
