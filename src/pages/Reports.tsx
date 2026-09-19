@@ -228,7 +228,7 @@ export default function Reports() {
     doc.save(`sales-report-${datePreset}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.pdf`);
   };
 
-  const handleExportItemCSV = () => { const lines = ['ITEM-WISE SALES REPORT', `Period: ${itemDatePreset}`, '', 'Item Name,Category,Qty Sold,Gross Revenue,Net Revenue,GST Amount', ...ITEM_STATS.map(s => { const cat = categories.find(c => c.id === s.categoryId)?.name || 'Unknown'; return `${s.name},${cat},${s.qty},${s.gross.toFixed(2)},${s.net.toFixed(2)},${s.gst.toFixed(2)}`; }), `TOTAL,,${itemTotalQty},${itemTotalGross.toFixed(2)},${itemTotalNet.toFixed(2)},${itemTotalGST.toFixed(2)}`]; downloadCSV(lines, `item-report-${itemDatePreset}`); };
+  const handleExportItemCSV = () => { const lines = ['ITEM-WISE SALES REPORT', `Period: ${itemDatePreset}`, '', 'Item Name,HSN Code,Category,Qty Sold,Gross Revenue,Net Revenue,GST Amount', ...ITEM_STATS.map(s => { const cat = categories.find(c => c.id === s.categoryId)?.name || 'Unknown'; const menuItem = menuItems.find(m => m.id === s.id); const hsn = menuItem?.hsnCode || '—'; return `${s.name},${hsn},${cat},${s.qty},${s.gross.toFixed(2)},${s.net.toFixed(2)},${s.gst.toFixed(2)}`; }), `TOTAL,,,${itemTotalQty},${itemTotalGross.toFixed(2)},${itemTotalNet.toFixed(2)},${itemTotalGST.toFixed(2)}`]; downloadCSV(lines, `item-report-${itemDatePreset}`); };
 
   const handleExportItemPDF = async () => {
     const { default: jsPDF } = await import('jspdf');
@@ -241,16 +241,18 @@ export default function Reports() {
     doc.setFontSize(12); doc.text(`Period: ${itemDatePreset}`, pw/2, y, { align: 'center' });
     y += 15;
     doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('Item Name', lm, y); doc.text('Category', lm+60, y); doc.text('Qty', lm+100, y); doc.text('Net', lm+120, y); doc.text('GST', lm+150, y); doc.text('Gross', lm+175, y); y += 6;
+    doc.text('Item Name', lm, y); doc.text('HSN', lm+50, y); doc.text('Category', lm+75, y); doc.text('Qty', lm+110, y); doc.text('Net', lm+125, y); doc.text('GST', lm+150, y); doc.text('Gross', lm+175, y); y += 6;
     doc.setFont('helvetica', 'normal');
     ITEM_STATS.forEach(s => {
       if (y > 270) { doc.addPage(); y = 15; }
       const cat = categories.find(c => c.id === s.categoryId)?.name || 'Unknown';
-      doc.text(s.name.slice(0,25), lm, y); doc.text(cat.slice(0,15), lm+60, y); doc.text(s.qty.toString(), lm+100, y); doc.text(s.net.toFixed(2), lm+120, y); doc.text(s.gst.toFixed(2), lm+150, y); doc.text(s.gross.toFixed(2), lm+175, y); y += 5;
+      const menuItem = menuItems.find(m => m.id === s.id);
+      const hsn = menuItem?.hsnCode || '—';
+      doc.text(s.name.slice(0,22), lm, y); doc.text(hsn.slice(0,10), lm+50, y); doc.text(cat.slice(0,15), lm+75, y); doc.text(s.qty.toString(), lm+110, y); doc.text(s.net.toFixed(2), lm+125, y); doc.text(s.gst.toFixed(2), lm+150, y); doc.text(s.gross.toFixed(2), lm+175, y); y += 5;
     });
     doc.setFont('helvetica', 'bold');
     y += 5; if (y > 270) { doc.addPage(); y = 15; }
-    doc.text('TOTAL', lm, y); doc.text(itemTotalQty.toString(), lm+100, y); doc.text(itemTotalNet.toFixed(2), lm+120, y); doc.text(itemTotalGST.toFixed(2), lm+150, y); doc.text(itemTotalGross.toFixed(2), lm+175, y);
+    doc.text('TOTAL', lm, y); doc.text(itemTotalQty.toString(), lm+110, y); doc.text(itemTotalNet.toFixed(2), lm+125, y); doc.text(itemTotalGST.toFixed(2), lm+150, y); doc.text(itemTotalGross.toFixed(2), lm+175, y);
     doc.save(`item-report-${itemDatePreset}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.pdf`);
   };
 
