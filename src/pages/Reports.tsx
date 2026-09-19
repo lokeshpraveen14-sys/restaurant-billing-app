@@ -190,9 +190,69 @@ export default function Reports() {
   }, [itemBills, menuItems, itemCategoryFilter, itemSearch, itemSortBy]);
 
   const downloadCSV = (lines: string[], name: string) => { const blob = new Blob([lines.join('\n')], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${name}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`; a.click(); URL.revokeObjectURL(url); };
+  
   const handleExportOverviewCSV = () => { const lines = ['RESTAURANT SALES REPORT', `Total Revenue,${totalRevenue.toFixed(2)}`, `Total Orders,${totalOrders}`, `Total Covers,${totalCovers}`, '', 'DAILY BREAKDOWN', 'Date,Revenue,Orders', ...DAILY_DATA.map(d => `${d.date},${d.revenue.toFixed(2)},${d.orders}`), '', 'GST SUMMARY', 'Rate,Taxable,CGST,SGST,Total', ...GST_DATA.map(g => `${g.rate},${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`)]; downloadCSV(lines, `sales-report-${datePreset}`); };
 
+  const handleExportOverviewPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    let y = 15; const lm = 14;
+    doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+    doc.text('RESTAURANT SALES REPORT', pw/2, y, { align: 'center' });
+    y += 10;
+    doc.setFontSize(12);
+    doc.text(`Period: ${datePreset}`, pw/2, y, { align: 'center' });
+    y += 10;
+    doc.text(`Total Revenue: Rs. ${totalRevenue.toFixed(2)}`, lm, y); y += 6;
+    doc.text(`Total Orders: ${totalOrders}`, lm, y); y += 6;
+    doc.text(`Total Covers: ${totalCovers}`, lm, y); y += 10;
+    doc.setFontSize(14); doc.text('DAILY BREAKDOWN', lm, y); y += 6;
+    doc.setFontSize(10);
+    doc.text('Date', lm, y); doc.text('Revenue', lm+50, y); doc.text('Orders', lm+100, y); y += 5;
+    doc.setFont('helvetica', 'normal');
+    DAILY_DATA.forEach(d => {
+      if (y > 270) { doc.addPage(); y = 15; }
+      doc.text(d.date, lm, y); doc.text(`Rs. ${d.revenue.toFixed(2)}`, lm+50, y); doc.text(d.orders.toString(), lm+100, y); y += 5;
+    });
+    y += 5;
+    if (y > 250) { doc.addPage(); y = 15; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('GST SUMMARY', lm, y); y += 6;
+    doc.setFontSize(10);
+    doc.text('Rate', lm, y); doc.text('Taxable', lm+30, y); doc.text('CGST', lm+70, y); doc.text('SGST', lm+110, y); doc.text('Total', lm+150, y); y += 5;
+    doc.setFont('helvetica', 'normal');
+    GST_DATA.forEach(g => {
+      if (y > 270) { doc.addPage(); y = 15; }
+      doc.text(g.rate.toString(), lm, y); doc.text(g.taxable.toFixed(2), lm+30, y); doc.text(g.cgst.toFixed(2), lm+70, y); doc.text(g.sgst.toFixed(2), lm+110, y); doc.text(g.total.toFixed(2), lm+150, y); y += 5;
+    });
+    doc.save(`sales-report-${datePreset}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.pdf`);
+  };
+
   const handleExportItemCSV = () => { const lines = ['ITEM-WISE SALES REPORT', `Period: ${itemDatePreset}`, '', 'Item Name,Category,Qty Sold,Gross Revenue,Net Revenue,GST Amount', ...ITEM_STATS.map(s => { const cat = categories.find(c => c.id === s.categoryId)?.name || 'Unknown'; return `${s.name},${cat},${s.qty},${s.gross.toFixed(2)},${s.net.toFixed(2)},${s.gst.toFixed(2)}`; }), `TOTAL,,${itemTotalQty},${itemTotalGross.toFixed(2)},${itemTotalNet.toFixed(2)},${itemTotalGST.toFixed(2)}`]; downloadCSV(lines, `item-report-${itemDatePreset}`); };
+
+  const handleExportItemPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    let y = 15; const lm = 14;
+    doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+    doc.text('ITEM-WISE SALES REPORT', pw/2, y, { align: 'center' });
+    y += 10;
+    doc.setFontSize(12); doc.text(`Period: ${itemDatePreset}`, pw/2, y, { align: 'center' });
+    y += 15;
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('Item Name', lm, y); doc.text('Category', lm+60, y); doc.text('Qty', lm+100, y); doc.text('Net', lm+120, y); doc.text('GST', lm+150, y); doc.text('Gross', lm+175, y); y += 6;
+    doc.setFont('helvetica', 'normal');
+    ITEM_STATS.forEach(s => {
+      if (y > 270) { doc.addPage(); y = 15; }
+      const cat = categories.find(c => c.id === s.categoryId)?.name || 'Unknown';
+      doc.text(s.name.slice(0,25), lm, y); doc.text(cat.slice(0,15), lm+60, y); doc.text(s.qty.toString(), lm+100, y); doc.text(s.net.toFixed(2), lm+120, y); doc.text(s.gst.toFixed(2), lm+150, y); doc.text(s.gross.toFixed(2), lm+175, y); y += 5;
+    });
+    doc.setFont('helvetica', 'bold');
+    y += 5; if (y > 270) { doc.addPage(); y = 15; }
+    doc.text('TOTAL', lm, y); doc.text(itemTotalQty.toString(), lm+100, y); doc.text(itemTotalNet.toFixed(2), lm+120, y); doc.text(itemTotalGST.toFixed(2), lm+150, y); doc.text(itemTotalGross.toFixed(2), lm+175, y);
+    doc.save(`item-report-${itemDatePreset}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.pdf`);
+  };
 
   const PRESETS: { label: string; value: DatePreset }[] = [{ label: 'Today', value: 'today' }, { label: 'Yesterday', value: 'yesterday' }, { label: 'This Week', value: 'week' }, { label: 'This Month', value: 'month' }, { label: 'This Year', value: 'year' }, { label: 'Custom', value: 'custom' }];
   const tabs: { id: ReportTab; label: string; icon: React.ReactNode }[] = [{ id: 'items', label: 'Item-wise Report', icon: <Package size={16} /> }];
@@ -210,7 +270,8 @@ export default function Reports() {
                     <button key={r} className={`tab-item ${datePreset === r ? 'active' : ''}`} onClick={() => setDatePreset(r)} style={{ padding: '6px 12px', fontSize: '0.8125rem', textTransform: 'capitalize' }}>{r}</button>
                   ))}
                 </div>
-                <button className="btn btn-secondary btn-sm" onClick={handleExportOverviewCSV}><Download size={16} /> Export CSV</button>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportOverviewCSV}><Download size={16} /> CSV</button>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportOverviewPDF}><FilePdf size={16} /> PDF</button>
               </div>
             )}
 
@@ -239,7 +300,10 @@ export default function Reports() {
                 {PRESETS.map(p => (
                   <button key={p.value} className={`btn btn-sm ${itemDatePreset === p.value ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setItemDatePreset(p.value)}>{p.label}</button>
                 ))}
-                <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} onClick={handleExportItemCSV}><Download size={16} /> Export CSV</button>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                  <button className="btn btn-secondary btn-sm" onClick={handleExportItemCSV}><Download size={16} /> CSV</button>
+                  <button className="btn btn-secondary btn-sm" onClick={handleExportItemPDF}><FilePdf size={16} /> PDF</button>
+                </div>
               </div>
               {itemDatePreset === 'custom' && (
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
