@@ -23,7 +23,8 @@ export default function MenuManagement() {
       variants: [],
       addons: [],
       available: true,
-      gstRate: 5
+      gstRate: 5,
+      hsnCode: ''
     });
   };
 
@@ -49,6 +50,7 @@ export default function MenuManagement() {
         available: true,
         stockQuantity: editingItem.stockQuantity,
         gstRate: editingItem.gstRate || 5,
+        hsnCode: editingItem.hsnCode,
 
         variants: editingItem.variants || [],
         addons: editingItem.addons || [],
@@ -137,6 +139,7 @@ export default function MenuManagement() {
                       <th>Item Name</th>
                       <th>Category</th>
                       <th>Price</th>
+                      <th>HSN</th>
                       <th>GST</th>
                       <th>Type</th>
                       <th>Status</th>
@@ -171,6 +174,7 @@ export default function MenuManagement() {
                               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.variants.length} variants</div>
                             )}
                           </td>
+                          <td><span className="badge badge-muted" style={{ fontFamily: 'monospace' }}>{item.hsnCode || '—'}</span></td>
                           <td><span className="badge badge-muted">{item.gstRate}%</span></td>
                           <td>
                             <span className={`badge badge-${cat?.type === 'other' ? 'muted' : item.isVeg ? 'free' : 'occupied'}`}>
@@ -294,6 +298,17 @@ export default function MenuManagement() {
                     onChange={(e) => setEditingItem({ ...editingItem, gstRate: (parseFloat(e.target.value) || 0) as 0 | 5 | 12 | 18 | 28 })}
                   />
                 </div>
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: 4 }}>HSN/SAC Code (Optional)</label>
+                <input 
+                  type="text"
+                  className="input" 
+                  value={editingItem.hsnCode || ''} 
+                  onChange={(e) => setEditingItem({ ...editingItem, hsnCode: e.target.value })}
+                  placeholder="e.g. 996331"
+                />
               </div>
               
               <div>
