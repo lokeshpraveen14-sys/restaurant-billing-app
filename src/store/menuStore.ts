@@ -170,6 +170,7 @@ export const useMenuStore = create<MenuState>()(
           is_special: newItem.isSpecial || false,
           available: newItem.available,
           gst_rate: newItem.gstRate,
+          hsn_code: newItem.hsnCode || null,
           price_per_kg: newItem.pricePerKg || null,
           variants: newItem.variants || []
         });
@@ -191,6 +192,7 @@ export const useMenuStore = create<MenuState>()(
             is_special: updatedItem.isSpecial || false,
             available: updatedItem.available,
             gst_rate: updatedItem.gstRate,
+            hsn_code: updatedItem.hsnCode || null,
             price_per_kg: updatedItem.pricePerKg || null,
             variants: updatedItem.variants || [],
             updated_at: new Date().toISOString()
@@ -269,6 +271,7 @@ export const useMenuStore = create<MenuState>()(
               isSpecial: dbItem.is_special,
               available: dbItem.available,
               gstRate: dbItem.gst_rate,
+              hsnCode: dbItem.hsn_code || undefined,
               pricePerKg: dbItem.price_per_kg || undefined,
               variants: dbItem.variants || [],
               addons: state.items.find(i => i.id === dbItem.id)?.addons || [],
