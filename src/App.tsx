@@ -166,7 +166,7 @@ export default function App() {
                   <Route path="/settings" element={<RequirePermission module="admin"><Settings /></RequirePermission>} />
                   <Route path="/analytics" element={<RequirePermission module="reports"><Analytics /></RequirePermission>} />
                   <Route path="/shift" element={<RequirePermission module="admin"><ShiftManagement /></RequirePermission>} />
-                  <Route path="/bills" element={<RequirePermission module="reports"><BillHistory /></RequirePermission>} />
+                  <Route path="/bills" element={<RequirePermission module="bill_history"><BillHistory /></RequirePermission>} />
                   <Route path="/staff" element={<RequirePermission module="admin"><StaffManagement /></RequirePermission>} />
                   <Route path="/accounting" element={<RequirePermission module="admin"><Accounting /></RequirePermission>} />
                   <Route path="/headcount" element={<RequirePermission module="admin"><HeadCount /></RequirePermission>} />
