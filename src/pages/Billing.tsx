@@ -37,6 +37,7 @@ export default function Billing() {
   const [cashTendered, setCashTendered] = useState('');
   const [upiRef, setUpiRef] = useState('');
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handlePrint = async (printerId: string = 'billing', bill?: Bill | null) => {
     const b = bill || billGenerated;
@@ -88,6 +89,8 @@ export default function Billing() {
 
   const handleGenerateBill = async () => {
     if (!order) return;
+    setIsGenerating(true);
+    try {
 
 
     // Determine inter-state — no customer GSTIN on billing page; always intra-state for walk-in
@@ -169,6 +172,9 @@ export default function Billing() {
       }
     }
     toast.success('Bill Generated', `Invoice ${invoiceNumber} created`);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
 
@@ -449,10 +455,19 @@ export default function Billing() {
               <button
                 className="btn btn-primary btn-lg"
                 onClick={handleGenerateBill}
-                disabled={cartItems.length === 0}
+                disabled={cartItems.length === 0 || isGenerating}
                 style={{ width: '100%' }}
               >
-                <Receipt size={20} /> Generate Bill
+                {isGenerating ? (
+                  <>
+                    <span className="spinner" style={{ width: 20, height: 20, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }} />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Receipt size={20} /> Generate Bill
+                  </>
+                )}
               </button>
             {/* Printer Section — always visible */}
             <div style={{ marginTop: 8, padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
