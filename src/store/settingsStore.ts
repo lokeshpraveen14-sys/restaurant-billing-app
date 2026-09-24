@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoPrintKot: false,
   upiId: 'railway@upi',
   financialYear: '2025-26',
-  invoicePrefix: 'INV',
+  invoicePrefix: 'BILL',
   invoiceCounter: 1,
   outlet: 'Main Branch',
   currency: 'INR',
@@ -167,7 +167,13 @@ export const useSettingsStore = create<SettingsState>()(
         const existing = supabase.getChannels().find(c => c.topic === 'realtime:public:app_settings');
         if (existing) return;
 
-        supabase.channel('public:app_settings')
+        // Force upgrade the broken 'INV' series to 'BILL'
+        if (get().settings.invoicePrefix === 'INV') {
+          set((state) => ({ settings: { ...state.settings, invoicePrefix: 'BILL' } }));
+        }
+
+        supabase
+.channel('public:app_settings')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
             const printers = (payload.new as any)?.printers;
             if (printers && Array.isArray(printers)) {

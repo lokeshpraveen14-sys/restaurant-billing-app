@@ -63,3 +63,32 @@ $$;
 
 GRANT EXECUTE ON FUNCTION get_next_invoice_number(TEXT, TEXT) TO anon;
 GRANT EXECUTE ON FUNCTION get_next_invoice_number(TEXT, TEXT) TO authenticated;
+
+-- UPDATE: Added get_invoice_number_v2 to bypass broken RPCs
+CREATE OR REPLACE FUNCTION get_invoice_number_v2(
+  p_prefix TEXT,
+  p_fy     TEXT
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_id      TEXT;
+  v_counter INTEGER;
+  v_seq     TEXT;
+BEGIN
+  v_id := p_prefix || '/' || p_fy;
+
+  INSERT INTO invoice_counters (id, counter)
+  VALUES (v_id, 1)
+  ON CONFLICT (id) DO UPDATE
+    SET counter = invoice_counters.counter + 1
+  RETURNING counter INTO v_counter;
+
+  v_seq := LPAD(v_counter::TEXT, 4, '0');
+  RETURN p_prefix || '/' || p_fy || '/' || v_seq;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_invoice_number_v2(TEXT, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION get_invoice_number_v2(TEXT, TEXT) TO authenticated;

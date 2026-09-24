@@ -237,19 +237,38 @@ export async function getNextInvoiceNumber(
   _invoiceQueue = _invoiceQueue.then(async () => {
     try {
       const fy = getCurrentFY();
-      const { data, error } = await supabase.rpc('get_next_invoice_number', {
+      const { data, error } = await supabase.rpc('get_invoice_number_v2', {
         p_prefix: prefix,
         p_fy: fy,
       });
       if (error || !data) throw error;
       return data as string;
     } catch {
-      console.warn('[getNextInvoiceNumber] RPC failed — using local counter fallback');
-      // Use current ms timestamp + 3 random digits → unique even across offline devices
-      const base = localFallback();
-      const tsHex = Date.now().toString(36).toUpperCase().slice(-5);
-      const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-      return `${base}-${tsHex}${rand}`;
+      console.warn('[getNextInvoiceNumber] RPC failed — querying bills table for latest sequence');
+      const fy = getCurrentFY();
+      
+      // Fallback: Query the bills table for the highest invoice number in this FY
+      const { data } = await supabase
+        .from('bills')
+        .select('invoice_number')
+        .like('invoice_number', `${prefix}/${fy}/%`)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      let nextSeq = 1;
+      if (data && data.length > 0 && data[0].invoice_number) {
+        const parts = data[0].invoice_number.split('/');
+        const lastNum = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(lastNum)) {
+          nextSeq = lastNum + 1;
+        }
+      } else {
+        // Absolute fallback to local counter if DB query fails or no bills exist
+        nextSeq = Number(localFallback().split('/').pop()) || 1;
+      }
+
+      const seqStr = String(nextSeq).padStart(4, '0');
+      return `${prefix}/${fy}/${seqStr}`;
     }
   });
   return _invoiceQueue;
