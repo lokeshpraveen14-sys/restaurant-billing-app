@@ -169,6 +169,9 @@ export interface Bill {
   isGstBill?: boolean;       // if false: store tax internally but hide on print / exclude from GSTR-1
   staffName: string;
   status?: 'paid' | 'void';
+  voidedBy?: string;         // name of staff who voided the bill
+  voidedAt?: Date;           // timestamp of void
+  voidReason?: string;       // reason entered at time of void
   guestCount?: number;
   createdAt: Date;
   outletName: string;

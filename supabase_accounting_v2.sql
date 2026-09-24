@@ -60,3 +60,9 @@ $$;
 -- Grant execute to anon and authenticated (adjust if you use RLS)
 GRANT EXECUTE ON FUNCTION get_next_invoice_number(TEXT, TEXT) TO anon;
 GRANT EXECUTE ON FUNCTION get_next_invoice_number(TEXT, TEXT) TO authenticated;
+
+-- ── 5. bills: void audit columns ────────────────────────────
+ALTER TABLE bills
+  ADD COLUMN IF NOT EXISTS voided_by   TEXT,
+  ADD COLUMN IF NOT EXISTS voided_at   TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS void_reason TEXT;

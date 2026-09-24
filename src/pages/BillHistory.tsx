@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useBillStore } from '../store/billStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToast } from '../store/uiStore';
+import { useAuthStore } from '../store/authStore';
 import { Bill } from '../types';
 import { formatAmount } from '../lib/gst';
 import { printReceipt, buildBillReceipt } from '../lib/printer';
@@ -77,6 +78,9 @@ export default function BillHistory() {
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalBills, setTotalBills] = useState(0);
+  const [voidModal, setVoidModal] = useState<{ billId: string; invoiceNumber: string } | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const currentUser = useAuthStore(s => s.currentUser);
   const itemsPerPage = 50;
 
   const invoiceCounts = useMemo(() => {
@@ -185,13 +189,13 @@ export default function BillHistory() {
   };
 
 
-  const handleVoidBill = async (billId: string) => {
-    if (!window.confirm('Are you sure you want to void this bill? This action cannot be undone and will remove it from revenue calculations.')) {
-      return;
-    }
-
-    await voidBill(billId);
-    toast.success('Bill Voided', 'The bill has been successfully voided.');
+  const handleVoidBill = async () => {
+    if (!voidModal) return;
+    const voidedBy = currentUser?.name || 'Unknown';
+    await voidBill(voidModal.billId, voidedBy, voidReason);
+    toast.success('Bill Voided', `Bill ${voidModal.invoiceNumber} voided by ${voidedBy}`);
+    setVoidModal(null);
+    setVoidReason('');
     setSelectedBill(null);
     loadBillsManual(currentPage);
   };
@@ -201,8 +205,9 @@ export default function BillHistory() {
       return;
     }
 
-    // 1. Void the existing bill
-    await voidBill(bill.id);
+    // 1. Void the existing bill (revise is always by current user)
+    const voidedBy = currentUser?.name || 'Unknown';
+    await voidBill(bill.id, voidedBy, 'Bill revised');
 
     // 2. Map items for re-creation
     const mappedItems = bill.items.map(item => ({
@@ -431,6 +436,20 @@ export default function BillHistory() {
                 </div>
               </div>
 
+              {/* Void audit info */}
+              {selectedBill.status === 'void' && selectedBill.voidedBy && (
+                <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.84rem' }}>
+                  <div style={{ fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>⚠ Void Details</div>
+                  <div><span style={{ color: 'var(--text-muted)' }}>Voided by:</span> <strong>{selectedBill.voidedBy}</strong></div>
+                  {selectedBill.voidedAt && (
+                    <div><span style={{ color: 'var(--text-muted)' }}>Voided at:</span> {new Date(selectedBill.voidedAt).toLocaleString('en-IN')}</div>
+                  )}
+                  {selectedBill.voidReason && (
+                    <div><span style={{ color: 'var(--text-muted)' }}>Reason:</span> {selectedBill.voidReason}</div>
+                  )}
+                </div>
+              )}
+
               <div style={{ borderTop: '1px dashed var(--border)', borderBottom: '1px dashed var(--border)', padding: '12px 0', marginBottom: 16 }}>
                 <table style={{ width: '100%', fontSize: '0.875rem' }}>
                   <thead>
@@ -514,12 +533,61 @@ export default function BillHistory() {
                   <button
                     className="btn btn-secondary"
                     style={{ color: 'var(--status-void)' }}
-                    onClick={() => handleVoidBill(selectedBill.id)}
+                    onClick={() => setVoidModal({ billId: selectedBill.id, invoiceNumber: selectedBill.invoiceNumber })}
                   >
                     <WarningCircle size={18} /> Void Bill
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Void Confirmation Modal */}
+      {voidModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}>
+          <div className="card" style={{ width: 420, maxWidth: '90vw' }}>
+            <div className="card-header">
+              <div className="card-title" style={{ color: '#ef4444' }}>
+                <WarningCircle size={20} /> Void Bill {voidModal.invoiceNumber}
+              </div>
+            </div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                This will permanently void the bill and remove it from revenue calculations. This cannot be undone.
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', marginBottom: 6 }}>
+                  Voiding as: <span style={{ color: 'var(--brand-color)', fontWeight: 700 }}>{currentUser?.name || 'Unknown'}</span>
+                </label>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', marginBottom: 6 }}>
+                  Reason for voiding <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g. Customer cancelled, Wrong order..."
+                  value={voidReason}
+                  onChange={e => setVoidReason(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleVoidBill(); }}
+                />
+              </div>
+            </div>
+            <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid var(--border)', padding: 16 }}>
+              <button className="btn btn-ghost" onClick={() => { setVoidModal(null); setVoidReason(''); }}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                onClick={handleVoidBill}
+              >
+                <WarningCircle size={16} /> Confirm Void
+              </button>
             </div>
           </div>
         </div>

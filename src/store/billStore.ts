@@ -8,7 +8,7 @@ import { useAccountingStore } from './accountingStore';
 interface BillState {
   bills: Bill[];
   addBill: (bill: Bill) => Promise<void>;
-  voidBill: (billId: string) => Promise<void>;
+  voidBill: (billId: string, voidedBy: string, voidReason?: string) => Promise<void>;
   fetchBillsByDateRange: (startDate: Date, endDate: Date, page?: number, limit?: number) => Promise<{ bills: Bill[]; total: number }>;
   initBillSync: () => void;
 }
@@ -64,16 +64,26 @@ export const useBillStore = create<BillState>()(
   },
 
 
-  voidBill: async (billId: string) => {
+  voidBill: async (billId: string, voidedBy: string, voidReason?: string) => {
+    const voidedAt = new Date();
     // Optimistic UI update
     set((state) => ({
-      bills: state.bills.map((b) => (b.id === billId ? { ...b, status: 'void' as const } : b)),
+      bills: state.bills.map((b) =>
+        b.id === billId
+          ? { ...b, status: 'void' as const, voidedBy, voidedAt, voidReason: voidReason || '' }
+          : b
+      ),
     }));
 
     // Update in Supabase
     const { error } = await supabase
       .from('bills')
-      .update({ status: 'void' })
+      .update({
+        status: 'void',
+        voided_by: voidedBy,
+        voided_at: voidedAt.toISOString(),
+        void_reason: voidReason || null,
+      })
       .eq('id', billId);
 
     if (error) {
@@ -125,6 +135,9 @@ export const useBillStore = create<BillState>()(
       changeDue: 0,
       staffName: b.staff_name,
       status: b.status || 'paid',
+      voidedBy: b.voided_by || undefined,
+      voidedAt: b.voided_at ? new Date(b.voided_at) : undefined,
+      voidReason: b.void_reason || undefined,
       guestCount: b.guest_count,
       customerGstin: b.customer_gstin || undefined,
       placeOfSupply: b.place_of_supply || undefined,
@@ -178,6 +191,9 @@ export const useBillStore = create<BillState>()(
         changeDue: 0,
         staffName: b.staff_name,
         status: b.status || 'paid',
+        voidedBy: b.voided_by || undefined,
+        voidedAt: b.voided_at ? new Date(b.voided_at) : undefined,
+        voidReason: b.void_reason || undefined,
         guestCount: b.guest_count,
         customerGstin: b.customer_gstin || undefined,
         placeOfSupply: b.place_of_supply || undefined,
