@@ -114,6 +114,11 @@ export const useSettingsStore = create<SettingsState>()(
               gstEnabled: s.gstEnabled,
               defaultGstRate: s.defaultGstRate,
               businessState: s.businessState,
+              categoryGstRates: s.categoryGstRates,
+              logoUrl: s.logoUrl,
+              printerWidth: s.printerWidth,
+              autoPrintBill: s.autoPrintBill,
+              autoPrintKot: s.autoPrintKot,
             },
             updated_at: new Date().toISOString(),
           });
@@ -175,12 +180,22 @@ export const useSettingsStore = create<SettingsState>()(
         supabase
 .channel('public:app_settings')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
-            const printers = (payload.new as any)?.printers;
-            if (printers && Array.isArray(printers)) {
-              set((state) => ({
-                settings: { ...state.settings, printers },
-              }));
-            }
+            const row = payload.new as any;
+            if (!row) return;
+
+            set((state) => {
+              let newSettings = { ...state.settings };
+              
+              if (row.printers && Array.isArray(row.printers)) {
+                newSettings.printers = row.printers;
+              }
+              
+              if (row.restaurant_info) {
+                newSettings = { ...newSettings, ...row.restaurant_info };
+              }
+              
+              return { settings: newSettings };
+            });
           })
           .subscribe();
       },
