@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 
-export type PermissionModule = 'admin' | 'tables' | 'orders' | 'kitchen' | 'billing' | 'menu' | 'inventory' | 'reports' | 'customers';
+export type PermissionModule = 'admin' | 'tables' | 'orders' | 'kitchen' | 'billing' | 'bill_history' | 'menu' | 'inventory' | 'reports' | 'customers';
 
 export const ALL_MODULES: { id: PermissionModule; label: string; description: string }[] = [
   { id: 'admin', label: 'Dashboard & Admin', description: 'Dashboard, settings, staff management, shift management, accounting, head count' },
@@ -11,16 +11,17 @@ export const ALL_MODULES: { id: PermissionModule; label: string; description: st
   { id: 'orders', label: 'Order Taking', description: 'Create and manage customer orders' },
   { id: 'kitchen', label: 'Kitchen Display', description: 'View and update KOT orders' },
   { id: 'billing', label: 'Billing & Counters', description: 'Process bills, bakery and juice counters' },
+  { id: 'bill_history', label: 'Bill History', description: 'View, search and void past bills and invoices' },
   { id: 'menu', label: 'Menu Management', description: 'Add, edit and delete menu items' },
   { id: 'inventory', label: 'Inventory', description: 'Manage stock and inventory' },
-  { id: 'reports', label: 'Reports & Analytics', description: 'View sales reports, bill history, GST filing, analytics' },
+  { id: 'reports', label: 'Reports & Analytics', description: 'View sales reports, GST filing and analytics dashboards' },
   { id: 'customers', label: 'Customers', description: 'Access customer records' },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, PermissionModule[]> = {
-  admin: ['admin', 'tables', 'orders', 'kitchen', 'billing', 'menu', 'inventory', 'reports', 'customers'],
-  manager: ['tables', 'orders', 'billing', 'inventory', 'menu', 'customers', 'kitchen', 'reports'],
-  cashier: ['billing', 'orders', 'customers'],
+  admin: ['admin', 'tables', 'orders', 'kitchen', 'billing', 'bill_history', 'menu', 'inventory', 'reports', 'customers'],
+  manager: ['tables', 'orders', 'billing', 'bill_history', 'inventory', 'menu', 'customers', 'kitchen', 'reports'],
+  cashier: ['billing', 'bill_history', 'orders', 'customers'],
   waiter: ['tables', 'orders', 'menu'],
   kitchen: ['kitchen'],
 };

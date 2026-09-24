@@ -26,7 +26,7 @@ const NAV_GROUPS = [
       { label: 'New Order', path: '/order', icon: <ClipboardText size={20} />, module: 'orders' },
       { label: 'Kitchen Display', path: '/kitchen', icon: <CookingPot size={20} />, module: 'kitchen' },
       { label: 'Billing', path: '/billing', icon: <Receipt size={20} />, module: 'billing' },
-      { label: 'Bill History', path: '/bills', icon: <Receipt size={20} />, module: 'reports' },
+      { label: 'Bill History', path: '/bills', icon: <Receipt size={20} />, module: 'bill_history' },
       { label: 'Head Count', path: '/headcount', icon: <Users size={20} />, module: 'admin' },
     ] as NavItem[],
   },
