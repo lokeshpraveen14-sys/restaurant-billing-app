@@ -25,3 +25,7 @@ CREATE POLICY "Allow public update on app_settings"
 
 CREATE POLICY "Allow public insert on app_settings"
   ON public.app_settings FOR INSERT WITH CHECK (true);
+
+-- Add restaurant_info column for syncing restaurant name, address, GSTIN etc.
+ALTER TABLE public.app_settings
+  ADD COLUMN IF NOT EXISTS restaurant_info JSONB DEFAULT '{}'::jsonb;

@@ -37,6 +37,7 @@ interface SettingsState {
   incrementInvoiceCounter: () => number;
   syncInvoiceCounter: (invoiceNumber: string) => void;
   syncPrintersToCloud: () => Promise<void>;
+  syncRestaurantSettingsToCloud: () => Promise<void>;
   fetchPrintersFromCloud: () => Promise<void>;
   initSettingsSync: () => void;
 }
@@ -90,6 +91,39 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
 
+      syncRestaurantSettingsToCloud: async () => {
+        const s = get().settings;
+        try {
+          const { error } = await supabase.from('app_settings').upsert({
+            id: 'default',
+            restaurant_info: {
+              restaurantName: s.restaurantName,
+              address: s.address,
+              phone: s.phone,
+              email: s.email,
+              gstin: s.gstin,
+              upiId: s.upiId,
+              outlet: s.outlet,
+              currency: s.currency,
+              financialYear: s.financialYear,
+              invoicePrefix: s.invoicePrefix,
+              serviceChargePercent: s.serviceChargePercent,
+              serviceChargeEnabled: s.serviceChargeEnabled,
+              parcelCharge: s.parcelCharge,
+              parcelChargeEnabled: s.parcelChargeEnabled,
+              gstEnabled: s.gstEnabled,
+              defaultGstRate: s.defaultGstRate,
+              businessState: s.businessState,
+            },
+            updated_at: new Date().toISOString(),
+          });
+          if (error) console.error('Failed to sync restaurant settings to cloud:', error);
+          else console.log('[Settings] Restaurant info synced to cloud ✓');
+        } catch (e) {
+          console.error('Restaurant settings cloud sync error:', e);
+        }
+      },
+
       fetchPrintersFromCloud: async () => {
         try {
           const { data, error } = await supabase
@@ -112,6 +146,23 @@ export const useSettingsStore = create<SettingsState>()(
         // Fetch shared printer config from cloud on startup
         get().fetchPrintersFromCloud();
 
+        // Fetch restaurant info from cloud on startup
+        (async () => {
+          try {
+            const { data, error } = await supabase
+              .from('app_settings')
+              .select('restaurant_info')
+              .eq('id', 'default')
+              .single();
+            if (!error && data?.restaurant_info) {
+              const ri = data.restaurant_info as Partial<Settings>;
+              set((state) => ({ settings: { ...state.settings, ...ri } }));
+              console.log('[Settings] Restaurant info loaded from cloud ✓');
+            }
+          } catch (e) {
+            console.warn('[Settings] Could not fetch restaurant info from cloud:', e);
+          }
+        })();
         // Subscribe to real-time printer config changes from other devices
         const existing = supabase.getChannels().find(c => c.topic === 'realtime:public:app_settings');
         if (existing) return;

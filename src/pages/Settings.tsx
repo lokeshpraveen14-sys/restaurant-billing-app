@@ -11,7 +11,7 @@ import { UserRole } from '../types';
 const GST_RATES = [0, 5, 12, 18, 28] as const;
 
 export default function Settings() {
-  const { settings, updateSettings, syncPrintersToCloud } = useSettingsStore();
+  const { settings, updateSettings, syncPrintersToCloud, syncRestaurantSettingsToCloud } = useSettingsStore();
   const { categories } = useMenuStore();
   const toast = useToast();
   const [form, setForm] = useState({ ...settings });
@@ -24,6 +24,8 @@ export default function Settings() {
     updateSettings(form);
     // Sync printer config to cloud so all devices get the same printers
     syncPrintersToCloud();
+    // Sync restaurant info (name, address, GSTIN, etc.) to cloud
+    syncRestaurantSettingsToCloud();
     toast.success('Settings saved', 'All changes have been applied');
   };
 

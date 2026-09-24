@@ -138,7 +138,7 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
   }
 
   return [
-    { type: 'text', bold: true, center: true, size: 'double' as const, text: data.restaurantName },
+    { type: 'text', bold: true, center: true, text: data.restaurantName },
     { type: 'text', center: true, text: data.address },
     { type: 'text', center: true, text: `GSTIN: ${data.gstin}` },
     { type: 'divider' },
