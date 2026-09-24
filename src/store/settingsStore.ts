@@ -50,11 +50,13 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({ settings: { ...state.settings, ...updates } })),
 
       incrementInvoiceCounter: () => {
-        const current = get().settings.invoiceCounter;
-        set((state) => ({
-          settings: { ...state.settings, invoiceCounter: state.settings.invoiceCounter + 1 },
-        }));
-        return current;
+        // Read current, then increment — done synchronously to avoid race with Zustand async writes
+        let counter = 0;
+        set((state) => {
+          counter = state.settings.invoiceCounter;
+          return { settings: { ...state.settings, invoiceCounter: state.settings.invoiceCounter + 1 } };
+        });
+        return counter;
       },
 
       syncInvoiceCounter: (invoiceNumber: string) => {

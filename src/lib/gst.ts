@@ -215,33 +215,44 @@ export function getCurrentFY(date = new Date()): string {
 }
 
 /**
- * Atomically fetch the next invoice number from Postgres.
- * Falls back to local counter if RPC fails (e.g. offline / network error).
+ * Module-level queue to serialize invoice number generation.
+ * This prevents concurrent calls from racing each other and getting the same number
+ * when both the RPC and the local fallback are used.
+ */
+let _invoiceQueue: Promise<string> = Promise.resolve('');
+
+/**
+ * Atomically fetch the next invoice number from Postgres (serialized with a local queue).
+ * Falls back to a timestamp+random unique ID if RPC fails.
  *
- * IMPORTANT: The local fallback appends a short timestamp suffix (e.g. "3331-T4A2")
- * so that two devices going offline at the same time never produce the exact same
- * invoice number. The DB RPC is always the preferred path.
+ * The module-level queue ensures that even if 10 bills are submitted in rapid
+ * succession, each call waits for the previous one to finish before requesting
+ * the next counter — so you never get the same number twice even offline.
  */
 export async function getNextInvoiceNumber(
   prefix: string,
   localFallback: () => string
 ): Promise<string> {
-  try {
-    const fy = getCurrentFY();
-    const { data, error } = await supabase.rpc('get_next_invoice_number', {
-      p_prefix: prefix,
-      p_fy: fy,
-    });
-    if (error || !data) throw error;
-    return data as string;
-  } catch {
-    console.warn('[getNextInvoiceNumber] RPC failed — using local counter fallback');
-    // Append a short timestamp suffix (last 4 hex chars of current ms)
-    // so two devices failing at the same time produce different numbers.
-    const base = localFallback();
-    const suffix = Date.now().toString(16).slice(-4).toUpperCase();
-    return `${base}-${suffix}`;
-  }
+  // Chain onto the existing queue so calls are strictly serialized
+  _invoiceQueue = _invoiceQueue.then(async () => {
+    try {
+      const fy = getCurrentFY();
+      const { data, error } = await supabase.rpc('get_next_invoice_number', {
+        p_prefix: prefix,
+        p_fy: fy,
+      });
+      if (error || !data) throw error;
+      return data as string;
+    } catch {
+      console.warn('[getNextInvoiceNumber] RPC failed — using local counter fallback');
+      // Use current ms timestamp + 3 random digits → unique even across offline devices
+      const base = localFallback();
+      const tsHex = Date.now().toString(36).toUpperCase().slice(-5);
+      const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      return `${base}-${tsHex}${rand}`;
+    }
+  });
+  return _invoiceQueue;
 }
 
 /** HSN Code for common food items */
