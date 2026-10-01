@@ -25,12 +25,13 @@ export const useBillStore = create<BillState>()(
       return;
     }
 
-    // Add locally for instant UI update
+    // Save locally FIRST for instant UI — billing never waits for the network
     const newBill = { ...bill, status: bill.status || 'paid' as const };
     set((state) => ({ bills: [...state.bills, newBill] }));
 
-    // Push to Supabase — use UPSERT (onConflict: id) so retries/refreshes never create duplicate rows
-    const { error } = await supabase.from('bills').upsert({
+    // Push to Supabase in the BACKGROUND — don't await, don't block the UI
+    // Bills stored in localStorage via Zustand persist, so they survive even if this fails
+    supabase.from('bills').upsert({
       id: bill.id,
       invoice_number: bill.invoiceNumber,
       order_id: bill.orderId,
@@ -56,11 +57,10 @@ export const useBillStore = create<BillState>()(
       outlet_gstin: bill.outletGSTIN || null,
       is_gst_bill: bill.isGstBill !== false,
       created_at: bill.createdAt.toISOString()
-    }, { onConflict: 'id' });
-
-    if (error) {
-      console.error('[addBill] Failed to upsert bill into Supabase:', error);
-    }
+    }, { onConflict: 'id' }).then(({ error }) => {
+      if (error) console.warn('[addBill] Background Supabase sync failed (will retry on next sync):', error.message);
+      else console.log('[addBill] Synced to Supabase ✓', bill.invoiceNumber);
+    });
   },
 
 

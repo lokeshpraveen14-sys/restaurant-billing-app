@@ -78,25 +78,43 @@ function startDaemon() {
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log('');
 
-  // 1. Process any missed jobs on startup
+  // 1. Process any missed jobs on startup (once only — no polling loop)
   pollPendingJobs();
 
-  // 2. Subscribe to realtime inserts
-  supabase
-    .channel('public:print_jobs')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'print_jobs' }, payload => {
-      if (payload.new.status === 'pending') {
-        processJob(payload.new);
-      }
-    })
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('📡 Realtime connection established. Waiting for jobs...');
-      }
-    });
+  // 2. Subscribe to realtime inserts with exponential backoff
+  let retryDelay = 5000;       // start at 5 seconds
+  const MAX_RETRY = 300000;    // cap at 5 minutes
 
-  // 3. Fallback polling every 10 seconds just in case realtime drops
-  setInterval(pollPendingJobs, 10000);
+  function subscribeRealtime() {
+    const channel = supabase
+      .channel('public:print_jobs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'print_jobs' }, payload => {
+        if (payload.new.status === 'pending') {
+          // Reset backoff on successful message
+          retryDelay = 5000;
+          processJob(payload.new);
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          retryDelay = 5000; // reset on success
+          console.log('📡 Realtime connection established. Waiting for jobs...');
+        } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          console.warn(`⚠️  Realtime disconnected (${status}). Retrying in ${retryDelay / 1000}s...`);
+          supabase.removeChannel(channel);
+          setTimeout(() => {
+            retryDelay = Math.min(retryDelay * 2, MAX_RETRY); // exponential backoff
+            subscribeRealtime();
+          }, retryDelay);
+        }
+      });
+  }
+
+  subscribeRealtime();
+
+  // NOTE: setInterval polling REMOVED — it was causing 259,200 DB reads/month
+  // and burning egress quota. Realtime subscription handles new jobs instantly.
+  // The startup pollPendingJobs() above handles any jobs that arrived while offline.
 }
 
 startDaemon();
