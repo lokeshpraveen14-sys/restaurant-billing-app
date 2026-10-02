@@ -163,7 +163,7 @@ export const useBillStore = create<BillState>()(
       .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false })
-      .limit(500);
+      .limit(2000); // Match initBillSync limit
 
     if (error || !data) return;
 
@@ -225,7 +225,7 @@ export const useBillStore = create<BillState>()(
       .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(2000); // Cover a full busy day (was 200 — too small, caused revenue drops)
 
     if (!error && data) {
       const dbBills = data.map(b => ({
@@ -281,15 +281,15 @@ export const useBillStore = create<BillState>()(
         return Array.from(seenInvoices.values());
       })();
 
-      // Merge: DB is authoritative. Keep any local bills not in DB (e.g. just created).
+      // Merge: ADDITIVE ONLY — never remove local bills.
+      // DB is the source of truth for bill content, but we never throw away
+      // local bills just because the DB query didn't return them (limit/timing).
       set((state) => {
         const dbIds = new Set(deduplicatedDbBills.map(b => b.id));
-        const dbInvoiceNumbers = new Set(deduplicatedDbBills.map(b => b.invoiceNumber));
-        // Exclude local bills whose invoice number is already in DB (prevents showing stale local copies)
-        const localOnly = state.bills.filter(
-          b => !dbIds.has(b.id) && !dbInvoiceNumbers.has(b.invoiceNumber)
-        );
-        return { bills: [...deduplicatedDbBills, ...localOnly] };
+        // Keep ALL existing local bills; only add DB bills not already present
+        const existingIds = new Set(state.bills.map(b => b.id));
+        const newFromDb = deduplicatedDbBills.filter(b => !existingIds.has(b.id));
+        return { bills: [...state.bills, ...newFromDb] };
       });
 
       // Sync the invoice counter based on the bills we just fetched
