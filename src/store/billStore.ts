@@ -202,8 +202,11 @@ export const useBillStore = create<BillState>()(
       hsnCodes: b.hsn_codes || undefined,
       isGstBill: b.is_gst_bill || false,
       outletGstin: b.outlet_gstin || undefined,
+      outletName: '',
+      outletAddress: '',
+      outletGSTIN: b.outlet_gstin || '',
       createdAt: new Date(b.created_at),
-    }));
+    })) as Bill[];
 
     // Merge: keep old bills not in today's range, replace today's with fresh data
     set(state => {
