@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useTableStore } from '../store/tableStore';
 import { useOrderStore } from '../store/orderStore';
@@ -8,7 +8,7 @@ import { useShiftStore } from '../store/shiftStore';
 import { formatAmount } from '../lib/gst';
 import {
   TrendUp, Receipt, Table, ClipboardText, CurrencyInr,
-  ChartBar, ArrowUp, ArrowDown, Clock, CheckCircle
+  ChartBar, ArrowUp, ArrowDown, Clock, CheckCircle, ArrowClockwise
 } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -37,7 +37,15 @@ export default function Dashboard() {
   const orders = useOrderStore(s => s.orders);
   const items = useMenuStore(s => s.items);
   const bills = useBillStore(s => s.bills);
+  const refreshTodayBills = useBillStore(s => s.refreshTodayBills);
   const currentShift = useShiftStore(s => s.currentShift);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshTodayBills();
+    setRefreshing(false);
+  };
 
   const occupiedTables = tables.filter((t) => t.status === 'occupied').length;
   const freeTables = tables.filter((t) => t.status === 'free').length;
@@ -124,14 +132,37 @@ export default function Dashboard() {
     <>
       <TopBar title="Dashboard" />
       <div className="page-body">
-        {/* Greeting */}
-        <div style={{ marginBottom: 'var(--space-6)' }}>
-          <h2 style={{ color: 'var(--text-primary)', marginBottom: 4 }}>
-            Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}, {currentUser?.name.split(' ')[0]}
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
+        {/* Greeting + Refresh */}
+        <div style={{ marginBottom: 'var(--space-6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <h2 style={{ color: 'var(--text-primary)', marginBottom: 4 }}>
+              Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}, {currentUser?.name.split(' ')[0]}
+            </h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh today's revenue from server"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', borderRadius: 10,
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)',
+              color: refreshing ? 'var(--text-muted)' : 'var(--accent)',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              fontSize: '0.85rem', fontWeight: 600,
+              transition: 'all 0.2s',
+            }}
+          >
+            <ArrowClockwise
+              size={16}
+              style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}
+            />
+            {refreshing ? 'Refreshing...' : 'Refresh Revenue'}
+          </button>
+          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
 
         {/* Stats Grid */}

@@ -11,6 +11,7 @@ interface BillState {
   voidBill: (billId: string, voidedBy: string, voidReason?: string) => Promise<void>;
   fetchBillsByDateRange: (startDate: Date, endDate: Date, page?: number, limit?: number) => Promise<{ bills: Bill[]; total: number }>;
   initBillSync: () => void;
+  refreshTodayBills: () => Promise<void>;
 }
 
 export const useBillStore = create<BillState>()(
@@ -150,6 +151,65 @@ export const useBillStore = create<BillState>()(
     }));
 
     return { bills: mapped, total: count ?? 0 };
+  },
+
+  refreshTodayBills: async () => {
+    // Force re-fetch today's bills from Supabase — used by Dashboard Refresh button
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from('bills')
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at')
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (error || !data) return;
+
+    const fresh = data.map(b => ({
+      id: b.id,
+      invoiceNumber: b.invoice_number,
+      orderId: b.order_id,
+      tableId: b.table_id || undefined,
+      tableNumber: b.table_number || undefined,
+      orderType: b.order_type as any,
+      items: b.items as any,
+      subtotal: Number(b.subtotal),
+      gstBreakdown: [],
+      totalGST: Number(b.total_gst),
+      cgstAmount: Number(b.cgst_amount || 0),
+      sgstAmount: Number(b.sgst_amount || 0),
+      igstAmount: Number(b.igst_amount || 0),
+      serviceCharge: Number(b.service_charge),
+      serviceChargePercent: 0,
+      discountType: 'flat' as const,
+      discountValue: 0,
+      discountAmount: Number(b.discount_amount),
+      roundOff: 0,
+      totalAmount: Number(b.total_amount),
+      payments: b.payments as any,
+      amountPaid: Number(b.total_amount),
+      changeDue: 0,
+      staffName: b.staff_name,
+      status: b.status || 'paid',
+      voidedBy: b.voided_by || undefined,
+      voidedAt: b.voided_at ? new Date(b.voided_at) : undefined,
+      voidReason: b.void_reason || undefined,
+      guestCount: b.guest_count,
+      customerGstin: b.customer_gstin || undefined,
+      placeOfSupply: b.place_of_supply || undefined,
+      hsnCodes: b.hsn_codes || undefined,
+      isGstBill: b.is_gst_bill || false,
+      outletGstin: b.outlet_gstin || undefined,
+      createdAt: new Date(b.created_at),
+    }));
+
+    // Merge: keep old bills not in today's range, replace today's with fresh data
+    set(state => {
+      const oldBills = state.bills.filter(b => new Date(b.createdAt) < startDate);
+      return { bills: [...fresh, ...oldBills] };
+    });
   },
 
   initBillSync: async () => {
