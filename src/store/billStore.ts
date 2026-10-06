@@ -10,6 +10,7 @@ interface BillState {
   addBill: (bill: Bill) => Promise<void>;
   voidBill: (billId: string, voidedBy: string, voidReason?: string) => Promise<void>;
   fetchBillsByDateRange: (startDate: Date, endDate: Date, page?: number, limit?: number) => Promise<{ bills: Bill[]; total: number }>;
+  fetchAllBillsForDateRange: (startDate: Date, endDate: Date) => Promise<Bill[]>;
   initBillSync: () => void;
   refreshTodayBills: () => Promise<void>;
 }
@@ -151,6 +152,22 @@ export const useBillStore = create<BillState>()(
     }));
 
     return { bills: mapped, total: count ?? 0 };
+  },
+
+  fetchAllBillsForDateRange: async (startDate: Date, endDate: Date) => {
+    let allBills: Bill[] = [];
+    let page = 1;
+    const limit = 1000;
+    
+    while (true) {
+      const { bills, total } = await get().fetchBillsByDateRange(startDate, endDate, page, limit);
+      allBills = [...allBills, ...bills];
+      if (allBills.length >= total || bills.length < limit) {
+        break;
+      }
+      page++;
+    }
+    return allBills;
   },
 
   refreshTodayBills: async () => {

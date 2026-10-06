@@ -55,7 +55,7 @@ export default function Reports() {
   const [itemPage, setItemPage] = useState(1);
   const ITEM_PAGE_SIZE = 50;
 
-  const { fetchBillsByDateRange, bills: localBills } = useBillStore();
+  const { fetchAllBillsForDateRange, bills: localBills } = useBillStore();
   const { categories, items: menuItems } = useMenuStore();
   const currentUser = useAuthStore(s => s.currentUser);
   const { bankAccounts, ledgerTransactions } = useAccountingStore();
@@ -70,7 +70,7 @@ export default function Reports() {
   const fetchFiltered = async (start: Date, end: Date): Promise<Bill[]> => {
     let result: Bill[] = [];
     try {
-      const { bills: supabaseBills } = await fetchBillsByDateRange(start, end, 1, 5000);
+      const supabaseBills = await fetchAllBillsForDateRange(start, end);
       const localFiltered = localBills.filter(b => { const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt); return d >= start && d <= end; });
       const allById: Record<string, Bill> = {};
       localFiltered.forEach(b => { allById[b.id] = b; });

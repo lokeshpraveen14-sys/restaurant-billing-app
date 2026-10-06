@@ -90,7 +90,7 @@ export default function Accounting() {
   useEffect(() => { initAccountingSync(); }, []);
 
   // ─── BILLING REVENUE (auto from bills DB) ───────────────────────────────────
-  const { fetchBillsByDateRange } = useBillStore();
+  const { fetchAllBillsForDateRange } = useBillStore();
   const [revPeriod, setRevPeriod] = useState<'today' | 'week' | 'month' | 'custom'>('month');
   const [customFrom, setCustomFrom] = useState(() => {
     const d = new Date();
@@ -135,7 +135,7 @@ export default function Accounting() {
       setLoadingBills(true);
       try {
         const { start, end } = getDateRange();
-        const { bills } = await fetchBillsByDateRange(start, end, 1, 5000);
+        const bills = await fetchAllBillsForDateRange(start, end);
         if (!isMounted) return;
         const activeBills = bills.filter(b => b.status !== 'void');
         let cash = 0, card = 0, upi = 0, total = 0;

@@ -18,7 +18,7 @@ export default function GstFiling() {
     return new Date().toISOString().split('T')[0];
   });
 
-  const { fetchBillsByDateRange, bills: localBills } = useBillStore();
+  const { fetchAllBillsForDateRange, bills: localBills } = useBillStore();
   const { bankAccounts, ledgerTransactions } = useAccountingStore();
   const { settings } = useSettingsStore();
 
@@ -30,8 +30,7 @@ export default function GstFiling() {
     
     let gstrBills: Bill[] = [];
     try { 
-      const result = await fetchBillsByDateRange(start, end, 1, 5000); 
-      gstrBills = result.bills;
+      gstrBills = await fetchAllBillsForDateRange(start, end); 
     } catch { 
       gstrBills = localBills.filter(b => {
         const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
