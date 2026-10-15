@@ -86,6 +86,7 @@ function startDaemon() {
   const MAX_RETRY = 300000;    // cap at 5 minutes
 
   function subscribeRealtime() {
+    let isDisconnecting = false;
     const channel = supabase
       .channel('public:print_jobs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'print_jobs' }, payload => {
@@ -100,6 +101,8 @@ function startDaemon() {
           retryDelay = 5000; // reset on success
           console.log('📡 Realtime connection established. Waiting for jobs...');
         } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          if (isDisconnecting) return;
+          isDisconnecting = true;
           console.warn(`⚠️  Realtime disconnected (${status}). Retrying in ${retryDelay / 1000}s...`);
           supabase.removeChannel(channel);
           setTimeout(() => {

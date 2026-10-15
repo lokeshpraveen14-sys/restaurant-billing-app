@@ -91,6 +91,7 @@ function RequirePermission({ module, children }: { module: string, children: Rea
     if (perms.includes('billing' as any)) return <Navigate to="/billing" replace />;
     if (perms.includes('kitchen' as any)) return <Navigate to="/kitchen" replace />;
     if (perms.includes('orders' as any)) return <Navigate to="/order" replace />;
+    if (perms.includes('shift' as any)) return <Navigate to="/shift" replace />;
     return <Navigate to="/login" replace />;
   }
   
@@ -165,7 +166,7 @@ export default function App() {
                   <Route path="/gst-filing" element={<RequirePermission module="reports"><GstFiling /></RequirePermission>} />
                   <Route path="/settings" element={<RequirePermission module="admin"><Settings /></RequirePermission>} />
                   <Route path="/analytics" element={<RequirePermission module="reports"><Analytics /></RequirePermission>} />
-                  <Route path="/shift" element={<RequirePermission module="admin"><ShiftManagement /></RequirePermission>} />
+                  <Route path="/shift" element={<RequirePermission module="shift"><ShiftManagement /></RequirePermission>} />
                   <Route path="/bills" element={<RequirePermission module="bill_history"><BillHistory /></RequirePermission>} />
                   <Route path="/staff" element={<RequirePermission module="admin"><StaffManagement /></RequirePermission>} />
                   <Route path="/accounting" element={<RequirePermission module="admin"><Accounting /></RequirePermission>} />

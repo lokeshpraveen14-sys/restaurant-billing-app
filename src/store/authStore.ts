@@ -3,10 +3,11 @@ import { persist } from 'zustand/middleware';
 import { User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 
-export type PermissionModule = 'admin' | 'tables' | 'orders' | 'kitchen' | 'billing' | 'bill_history' | 'menu' | 'inventory' | 'reports' | 'customers';
+export type PermissionModule = 'admin' | 'shift' | 'tables' | 'orders' | 'kitchen' | 'billing' | 'bill_history' | 'menu' | 'inventory' | 'reports' | 'customers';
 
 export const ALL_MODULES: { id: PermissionModule; label: string; description: string }[] = [
-  { id: 'admin', label: 'Dashboard & Admin', description: 'Dashboard, settings, staff management, shift management, accounting, head count' },
+  { id: 'admin', label: 'Dashboard & Admin', description: 'Dashboard, settings, staff management, accounting, head count' },
+  { id: 'shift', label: 'Shift Management', description: 'Open, manage and close cash shifts, drawer totals and handover summaries' },
   { id: 'tables', label: 'Table Management', description: 'View and manage restaurant tables' },
   { id: 'orders', label: 'Order Taking', description: 'Create and manage customer orders' },
   { id: 'kitchen', label: 'Kitchen Display', description: 'View and update KOT orders' },
@@ -19,11 +20,11 @@ export const ALL_MODULES: { id: PermissionModule; label: string; description: st
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, PermissionModule[]> = {
-  admin: ['admin', 'tables', 'orders', 'kitchen', 'billing', 'bill_history', 'menu', 'inventory', 'reports', 'customers'],
-  manager: ['tables', 'orders', 'billing', 'bill_history', 'inventory', 'menu', 'customers', 'kitchen', 'reports'],
-  cashier: ['billing', 'bill_history', 'orders', 'customers'],
-  waiter: ['tables', 'orders', 'menu'],
-  kitchen: ['kitchen'],
+  admin: ['admin', 'shift', 'tables', 'orders', 'kitchen', 'billing', 'bill_history', 'menu', 'inventory', 'reports', 'customers'],
+  manager: ['shift', 'tables', 'orders', 'billing', 'bill_history', 'inventory', 'menu', 'customers', 'kitchen', 'reports'],
+  cashier: ['shift', 'billing', 'bill_history', 'orders', 'customers'],
+  waiter: ['shift', 'tables', 'orders', 'menu'],
+  kitchen: ['shift', 'kitchen'],
 };
 
 // Fallback demo users — used only while Supabase loads, or if offline
@@ -83,6 +84,31 @@ interface AuthState {
   initUserSync: () => void;
   updateRolePermissions: (role: UserRole, modules: PermissionModule[]) => void;
   loadRolePermissions: () => Promise<void>;
+}
+
+export function normalizeRolePermissions(saved?: Record<string, any>): Record<UserRole, PermissionModule[]> {
+  if (!saved) return { ...DEFAULT_ROLE_PERMISSIONS };
+
+  const isMigrated = !!saved._shiftMigrated;
+  const merged: Record<UserRole, PermissionModule[]> = {
+    admin: Array.from(new Set([...(saved.admin || DEFAULT_ROLE_PERMISSIONS.admin), 'shift'])),
+    manager: saved.manager ? [...saved.manager] : [...DEFAULT_ROLE_PERMISSIONS.manager],
+    cashier: saved.cashier ? [...saved.cashier] : [...DEFAULT_ROLE_PERMISSIONS.cashier],
+    waiter: saved.waiter ? [...saved.waiter] : [...DEFAULT_ROLE_PERMISSIONS.waiter],
+    kitchen: saved.kitchen ? [...saved.kitchen] : [...DEFAULT_ROLE_PERMISSIONS.kitchen],
+  };
+
+  // If this is a legacy saved permissions object that was saved before 'shift' was a separate module,
+  // ensure 'shift' is added to all roles ("shift need for all")
+  if (!isMigrated) {
+    (['admin', 'manager', 'cashier', 'waiter', 'kitchen'] as UserRole[]).forEach((r) => {
+      if (!merged[r].includes('shift')) {
+        merged[r].push('shift');
+      }
+    });
+  }
+
+  return merged;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -186,9 +212,9 @@ export const useAuthStore = create<AuthState>()(
           supabase.channel('public:app_settings')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
               if (payload.new && (payload.new as any).id === 'roles') {
-                const saved = (payload.new as any).printers as Record<UserRole, PermissionModule[]>;
+                const saved = (payload.new as any).printers;
                 if (saved) {
-                  set({ rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS, ...saved } });
+                  set({ rolePermissions: normalizeRolePermissions(saved) });
                 }
               }
             })
@@ -199,9 +225,9 @@ export const useAuthStore = create<AuthState>()(
           supabase.channel('auth_app_settings')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
               if (payload.new && (payload.new as any).id === 'roles') {
-                const saved = (payload.new as any).printers as Record<UserRole, PermissionModule[]>;
+                const saved = (payload.new as any).printers;
                 if (saved) {
-                  set({ rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS, ...saved } });
+                  set({ rolePermissions: normalizeRolePermissions(saved) });
                 }
               }
             })
@@ -216,7 +242,7 @@ export const useAuthStore = create<AuthState>()(
         // Persist to Supabase app_settings (using id 'roles' and storing JSON in printers column)
         try {
           const current = get().rolePermissions;
-          const updated = { ...current, [role]: modules };
+          const updated = { ...current, [role]: modules, _shiftMigrated: true };
           await supabase.from('app_settings').upsert(
             { id: 'roles', printers: updated, updated_at: new Date().toISOString() },
             { onConflict: 'id' }
@@ -234,8 +260,7 @@ export const useAuthStore = create<AuthState>()(
             .eq('id', 'roles')
             .single();
           if (data?.printers) {
-            const saved = data.printers as Record<UserRole, PermissionModule[]>;
-            set({ rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS, ...saved } });
+            set({ rolePermissions: normalizeRolePermissions(data.printers) });
           }
         } catch (e) {
           // offline or not saved yet — use defaults
@@ -249,6 +274,11 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
         rolePermissions: state.rolePermissions,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state && state.rolePermissions) {
+          state.rolePermissions = normalizeRolePermissions(state.rolePermissions);
+        }
+      },
     }
   )
 );

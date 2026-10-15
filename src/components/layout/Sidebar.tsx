@@ -45,7 +45,7 @@ const NAV_GROUPS = [
       { label: 'Reports', path: '/reports', icon: <ChartBar size={20} />, module: 'reports' },
       { label: 'GST Filing', path: '/gst-filing', icon: <FileText size={20} />, module: 'reports' },
       { label: 'Analytics', path: '/analytics', icon: <ChartLine size={20} />, module: 'reports' },
-      { label: 'Shift', path: '/shift', icon: <Timer size={20} />, module: 'admin' },
+      { label: 'Shift', path: '/shift', icon: <Timer size={20} />, module: 'shift' },
     ] as NavItem[],
   },
   {
