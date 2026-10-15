@@ -181,6 +181,11 @@ export const useAuthStore = create<AuthState>()(
         get().fetchUsers();
 
         // Real-time: when any device changes a PIN/adds a user, all other devices update instantly
+        const staleStaff = supabase.getChannels().find(c => c.topic === 'realtime:staff-users-sync');
+        if (staleStaff) {
+          supabase.removeChannel(staleStaff);
+        }
+
         supabase
           .channel('staff-users-sync')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_users' }, (payload) => {
@@ -207,32 +212,21 @@ export const useAuthStore = create<AuthState>()(
           .subscribe();
 
         // Real-time: listen for role permissions changes from app_settings
-        const existing = supabase.getChannels().find(c => c.topic === 'realtime:public:app_settings');
-        if (!existing) {
-          supabase.channel('public:app_settings')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
-              if (payload.new && (payload.new as any).id === 'roles') {
-                const saved = (payload.new as any).printers;
-                if (saved) {
-                  set({ rolePermissions: normalizeRolePermissions(saved) });
-                }
-              }
-            })
-            .subscribe();
-        } else {
-          // If already subscribed (e.g. by settingsStore), we can't easily add another handler to the same channel
-          // without storing the channel reference. Instead, we'll create a dedicated channel for auth
-          supabase.channel('auth_app_settings')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
-              if (payload.new && (payload.new as any).id === 'roles') {
-                const saved = (payload.new as any).printers;
-                if (saved) {
-                  set({ rolePermissions: normalizeRolePermissions(saved) });
-                }
-              }
-            })
-            .subscribe();
+        const staleRoles = supabase.getChannels().find(c => c.topic === 'realtime:auth_app_settings');
+        if (staleRoles) {
+          supabase.removeChannel(staleRoles);
         }
+
+        supabase.channel('auth_app_settings')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+            if (payload.new && (payload.new as any).id === 'roles') {
+              const saved = (payload.new as any).printers;
+              if (saved) {
+                set({ rolePermissions: normalizeRolePermissions(saved) });
+              }
+            }
+          })
+          .subscribe();
       },
 
       updateRolePermissions: async (role, modules) => {
