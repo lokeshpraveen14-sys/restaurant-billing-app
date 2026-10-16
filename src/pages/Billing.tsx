@@ -5,6 +5,7 @@ import { useTableStore } from '../store/tableStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useBillStore } from '../store/billStore';
 import { useShiftStore } from '../store/shiftStore';
+import { useAuthStore } from '../store/authStore';
 import { useToast } from '../store/uiStore';
 import { calculateGSTBreakdown, gstRoundOff, getNextInvoiceNumber, generateInvoiceNumber, formatAmount, calculateServiceCharge, calculateDiscount, determineIsInterState, sumCGST, sumSGST, sumIGST } from '../lib/gst';
 import { Bill, Payment, PaymentMode, DiscountType } from '../types';
@@ -26,6 +27,9 @@ export default function Billing() {
   const incrementInvoiceCounter = useSettingsStore(s => s.incrementInvoiceCounter);
   const addBill = useBillStore(s => s.addBill);
   const addBillToShift = useShiftStore(s => s.addBillToShift);
+  const getActiveShiftForStaff = useShiftStore(s => s.getActiveShiftForStaff);
+  const currentUser = useAuthStore(s => s.currentUser);
+  const activeShift = getActiveShiftForStaff(currentUser?.id);
   const toast = useToast();
   const cartItems = order?.items.filter((i) => i.status !== 'void') || [];
 
@@ -147,7 +151,9 @@ export default function Billing() {
       payments: [{ mode: paymentMode, amount: totalAmount }],
       amountPaid: parseFloat(cashTendered) || totalAmount,
       changeDue: Math.max(0, changeDue),
-      staffName: order.staffName,
+      staffName: currentUser?.name || order.staffName,
+      staffId: currentUser?.id,
+      shiftId: activeShift?.id,
       createdAt: new Date(),
       outletName: settings.restaurantName,
       outletAddress: settings.address,
@@ -159,11 +165,11 @@ export default function Billing() {
 
     setBillGenerated(bill);
     addBill(bill);
-    // Track this bill in the active shift
+    // Track this bill in the active shift of this cashier
     const cashPaid = paymentMode === 'cash' ? totalAmount : 0;
     const upiPaid = paymentMode === 'upi' ? totalAmount : 0;
     const cardPaid = paymentMode === 'card' ? totalAmount : 0;
-    addBillToShift(cashPaid, upiPaid, cardPaid, totalAmount, order.guestCount || 0);
+    addBillToShift(cashPaid, upiPaid, cardPaid, totalAmount, order.guestCount || 0, currentUser?.id, activeShift?.id);
     updateOrderStatus(order.id, 'paid');
     if (order.tableId) {
       const otherActiveOrders = useOrderStore.getState().getOrdersByTable(order.tableId, order.tableNumber).filter(o => o.id !== order.id);

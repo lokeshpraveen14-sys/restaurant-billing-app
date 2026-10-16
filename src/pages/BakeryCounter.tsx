@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useMenuStore } from '../store/menuStore';
 import { useBillStore } from '../store/billStore';
+import { useShiftStore } from '../store/shiftStore';
+import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToast } from '../store/uiStore';
 import { formatAmount } from '../lib/gst';
@@ -27,6 +29,10 @@ export default function BakeryCounter() {
   const items = useMenuStore(s => s.items);
   const categories = useMenuStore(s => s.categories);
   const addBill = useBillStore(s => s.addBill);
+  const addBillToShift = useShiftStore(s => s.addBillToShift);
+  const getActiveShiftForStaff = useShiftStore(s => s.getActiveShiftForStaff);
+  const currentUser = useAuthStore(s => s.currentUser);
+  const activeShift = getActiveShiftForStaff(currentUser?.id);
   const settings = useSettingsStore(s => s.settings);
   const incrementInvoiceCounter = useSettingsStore(s => s.incrementInvoiceCounter);
   const toast = useToast();
@@ -342,7 +348,9 @@ export default function BakeryCounter() {
                       payments: [{ mode: 'cash', amount: rounded }],
                       amountPaid: rounded,
                       changeDue: 0,
-                      staffName: 'Bakery Staff',
+                      staffName: currentUser?.name || 'Bakery Staff',
+                      staffId: currentUser?.id,
+                      shiftId: activeShift?.id,
                       createdAt: new Date(),
                       outletName: settings.restaurantName,
                       outletAddress: settings.address,
@@ -350,6 +358,7 @@ export default function BakeryCounter() {
                     };
 
                     addBill(newBill);
+                    addBillToShift(rounded, 0, 0, rounded, 0, currentUser?.id, activeShift?.id);
                     setBillGenerated(newBill);
                     toast.success('Bill Generated', `Invoice ${invoiceNumber} created`);
                     setCart([]);

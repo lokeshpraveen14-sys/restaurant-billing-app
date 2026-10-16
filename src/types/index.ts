@@ -168,16 +168,22 @@ export interface Bill {
   hsnCodes?: Record<string, string>; // { menuItemId: hsnCode } snapshot at bill time
   isGstBill?: boolean;       // if false: store tax internally but hide on print / exclude from GSTR-1
   staffName: string;
-  status?: 'paid' | 'void';
-  voidedBy?: string;         // name of staff who voided the bill
+  staffId?: string;          // staff ID of cashier who billed
+  status?: 'paid' | 'void' | 'revised';
+  voidedBy?: string;         // name of staff who voided/deleted the bill
   voidedAt?: Date;           // timestamp of void
   voidReason?: string;       // reason entered at time of void
+  voidShiftId?: string;      // shift in which the bill was voided
+  revisedBy?: string;        // name of staff who revised the bill
+  revisedAt?: Date;          // timestamp of revision
+  revisedReason?: string;    // reason entered at time of revision
+  revisedShiftId?: string;   // shift in which the bill was revised
   guestCount?: number;
   createdAt: Date;
   outletName: string;
   outletAddress: string;
   outletGSTIN: string;
-  shiftId?: string; // link to shift
+  shiftId?: string; // link to shift in which bill was created
 }
 
 // Inventory
@@ -236,6 +242,10 @@ export interface Shift {
   totalRevenue: number;
   totalOrders: number;
   totalCovers: number;
+  totalVoided?: number;
+  totalVoidedCount?: number;
+  totalRevised?: number;
+  totalRevisedCount?: number;
   status: 'open' | 'closed';
   notes?: string;
 }

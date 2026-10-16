@@ -8,11 +8,68 @@ import { useAccountingStore } from './accountingStore';
 interface BillState {
   bills: Bill[];
   addBill: (bill: Bill) => Promise<void>;
-  voidBill: (billId: string, voidedBy: string, voidReason?: string) => Promise<void>;
+  voidBill: (billId: string, voidedBy: string, voidReason?: string, shiftId?: string) => Promise<void>;
+  reviseBill: (billId: string, revisedBy: string, revisedReason?: string, shiftId?: string) => Promise<void>;
   fetchBillsByDateRange: (startDate: Date, endDate: Date, page?: number, limit?: number) => Promise<{ bills: Bill[]; total: number }>;
   fetchAllBillsForDateRange: (startDate: Date, endDate: Date) => Promise<Bill[]>;
   initBillSync: () => void;
   refreshTodayBills: () => Promise<void>;
+}
+
+export function mapDbBill(b: any): Bill {
+  const isRevised = b.status === 'revised' || (typeof b.void_reason === 'string' && b.void_reason.startsWith('[REVISED]'));
+  const isVoid = b.status === 'void' && !isRevised;
+  const status: 'paid' | 'void' | 'revised' = isRevised ? 'revised' : isVoid ? 'void' : 'paid';
+
+  let revisedReason = isRevised ? b.void_reason?.replace(/^\[REVISED\]\s*/, '') : undefined;
+  if (!revisedReason && isRevised) revisedReason = 'Bill revised';
+
+  return {
+    id: b.id,
+    invoiceNumber: b.invoice_number,
+    orderId: b.order_id,
+    tableId: b.table_id || undefined,
+    tableNumber: b.table_number || undefined,
+    orderType: b.order_type as any,
+    items: b.items as any,
+    subtotal: Number(b.subtotal),
+    gstBreakdown: [],
+    totalGST: Number(b.total_gst),
+    cgstAmount: Number(b.cgst_amount || 0),
+    sgstAmount: Number(b.sgst_amount || 0),
+    igstAmount: Number(b.igst_amount || 0),
+    serviceCharge: Number(b.service_charge),
+    serviceChargePercent: 0,
+    discountType: 'flat' as const,
+    discountValue: 0,
+    discountAmount: Number(b.discount_amount),
+    roundOff: 0,
+    totalAmount: Number(b.total_amount),
+    payments: b.payments as any,
+    amountPaid: Number(b.total_amount),
+    changeDue: 0,
+    staffName: b.staff_name,
+    status,
+    voidedBy: isVoid ? b.voided_by || undefined : undefined,
+    voidedAt: isVoid && b.voided_at ? new Date(b.voided_at) : undefined,
+    voidReason: isVoid ? b.void_reason || undefined : undefined,
+    voidShiftId: b.void_shift_id || undefined,
+    revisedBy: isRevised ? b.revised_by || b.voided_by || undefined : undefined,
+    revisedAt: isRevised && (b.revised_at || b.voided_at) ? new Date(b.revised_at || b.voided_at) : undefined,
+    revisedReason: isRevised ? b.revised_reason || revisedReason : undefined,
+    revisedShiftId: b.revised_shift_id || b.void_shift_id || undefined,
+    guestCount: b.guest_count,
+    customerGstin: b.customer_gstin || undefined,
+    placeOfSupply: b.place_of_supply || undefined,
+    hsnCodes: b.hsn_codes || undefined,
+    isGstBill: b.is_gst_bill !== false,
+    createdAt: new Date(b.created_at),
+    outletName: '',
+    outletAddress: '',
+    outletGSTIN: b.outlet_gstin || '',
+    shiftId: b.shift_id || undefined,
+    staffId: b.staff_id || undefined,
+  };
 }
 
 export const useBillStore = create<BillState>()(
@@ -28,11 +85,10 @@ export const useBillStore = create<BillState>()(
     }
 
     // Save locally FIRST for instant UI — billing never waits for the network
-    const newBill = { ...bill, status: bill.status || 'paid' as const };
+    const newBill = { ...bill, status: bill.status || ('paid' as const) };
     set((state) => ({ bills: [...state.bills, newBill] }));
 
     // Push to Supabase in the BACKGROUND — don't await, don't block the UI
-    // Bills stored in localStorage via Zustand persist, so they survive even if this fails
     supabase.from('bills').upsert({
       id: bill.id,
       invoice_number: bill.invoiceNumber,
@@ -58,6 +114,8 @@ export const useBillStore = create<BillState>()(
       place_of_supply: bill.placeOfSupply || null,
       outlet_gstin: bill.outletGSTIN || null,
       is_gst_bill: bill.isGstBill !== false,
+      shift_id: bill.shiftId || null,
+      staff_id: bill.staffId || null,
       created_at: bill.createdAt.toISOString()
     }, { onConflict: 'id' }).then(({ error }) => {
       if (error) console.warn('[addBill] Background Supabase sync failed (will retry on next sync):', error.message);
@@ -65,14 +123,20 @@ export const useBillStore = create<BillState>()(
     });
   },
 
-
-  voidBill: async (billId: string, voidedBy: string, voidReason?: string) => {
+  voidBill: async (billId: string, voidedBy: string, voidReason?: string, shiftId?: string) => {
     const voidedAt = new Date();
     // Optimistic UI update
     set((state) => ({
       bills: state.bills.map((b) =>
         b.id === billId
-          ? { ...b, status: 'void' as const, voidedBy, voidedAt, voidReason: voidReason || '' }
+          ? {
+              ...b,
+              status: 'void' as const,
+              voidedBy,
+              voidedAt,
+              voidReason: voidReason || '',
+              voidShiftId: shiftId || b.shiftId,
+            }
           : b
       ),
     }));
@@ -85,11 +149,50 @@ export const useBillStore = create<BillState>()(
         voided_by: voidedBy,
         voided_at: voidedAt.toISOString(),
         void_reason: voidReason || null,
+        void_shift_id: shiftId || null,
       })
       .eq('id', billId);
 
     if (error) {
       console.error('Failed to void bill in Supabase:', error);
+    }
+  },
+
+  reviseBill: async (billId: string, revisedBy: string, revisedReason?: string, shiftId?: string) => {
+    const revisedAt = new Date();
+    // Optimistic UI update
+    set((state) => ({
+      bills: state.bills.map((b) =>
+        b.id === billId
+          ? {
+              ...b,
+              status: 'revised' as const,
+              revisedBy,
+              revisedAt,
+              revisedReason: revisedReason || 'Bill revised',
+              revisedShiftId: shiftId || b.shiftId,
+            }
+          : b
+      ),
+    }));
+
+    // Update in Supabase
+    const { error } = await supabase
+      .from('bills')
+      .update({
+        status: 'revised',
+        voided_by: revisedBy,
+        voided_at: revisedAt.toISOString(),
+        void_reason: `[REVISED] ${revisedReason || 'Bill revised'}`,
+        revised_by: revisedBy,
+        revised_at: revisedAt.toISOString(),
+        revised_reason: revisedReason || 'Bill revised',
+        void_shift_id: shiftId || null,
+      })
+      .eq('id', billId);
+
+    if (error) {
+      console.error('Failed to mark bill revised in Supabase:', error);
     }
   },
 
@@ -100,7 +203,7 @@ export const useBillStore = create<BillState>()(
 
     const { data, error, count } = await supabase
       .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at', { count: 'exact' })
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at', { count: 'exact' })
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
       .order('created_at', { ascending: false })
@@ -111,46 +214,7 @@ export const useBillStore = create<BillState>()(
       return { bills: [], total: 0 };
     }
 
-    const mapped = data.map((b) => ({
-      id: b.id,
-      invoiceNumber: b.invoice_number,
-      orderId: b.order_id,
-      tableId: b.table_id || undefined,
-      tableNumber: b.table_number || undefined,
-      orderType: b.order_type as any,
-      items: b.items as any,
-      subtotal: Number(b.subtotal),
-      gstBreakdown: [],
-      totalGST: Number(b.total_gst),
-      cgstAmount: Number(b.cgst_amount || 0),
-      sgstAmount: Number(b.sgst_amount || 0),
-      igstAmount: Number(b.igst_amount || 0),
-      serviceCharge: Number(b.service_charge),
-      serviceChargePercent: 0,
-      discountType: 'flat' as const,
-      discountValue: 0,
-      discountAmount: Number(b.discount_amount),
-      roundOff: 0,
-      totalAmount: Number(b.total_amount),
-      payments: b.payments as any,
-      amountPaid: Number(b.total_amount),
-      changeDue: 0,
-      staffName: b.staff_name,
-      status: b.status || 'paid',
-      voidedBy: b.voided_by || undefined,
-      voidedAt: b.voided_at ? new Date(b.voided_at) : undefined,
-      voidReason: b.void_reason || undefined,
-      guestCount: b.guest_count,
-      customerGstin: b.customer_gstin || undefined,
-      placeOfSupply: b.place_of_supply || undefined,
-      hsnCodes: b.hsn_codes || undefined,
-      isGstBill: b.is_gst_bill !== false,
-      createdAt: new Date(b.created_at),
-      outletName: '',
-      outletAddress: '',
-      outletGSTIN: b.outlet_gstin || '',
-    }));
-
+    const mapped = data.map(mapDbBill);
     return { bills: mapped, total: count ?? 0 };
   },
 
@@ -177,53 +241,14 @@ export const useBillStore = create<BillState>()(
 
     const { data, error } = await supabase
       .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at')
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false })
       .limit(2000); // Match initBillSync limit
 
     if (error || !data) return;
 
-    const fresh = data.map(b => ({
-      id: b.id,
-      invoiceNumber: b.invoice_number,
-      orderId: b.order_id,
-      tableId: b.table_id || undefined,
-      tableNumber: b.table_number || undefined,
-      orderType: b.order_type as any,
-      items: b.items as any,
-      subtotal: Number(b.subtotal),
-      gstBreakdown: [],
-      totalGST: Number(b.total_gst),
-      cgstAmount: Number(b.cgst_amount || 0),
-      sgstAmount: Number(b.sgst_amount || 0),
-      igstAmount: Number(b.igst_amount || 0),
-      serviceCharge: Number(b.service_charge),
-      serviceChargePercent: 0,
-      discountType: 'flat' as const,
-      discountValue: 0,
-      discountAmount: Number(b.discount_amount),
-      roundOff: 0,
-      totalAmount: Number(b.total_amount),
-      payments: b.payments as any,
-      amountPaid: Number(b.total_amount),
-      changeDue: 0,
-      staffName: b.staff_name,
-      status: b.status || 'paid',
-      voidedBy: b.voided_by || undefined,
-      voidedAt: b.voided_at ? new Date(b.voided_at) : undefined,
-      voidReason: b.void_reason || undefined,
-      guestCount: b.guest_count,
-      customerGstin: b.customer_gstin || undefined,
-      placeOfSupply: b.place_of_supply || undefined,
-      hsnCodes: b.hsn_codes || undefined,
-      isGstBill: b.is_gst_bill || false,
-      outletGstin: b.outlet_gstin || undefined,
-      outletName: '',
-      outletAddress: '',
-      outletGSTIN: b.outlet_gstin || '',
-      createdAt: new Date(b.created_at),
-    })) as Bill[];
+    const fresh = data.map(mapDbBill);
 
     // Merge: keep old bills not in today's range, replace today's with fresh data
     set(state => {
@@ -239,51 +264,13 @@ export const useBillStore = create<BillState>()(
 
     const { data, error } = await supabase
       .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,created_at')
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false })
       .limit(2000); // Cover a full busy day (was 200 — too small, caused revenue drops)
 
     if (!error && data) {
-      const dbBills = data.map(b => ({
-        id: b.id,
-        invoiceNumber: b.invoice_number,
-        orderId: b.order_id,
-        tableId: b.table_id || undefined,
-        tableNumber: b.table_number || undefined,
-        orderType: b.order_type as any,
-        items: b.items as any,
-        subtotal: Number(b.subtotal),
-        gstBreakdown: [],
-        totalGST: Number(b.total_gst),
-        cgstAmount: Number(b.cgst_amount || 0),
-        sgstAmount: Number(b.sgst_amount || 0),
-        igstAmount: Number(b.igst_amount || 0),
-        serviceCharge: Number(b.service_charge),
-        serviceChargePercent: 0,
-        discountType: 'flat' as const,
-        discountValue: 0,
-        discountAmount: Number(b.discount_amount),
-        roundOff: 0,
-        totalAmount: Number(b.total_amount),
-        payments: b.payments as any,
-        amountPaid: Number(b.total_amount),
-        changeDue: 0,
-        staffName: b.staff_name,
-        status: b.status || 'paid',
-        voidedBy: b.voided_by || undefined,
-        voidedAt: b.voided_at ? new Date(b.voided_at) : undefined,
-        voidReason: b.void_reason || undefined,
-        guestCount: b.guest_count,
-        customerGstin: b.customer_gstin || undefined,
-        placeOfSupply: b.place_of_supply || undefined,
-        hsnCodes: b.hsn_codes || undefined,
-        isGstBill: b.is_gst_bill !== false,
-        createdAt: new Date(b.created_at),
-        outletName: '',
-        outletAddress: '',
-        outletGSTIN: b.outlet_gstin || '',
-      }));
+      const dbBills = data.map(mapDbBill);
 
       // Deduplicate DB bills by invoiceNumber — keep the earliest created_at per invoice.
       // This handles the case where the same invoice was accidentally inserted twice in DB.

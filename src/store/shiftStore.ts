@@ -3,20 +3,34 @@ import { persist } from 'zustand/middleware';
 import { Shift } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAccountingStore } from './accountingStore';
+import { useAuthStore } from './authStore';
 
 interface ShiftState {
-  shifts: Shift[];
-  currentShift: Shift | null;
+  shifts: Shift[]; // Closed historical shifts
+  activeShifts: Shift[]; // All currently open shifts across all cashiers
+  currentShift: Shift | null; // Open shift for the currently logged-in user / active context
+
+  getActiveShiftForStaff: (staffId?: string) => Shift | undefined;
+  syncCurrentShiftForUser: (staffId?: string) => void;
   openShift: (staffName: string, staffId: string, openingBalance: number) => Promise<Shift>;
   closeShift: (
-    actualClosingBalance: number,
-    shiftRevenue: number,
-    shiftCash: number,
-    shiftUPI: number,
-    shiftCard: number,
+    shiftIdOrActualClosing: string | number,
+    actualClosingBalanceOrRev?: number,
+    shiftRevenueOrCash?: number,
+    shiftCashOrUPI?: number,
+    shiftUPIOrCard?: number,
+    shiftCardOrNotes?: number | string,
     notes?: string
   ) => Promise<void>;
-  addBillToShift: (cashAmount: number, upiAmount: number, cardAmount: number, total: number, covers: number) => Promise<void>;
+  addBillToShift: (
+    cashAmount: number,
+    upiAmount: number,
+    cardAmount: number,
+    total: number,
+    covers: number,
+    staffId?: string,
+    shiftId?: string
+  ) => Promise<void>;
   initShiftSync: () => Promise<void>;
 }
 
@@ -24,9 +38,29 @@ export const useShiftStore = create<ShiftState>()(
   persist(
     (set, get) => ({
       shifts: [],
+      activeShifts: [],
       currentShift: null,
 
+      getActiveShiftForStaff: (staffId?: string) => {
+        if (!staffId) return undefined;
+        return get().activeShifts.find((s) => s.staffId === staffId && s.status === 'open');
+      },
+
+      syncCurrentShiftForUser: (staffId?: string) => {
+        const id = staffId || useAuthStore.getState().currentUser?.id;
+        if (!id) return;
+        const matchingShift = get().activeShifts.find((s) => s.staffId === id && s.status === 'open') || null;
+        set({ currentShift: matchingShift });
+      },
+
       openShift: async (staffName, staffId, openingBalance) => {
+        // Prevent opening duplicate active shifts for the same staff member
+        const existing = get().activeShifts.find((s) => s.staffId === staffId && s.status === 'open');
+        if (existing) {
+          set({ currentShift: existing });
+          return existing;
+        }
+
         const newShift: Shift = {
           id: crypto.randomUUID(),
           staffName,
@@ -41,37 +75,80 @@ export const useShiftStore = create<ShiftState>()(
           totalCovers: 0,
           status: 'open',
         };
-        set({ currentShift: newShift });
-        
+
+        set((state) => ({
+          activeShifts: [...state.activeShifts.filter((s) => s.id !== newShift.id), newShift],
+          currentShift: newShift,
+        }));
+
         await supabase.from('shifts').insert({
           id: newShift.id,
           staff_name: newShift.staffName,
           staff_id: newShift.staffId,
           opened_at: newShift.openedAt.toISOString(),
           opening_balance: newShift.openingBalance,
-          status: newShift.status
+          status: newShift.status,
+          total_cash: 0,
+          total_upi: 0,
+          total_card: 0,
+          total_revenue: 0,
+          total_orders: 0,
+          total_covers: 0,
         });
-        
+
         return newShift;
       },
 
       closeShift: async (
-        actualClosingBalance: number,
-        shiftRevenue: number,
-        shiftCash: number,
-        shiftUPI: number,
-        shiftCard: number,
-        notes?: string
+        shiftIdOrActualClosing: string | number,
+        actualClosingBalanceOrRev?: number,
+        shiftRevenueOrCash?: number,
+        shiftCashOrUPI?: number,
+        shiftUPIOrCard?: number,
+        shiftCardOrNotes?: number | string,
+        notesParam?: string
       ) => {
-        const current = get().currentShift;
-        if (!current) return;
+        let shiftId: string;
+        let actualClosingBalance: number;
+        let shiftRevenue: number;
+        let shiftCash: number;
+        let shiftUPI: number;
+        let shiftCard: number;
+        let notes: string | undefined;
+
+        if (typeof shiftIdOrActualClosing === 'string') {
+          shiftId = shiftIdOrActualClosing;
+          actualClosingBalance = actualClosingBalanceOrRev ?? 0;
+          shiftRevenue = shiftRevenueOrCash ?? 0;
+          shiftCash = shiftCashOrUPI ?? 0;
+          shiftUPI = shiftUPIOrCard ?? 0;
+          shiftCard = typeof shiftCardOrNotes === 'number' ? shiftCardOrNotes : 0;
+          notes = notesParam;
+        } else {
+          // Backward-compatible fallback when called as closeShift(actualClosingBalance, revenue, cash, upi, card, notes)
+          const target = get().currentShift || get().activeShifts[0];
+          if (!target) return;
+          shiftId = target.id;
+          actualClosingBalance = shiftIdOrActualClosing;
+          shiftRevenue = actualClosingBalanceOrRev ?? 0;
+          shiftCash = shiftRevenueOrCash ?? 0;
+          shiftUPI = shiftCashOrUPI ?? 0;
+          shiftCard = typeof shiftUPIOrCard === 'number' ? shiftUPIOrCard : 0;
+          notes = typeof shiftCardOrNotes === 'string' ? shiftCardOrNotes : notesParam;
+        }
+
+        const targetShift =
+          get().activeShifts.find((s) => s.id === shiftId) ||
+          get().currentShift;
+
+        if (!targetShift) return;
 
         // Expected closing = opening + dynamically calculated cash
-        const expectedClosingBalance = current.openingBalance + shiftCash;
+        const expectedClosingBalance = targetShift.openingBalance + shiftCash;
         const variance = actualClosingBalance - expectedClosingBalance;
 
         const closed: Shift = {
-          ...current,
+          ...targetShift,
           closedAt: new Date(),
           totalRevenue: shiftRevenue,
           totalCash: shiftCash,
@@ -84,25 +161,40 @@ export const useShiftStore = create<ShiftState>()(
           notes,
         };
 
-        const { error } = await supabase.from('shifts').update({
-          closed_at: closed.closedAt!.toISOString(),
-          total_revenue: shiftRevenue,
-          total_cash: shiftCash,
-          total_upi: shiftUPI,
-          total_card: shiftCard,
-          closing_balance: actualClosingBalance,
-          status: 'closed',
-          notes,
-        }).eq('id', closed.id);
+        const { error } = await supabase
+          .from('shifts')
+          .update({
+            closed_at: closed.closedAt!.toISOString(),
+            total_revenue: shiftRevenue,
+            total_cash: shiftCash,
+            total_upi: shiftUPI,
+            total_card: shiftCard,
+            closing_balance: actualClosingBalance,
+            status: 'closed',
+            notes,
+          })
+          .eq('id', closed.id);
 
         if (error) {
           console.error('Failed to close shift in Supabase:', error);
           return;
         }
 
-        set({
-          currentShift: null,
-          shifts: [closed, ...get().shifts],
+        set((state) => {
+          const remainingActive = state.activeShifts.filter((s) => s.id !== closed.id);
+          const currentUser = useAuthStore.getState().currentUser;
+          const updatedCurrent =
+            state.currentShift?.id === closed.id
+              ? currentUser
+                ? remainingActive.find((s) => s.staffId === currentUser.id) || null
+                : remainingActive[0] || null
+              : state.currentShift;
+
+          return {
+            activeShifts: remainingActive,
+            currentShift: updatedCurrent,
+            shifts: [closed, ...state.shifts.filter((s) => s.id !== closed.id)],
+          };
         });
 
         // === SPEC §8: Post shift cash variance as Journal voucher ===
@@ -115,8 +207,8 @@ export const useShiftStore = create<ShiftState>()(
             transactionType: isShort ? 'debit' : 'credit',
             amount: Math.abs(variance),
             description: isShort
-              ? `Journal — Cash Short on shift close (${current.staffName})`
-              : `Journal — Cash Over on shift close (${current.staffName})`,
+              ? `Journal — Cash Short on shift close (${targetShift.staffName})`
+              : `Journal — Cash Over on shift close (${targetShift.staffName})`,
             referenceId: closed.id,
           });
         }
@@ -131,7 +223,7 @@ export const useShiftStore = create<ShiftState>()(
             voucherType: 'sales',
             transactionType: 'credit',
             amount: shiftRevenue,
-            description: `Sales — Shift Consolidated (${current.staffName})`,
+            description: `Sales — Shift Consolidated (${targetShift.staffName})`,
             referenceId: closed.id,
           });
 
@@ -172,32 +264,49 @@ export const useShiftStore = create<ShiftState>()(
         }
       },
 
-      addBillToShift: async (cashAmount, upiAmount, cardAmount, total, covers) => {
-        const current = get().currentShift;
-        if (!current) return;
-        
-        const updatedShift = {
-          ...current,
-          totalCash: current.totalCash + cashAmount,
-          totalUPI: current.totalUPI + upiAmount,
-          totalCard: current.totalCard + cardAmount,
-          totalRevenue: current.totalRevenue + total,
-          totalOrders: current.totalOrders + 1,
-          totalCovers: current.totalCovers + covers,
+      addBillToShift: async (cashAmount, upiAmount, cardAmount, total, covers, staffId, shiftId) => {
+        const state = get();
+        // Priority 1: Direct shiftId match
+        // Priority 2: staffId match among activeShifts
+        // Priority 3: currentShift
+        // Priority 4: first open active shift
+        const target =
+          (shiftId ? state.activeShifts.find((s) => s.id === shiftId && s.status === 'open') : null) ||
+          (staffId ? state.activeShifts.find((s) => s.staffId === staffId && s.status === 'open') : null) ||
+          state.currentShift ||
+          state.activeShifts[0];
+
+        if (!target) return;
+
+        const updatedShift: Shift = {
+          ...target,
+          totalCash: (target.totalCash || 0) + cashAmount,
+          totalUPI: (target.totalUPI || 0) + upiAmount,
+          totalCard: (target.totalCard || 0) + cardAmount,
+          totalRevenue: (target.totalRevenue || 0) + total,
+          totalOrders: (target.totalOrders || 0) + 1,
+          totalCovers: (target.totalCovers || 0) + covers,
         };
-        
-        set({ currentShift: updatedShift });
-        
-        supabase.from('shifts').update({
-          total_cash: updatedShift.totalCash,
-          total_upi: updatedShift.totalUPI,
-          total_card: updatedShift.totalCard,
-          total_revenue: updatedShift.totalRevenue,
-          total_orders: updatedShift.totalOrders,
-          total_covers: updatedShift.totalCovers
-        }).eq('id', updatedShift.id).then();
+
+        set((s) => ({
+          activeShifts: s.activeShifts.map((sh) => (sh.id === updatedShift.id ? updatedShift : sh)),
+          currentShift: s.currentShift?.id === updatedShift.id ? updatedShift : s.currentShift,
+        }));
+
+        supabase
+          .from('shifts')
+          .update({
+            total_cash: updatedShift.totalCash,
+            total_upi: updatedShift.totalUPI,
+            total_card: updatedShift.totalCard,
+            total_revenue: updatedShift.totalRevenue,
+            total_orders: updatedShift.totalOrders,
+            total_covers: updatedShift.totalCovers,
+          })
+          .eq('id', updatedShift.id)
+          .then();
       },
-      
+
       initShiftSync: async () => {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 30);
@@ -210,29 +319,110 @@ export const useShiftStore = create<ShiftState>()(
           .order('opened_at', { ascending: false });
 
         if (!error && data) {
-          const dbShifts = data.map(s => ({
+          const dbShifts: Shift[] = data.map((s) => ({
             id: s.id,
             staffName: s.staff_name,
             staffId: s.staff_id,
             openedAt: new Date(s.opened_at),
             closedAt: s.closed_at ? new Date(s.closed_at) : undefined,
-            openingBalance: Number(s.opening_balance),
+            openingBalance: Number(s.opening_balance || 0),
             closingBalance: s.closing_balance ? Number(s.closing_balance) : undefined,
-            totalCash: Number(s.total_cash),
-            totalUPI: Number(s.total_upi),
-            totalCard: Number(s.total_card),
-            totalRevenue: Number(s.total_revenue),
-            totalOrders: Number(s.total_orders),
-            totalCovers: Number(s.total_covers),
+            actualClosingBalance: s.closing_balance ? Number(s.closing_balance) : undefined,
+            expectedClosingBalance: s.closing_balance ? Number(s.closing_balance) : undefined,
+            totalCash: Number(s.total_cash || 0),
+            totalUPI: Number(s.total_upi || 0),
+            totalCard: Number(s.total_card || 0),
+            totalRevenue: Number(s.total_revenue || 0),
+            totalOrders: Number(s.total_orders || 0),
+            totalCovers: Number(s.total_covers || 0),
             notes: s.notes,
-            status: s.status as 'open' | 'closed'
+            status: s.status as 'open' | 'closed',
           }));
-          
-          const openShift = dbShifts.find(s => s.status === 'open') || null;
-          set({ shifts: dbShifts.filter(s => s.status === 'closed'), currentShift: openShift });
+
+          const activeShifts = dbShifts.filter((s) => s.status === 'open');
+          const closedShifts = dbShifts.filter((s) => s.status === 'closed');
+
+          const currentUser = useAuthStore.getState().currentUser;
+          const userShift = currentUser
+            ? activeShifts.find((s) => s.staffId === currentUser.id) || null
+            : null;
+
+          set({
+            shifts: closedShifts,
+            activeShifts,
+            currentShift: userShift || activeShifts[0] || null,
+          });
         }
+
+        // Realtime sync on shifts so all 3-4 cashier terminals see open/closed shifts immediately
+        const staleChannel = supabase.getChannels().find((c) => c.topic === 'realtime:shifts-realtime-sync');
+        if (staleChannel) supabase.removeChannel(staleChannel);
+
+        supabase
+          .channel('shifts-realtime-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts' }, (payload) => {
+            const { eventType, new: newRow, old: oldRow } = payload as any;
+            if (eventType === 'DELETE') {
+              set((state) => ({
+                activeShifts: state.activeShifts.filter((s) => s.id !== oldRow.id),
+                shifts: state.shifts.filter((s) => s.id !== oldRow.id),
+                currentShift: state.currentShift?.id === oldRow.id ? null : state.currentShift,
+              }));
+              return;
+            }
+
+            const mapped: Shift = {
+              id: newRow.id,
+              staffName: newRow.staff_name,
+              staffId: newRow.staff_id,
+              openedAt: new Date(newRow.opened_at),
+              closedAt: newRow.closed_at ? new Date(newRow.closed_at) : undefined,
+              openingBalance: Number(newRow.opening_balance || 0),
+              closingBalance: newRow.closing_balance ? Number(newRow.closing_balance) : undefined,
+              actualClosingBalance: newRow.closing_balance ? Number(newRow.closing_balance) : undefined,
+              totalCash: Number(newRow.total_cash || 0),
+              totalUPI: Number(newRow.total_upi || 0),
+              totalCard: Number(newRow.total_card || 0),
+              totalRevenue: Number(newRow.total_revenue || 0),
+              totalOrders: Number(newRow.total_orders || 0),
+              totalCovers: Number(newRow.total_covers || 0),
+              notes: newRow.notes,
+              status: newRow.status as 'open' | 'closed',
+            };
+
+            set((state) => {
+              let newActive = state.activeShifts;
+              let newClosed = state.shifts;
+
+              if (mapped.status === 'open') {
+                newActive = [mapped, ...state.activeShifts.filter((s) => s.id !== mapped.id)];
+                newClosed = state.shifts.filter((s) => s.id !== mapped.id);
+              } else {
+                newActive = state.activeShifts.filter((s) => s.id !== mapped.id);
+                newClosed = [mapped, ...state.shifts.filter((s) => s.id !== mapped.id)];
+              }
+
+              const currentUser = useAuthStore.getState().currentUser;
+              const updatedCurrent = currentUser
+                ? newActive.find((s) => s.staffId === currentUser.id) || null
+                : newActive[0] || null;
+
+              return {
+                activeShifts: newActive,
+                shifts: newClosed,
+                currentShift: updatedCurrent,
+              };
+            });
+          })
+          .subscribe();
       },
     }),
-    { name: 'restaurant-shifts' }
+    {
+      name: 'restaurant-shifts',
+      partialize: (state) => ({
+        shifts: state.shifts,
+        activeShifts: state.activeShifts,
+      }),
+    }
   )
 );

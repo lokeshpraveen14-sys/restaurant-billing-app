@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
+import { useShiftStore } from './shiftStore';
 
 export type PermissionModule = 'admin' | 'shift' | 'tables' | 'orders' | 'kitchen' | 'billing' | 'bill_history' | 'menu' | 'inventory' | 'reports' | 'customers';
 
@@ -124,12 +125,24 @@ export const useAuthStore = create<AuthState>()(
         const user = get().allUsers.find((u) => u.pin === pin && u.active);
         if (user) {
           set({ currentUser: user, isAuthenticated: true });
+          try {
+            useShiftStore.getState().syncCurrentShiftForUser(user.id);
+          } catch (e) {
+            // ignore if not loaded yet
+          }
           return true;
         }
         return false;
       },
 
-      logout: () => set({ currentUser: null, isAuthenticated: false }),
+      logout: () => {
+        set({ currentUser: null, isAuthenticated: false });
+        try {
+          useShiftStore.getState().syncCurrentShiftForUser(undefined);
+        } catch (e) {
+          // ignore
+        }
+      },
 
       addUser: (userData) => {
         const newUser: User = {
