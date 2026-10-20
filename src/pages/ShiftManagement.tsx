@@ -28,7 +28,7 @@ import { useReactToPrint } from 'react-to-print';
 export default function ShiftManagement() {
   const { activeShifts, shifts, openShift, closeShift, getActiveShiftForStaff } = useShiftStore();
   const { currentUser, allUsers } = useAuthStore();
-  const { bills } = useBillStore();
+  const { bills, fetchBillsForShift } = useBillStore();
   const toast = useToast();
 
   const isAdmin = currentUser?.role === 'admin';
@@ -41,6 +41,7 @@ export default function ShiftManagement() {
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [detailModalShift, setDetailModalShift] = useState<Shift | null>(null);
   const [shiftTab, setShiftTab] = useState<'paid' | 'voided' | 'revised'>('paid');
+  const [loadingShiftBills, setLoadingShiftBills] = useState(false);
 
   const printRef = React.useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({ content: () => printRef.current });
@@ -68,6 +69,44 @@ export default function ShiftManagement() {
     return myActiveShift || null;
   }, [selectedShiftId, activeShifts, myActiveShift, isAdmin]);
 
+  // Sync bills from cloud for the current shift so cross-device bills (tab to laptop) appear immediately
+  const syncShiftBills = React.useCallback(async (showToast = false) => {
+    if (!currentShift) return;
+    setLoadingShiftBills(true);
+    try {
+      const fetched = await fetchBillsForShift(
+        currentShift.id,
+        currentShift.staffId,
+        currentShift.openedAt,
+        currentShift.closedAt
+      );
+      if (showToast) {
+        toast.success('Shift Synced', `Loaded ${fetched.length} bills for ${currentShift.staffName}`);
+      }
+    } finally {
+      setLoadingShiftBills(false);
+    }
+  }, [currentShift, fetchBillsForShift, toast]);
+
+  // Only pull data from cloud when the selected active shift changes
+  React.useEffect(() => {
+    if (currentShift) {
+      syncShiftBills(false);
+    }
+  }, [currentShift?.id, syncShiftBills]);
+
+  // Load bills for past closed shift in detail modal
+  React.useEffect(() => {
+    if (detailModalShift) {
+      fetchBillsForShift(
+        detailModalShift.id,
+        detailModalShift.staffId,
+        detailModalShift.openedAt,
+        detailModalShift.closedAt
+      );
+    }
+  }, [detailModalShift?.id, fetchBillsForShift]);
+
   // Helper to check if a bill was created in this shift
   const isBillInShift = (b: Bill, s: Shift) => {
     if (b.shiftId && b.shiftId === s.id) return true;
@@ -75,8 +114,8 @@ export default function ShiftManagement() {
     const sOpen = new Date(s.openedAt).getTime();
     const sClose = s.closedAt ? new Date(s.closedAt).getTime() : Infinity;
     const isSameStaff =
-      (b.staffId && b.staffId === s.staffId) ||
-      b.staffName?.toLowerCase().trim() === s.staffName?.toLowerCase().trim();
+      (b.staffId && s.staffId && String(b.staffId).trim() === String(s.staffId).trim()) ||
+      (b.staffName && s.staffName && b.staffName.toLowerCase().trim() === s.staffName.toLowerCase().trim());
     return isSameStaff && bTime >= sOpen && bTime <= sClose;
   };
 
@@ -121,20 +160,29 @@ export default function ShiftManagement() {
   }, [bills, currentShift]);
 
   // Metrics calculation
-  const shiftCash = shiftBills.reduce(
+  const computedCash = shiftBills.reduce(
     (s, b) => s + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0),
     0
   );
-  const shiftUPI = shiftBills.reduce(
+  const computedUPI = shiftBills.reduce(
     (s, b) => s + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0),
     0
   );
-  const shiftCard = shiftBills.reduce(
+  const computedCard = shiftBills.reduce(
     (s, b) => s + b.payments.filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0),
     0
   );
-  const shiftRevenue = shiftBills.reduce((s, b) => s + b.totalAmount, 0);
-  const shiftCovers = shiftBills.reduce((s, b) => s + (b.guestCount || 0), 0);
+  const computedRevenue = shiftBills.reduce((s, b) => s + b.totalAmount, 0);
+  const computedCovers = shiftBills.reduce((s, b) => s + (b.guestCount || 0), 0);
+
+  // Fallback to shift DB totals if bills are still loading from server
+  const shiftCash = shiftBills.length > 0 ? computedCash : (currentShift?.totalCash || 0);
+  const shiftUPI = shiftBills.length > 0 ? computedUPI : (currentShift?.totalUPI || 0);
+  const shiftCard = shiftBills.length > 0 ? computedCard : (currentShift?.totalCard || 0);
+  const shiftRevenue = shiftBills.length > 0 ? computedRevenue : (currentShift?.totalRevenue || 0);
+  const shiftCovers = shiftBills.length > 0 ? computedCovers : (currentShift?.totalCovers || 0);
+  const shiftOrdersCount = Math.max(shiftBills.length, currentShift?.totalOrders || 0);
+
   const shiftVoidedTotal = shiftVoidedBills.reduce((s, b) => s + b.totalAmount, 0);
   const shiftRevisedTotal = shiftRevisedBills.reduce((s, b) => s + b.totalAmount, 0);
   const closingBalance = (currentShift?.openingBalance || 0) + shiftCash;
@@ -223,6 +271,16 @@ export default function ShiftManagement() {
         title="Shift Management"
         actions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => syncShiftBills(true)}
+              disabled={loadingShiftBills}
+              title="Sync latest shift bills from server"
+            >
+              <ArrowsClockwise size={16} className={loadingShiftBills ? 'animate-spin' : ''} />
+              {loadingShiftBills ? 'Syncing...' : 'Sync Bills'}
+            </button>
+
             {myActiveShift ? (
               <button
                 className="btn btn-secondary btn-sm"
@@ -498,7 +556,10 @@ export default function ShiftManagement() {
                   return (
                     <button
                       key={s.id}
-                      onClick={() => setSelectedShiftId(s.id)}
+                      onClick={() => {
+                        setSelectedShiftId(s.id);
+                        fetchBillsForShift(s.id, s.staffId, s.openedAt, s.closedAt);
+                      }}
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
@@ -644,7 +705,7 @@ export default function ShiftManagement() {
                 <div className="stat-icon green">
                   <Receipt size={22} />
                 </div>
-                <div className="stat-value">{shiftBills.length}</div>
+                <div className="stat-value">{shiftOrdersCount}</div>
                 <div className="stat-label">Paid Orders</div>
               </div>
 
@@ -800,7 +861,16 @@ export default function ShiftManagement() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => syncShiftBills(true)}
+                    disabled={loadingShiftBills}
+                    title="Fetch latest shift bills from server"
+                  >
+                    <ArrowsClockwise size={14} className={loadingShiftBills ? 'animate-spin' : ''} />
+                    {loadingShiftBills ? 'Syncing...' : 'Sync'}
+                  </button>
                   <button className="btn btn-secondary btn-sm" onClick={handlePrint}>
                     <Printer size={14} /> Print Shift Summary
                   </button>

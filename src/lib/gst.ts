@@ -250,7 +250,19 @@ export async function getNextInvoiceNumber(
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
       ]);
 
-      if (rpcResult) return rpcResult;
+      if (rpcResult) {
+        try {
+          const { useBillStore } = await import('../store/billStore');
+          const isDuplicate = useBillStore.getState().bills.some((b) => b.invoiceNumber === rpcResult);
+          if (isDuplicate) {
+            console.warn('[getNextInvoiceNumber] RPC returned an already existing invoice number, falling back to local counter');
+            return localFallback();
+          }
+        } catch {
+          // ignore import failure
+        }
+        return rpcResult;
+      }
       // Timeout hit — fall to local counter below
       throw new Error('RPC timeout');
     } catch {

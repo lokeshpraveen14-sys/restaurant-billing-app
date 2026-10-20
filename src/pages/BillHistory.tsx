@@ -19,6 +19,7 @@ import {
   CaretRight,
   ArrowsClockwise,
   Trash,
+  UserCheck,
 } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useNavigate } from 'react-router-dom';
@@ -34,12 +35,14 @@ export default function BillHistory() {
   const recreateOrderWithItems = useOrderStore((s) => s.recreateOrderWithItems);
   const updateTableStatus = useTableStore((s) => s.updateTableStatus);
   const getActiveShiftForStaff = useShiftStore((s) => s.getActiveShiftForStaff);
-  const currentUser = useAuthStore((s) => s.currentUser);
+  const { currentUser, allUsers } = useAuthStore();
+  const isAdmin = currentUser?.role === 'admin';
   const toast = useToast();
   const navigate = useNavigate();
 
   const [historyTab, setHistoryTab] = useState<'all' | 'deleted' | 'revised'>('all');
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('today');
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
   const [customStart, setCustomStart] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -97,6 +100,33 @@ export default function BillHistory() {
     [bills]
   );
 
+  // Active staff filter: Cashier is locked to their own staff account, Admin can view all or filter by staff
+  const activeStaffFilter = useMemo<{ staffId?: string; staffName?: string } | undefined>(() => {
+    // If not admin (e.g. cashier), STRICTLY filter to their own ID and name only!
+    if (!isAdmin) {
+      return {
+        staffId: currentUser?.id,
+        staffName: currentUser?.name,
+      };
+    }
+    // If admin, check if admin selected a specific staff user
+    if (selectedStaffId && selectedStaffId !== 'all') {
+      const targetUser = allUsers.find((u) => u.id === selectedStaffId);
+      return {
+        staffId: selectedStaffId,
+        staffName: targetUser?.name,
+      };
+    }
+    return undefined; // Admin views all by default
+  }, [isAdmin, currentUser, selectedStaffId, allUsers]);
+
+  const isBillForStaff = (b: Bill, filter?: { staffId?: string; staffName?: string }) => {
+    if (!filter) return true;
+    const matchId = filter.staffId && b.staffId && String(b.staffId).trim() === String(filter.staffId).trim();
+    const matchName = filter.staffName && b.staffName && b.staffName.toLowerCase().trim() === filter.staffName.toLowerCase().trim();
+    return Boolean(matchId || matchName);
+  };
+
   useEffect(() => {
     let isMounted = true;
     const loadBills = async () => {
@@ -125,7 +155,7 @@ export default function BillHistory() {
       }
 
       try {
-        const result = await fetchBillsByDateRange(start, end, 1, itemsPerPage);
+        const result = await fetchBillsByDateRange(start, end, 1, itemsPerPage, activeStaffFilter);
         if (!isMounted) return;
         setBills(result.bills);
         setTotalBills(result.total);
@@ -134,7 +164,7 @@ export default function BillHistory() {
         const localFiltered = localBills
           .filter((b) => {
             const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-            return d >= start && d <= end;
+            return d >= start && d <= end && isBillForStaff(b, activeStaffFilter);
           })
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setBills(localFiltered);
@@ -144,11 +174,11 @@ export default function BillHistory() {
       setLoading(false);
     };
 
-    if (dateRange !== 'custom') loadBills();
+    loadBills();
     return () => {
       isMounted = false;
     };
-  }, [dateRange]);
+  }, [dateRange, activeStaffFilter]);
 
   const loadBillsManual = async (page = 1) => {
     setLoading(true);
@@ -176,7 +206,7 @@ export default function BillHistory() {
     }
 
     try {
-      const result = await fetchBillsByDateRange(start, end, page, itemsPerPage);
+      const result = await fetchBillsByDateRange(start, end, page, itemsPerPage, activeStaffFilter);
       setBills(result.bills);
       setTotalBills(result.total);
       setCurrentPage(page);
@@ -184,7 +214,7 @@ export default function BillHistory() {
       const localFiltered = localBills
         .filter((b) => {
           const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-          return d >= start && d <= end;
+          return d >= start && d <= end && isBillForStaff(b, activeStaffFilter);
         })
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setBills(localFiltered);
@@ -288,7 +318,7 @@ export default function BillHistory() {
 
   return (
     <>
-      <TopBar title="Bill History & Audit" />
+      <TopBar title={isAdmin ? 'Bill History & Audit' : `Bill History · ${currentUser?.name || 'Cashier'}`} />
       <div className="page-body">
         {/* Top-Level History Category Switcher */}
         <div
@@ -398,60 +428,135 @@ export default function BillHistory() {
             </button>
           </div>
 
-          {/* Date Range Selector */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              padding: '6px 12px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg)',
-            }}
-          >
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              Date:
-            </span>
-            <div className="tabs" style={{ padding: 2 }}>
-              {(['today', 'week', 'month', 'custom'] as const).map((r) => (
-                <button
-                  key={r}
-                  className={`tab-item ${dateRange === r ? 'active' : ''}`}
-                  onClick={() => setDateRange(r)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* Staff Filter (Admin dropdown / Cashier badge) */}
+            {isAdmin ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-lg)',
+                }}
+              >
+                <UserCheck size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Staff:
+                </span>
+                <select
+                  className="input"
                   style={{
-                    padding: '5px 12px',
+                    padding: '4px 8px',
                     fontSize: '0.8125rem',
-                    textTransform: 'capitalize',
+                    height: 32,
+                    minWidth: 150,
+                    cursor: 'pointer',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                  value={selectedStaffId}
+                  onChange={(e) => setSelectedStaffId(e.target.value)}
+                >
+                  <option value="all">All Staff ({allUsers.length})</option>
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px',
+                  background: 'rgba(59, 130, 246, 0.08)',
+                  border: '1px solid rgba(59, 130, 246, 0.25)',
+                  borderRadius: 'var(--radius-lg)',
+                }}
+                title="Only your bill history is visible"
+              >
+                <UserCheck size={18} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#3b82f6' }}>
+                  Cashier:
+                </span>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-normal)' }}>
+                  {currentUser?.name || 'Staff User'}
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    color: '#3b82f6',
+                    fontWeight: 600,
                   }}
                 >
-                  {r === 'today' ? 'Today' : r === 'custom' ? 'Custom' : `This ${r.charAt(0).toUpperCase() + r.slice(1)}`}
-                </button>
-              ))}
-            </div>
-            {dateRange === 'custom' && (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                  type="date"
-                  className="input"
-                  style={{ width: 140, padding: '5px 8px', fontSize: '0.8125rem' }}
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                />
-                <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>→</span>
-                <input
-                  type="date"
-                  className="input"
-                  style={{ width: 140, padding: '5px 8px', fontSize: '0.8125rem' }}
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                />
-                <button className="btn btn-primary btn-sm" onClick={() => loadBillsManual(1)}>
-                  Search
-                </button>
+                  Your Bills Only
+                </span>
               </div>
             )}
+
+            {/* Date Range Selector */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+                padding: '6px 12px',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)',
+              }}
+            >
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                Date:
+              </span>
+              <div className="tabs" style={{ padding: 2 }}>
+                {(['today', 'week', 'month', 'custom'] as const).map((r) => (
+                  <button
+                    key={r}
+                    className={`tab-item ${dateRange === r ? 'active' : ''}`}
+                    onClick={() => setDateRange(r)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '0.8125rem',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {r === 'today' ? 'Today' : r === 'custom' ? 'Custom' : `This ${r.charAt(0).toUpperCase() + r.slice(1)}`}
+                  </button>
+                ))}
+              </div>
+              {dateRange === 'custom' && (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    type="date"
+                    className="input"
+                    style={{ width: 140, padding: '5px 8px', fontSize: '0.8125rem' }}
+                    value={customStart}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                  />
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>→</span>
+                  <input
+                    type="date"
+                    className="input"
+                    style={{ width: 140, padding: '5px 8px', fontSize: '0.8125rem' }}
+                    value={customEnd}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                  />
+                  <button className="btn btn-primary btn-sm" onClick={() => loadBillsManual(1)}>
+                    Search
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -571,11 +676,15 @@ export default function BillHistory() {
         <div className="card">
           <div className="card-header">
             <div className="card-title">
-              {historyTab === 'all'
-                ? 'All Invoices'
-                : historyTab === 'deleted'
+              {historyTab === 'deleted'
                 ? 'Deleted / Voided Invoices'
-                : 'Revised Invoices'}
+                : historyTab === 'revised'
+                ? 'Revised Invoices'
+                : !isAdmin
+                ? `Invoices by ${currentUser?.name || 'You'}`
+                : selectedStaffId !== 'all'
+                ? `Invoices by ${allUsers.find((u) => u.id === selectedStaffId)?.name || 'Selected Staff'}`
+                : 'All Invoices'}
             </div>
             {historyTab === 'all' && bills.length > 0 && (
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -606,7 +715,13 @@ export default function BillHistory() {
                   ? 'No revised bills found'
                   : 'No bills found'}
               </div>
-              <div className="empty-state-desc">No records found for the selected date range.</div>
+              <div className="empty-state-desc">
+                {!isAdmin
+                  ? `No records found for ${currentUser?.name || 'your account'} for the selected date range.`
+                  : selectedStaffId !== 'all'
+                  ? `No records found for ${allUsers.find((u) => u.id === selectedStaffId)?.name || 'selected staff'} for the selected date range.`
+                  : 'No records found for the selected date range.'}
+              </div>
             </div>
           ) : (
             <>
