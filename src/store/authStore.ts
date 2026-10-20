@@ -4,14 +4,13 @@ import { User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 import { useShiftStore } from './shiftStore';
 
-export type PermissionModule = 'admin' | 'shift' | 'tables' | 'orders' | 'kitchen' | 'billing' | 'bill_history' | 'menu' | 'inventory' | 'reports' | 'customers';
+export type PermissionModule = 'admin' | 'shift' | 'tables' | 'orders' | 'billing' | 'bill_history' | 'menu' | 'inventory' | 'reports' | 'customers';
 
 export const ALL_MODULES: { id: PermissionModule; label: string; description: string }[] = [
   { id: 'admin', label: 'Dashboard & Admin', description: 'Dashboard, settings, staff management, accounting, head count' },
   { id: 'shift', label: 'Shift Management', description: 'Open, manage and close cash shifts, drawer totals and handover summaries' },
   { id: 'tables', label: 'Table Management', description: 'View and manage restaurant tables' },
   { id: 'orders', label: 'Order Taking', description: 'Create and manage customer orders' },
-  { id: 'kitchen', label: 'Kitchen Display', description: 'View and update KOT orders' },
   { id: 'billing', label: 'Billing & Counters', description: 'Process bills, bakery and juice counters' },
   { id: 'bill_history', label: 'Bill History', description: 'View, search and void past bills and invoices' },
   { id: 'menu', label: 'Menu Management', description: 'Add, edit and delete menu items' },
@@ -21,11 +20,11 @@ export const ALL_MODULES: { id: PermissionModule; label: string; description: st
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, PermissionModule[]> = {
-  admin: ['admin', 'shift', 'tables', 'orders', 'kitchen', 'billing', 'bill_history', 'menu', 'inventory', 'reports', 'customers'],
-  manager: ['shift', 'tables', 'orders', 'billing', 'bill_history', 'inventory', 'menu', 'customers', 'kitchen', 'reports'],
+  admin: ['admin', 'shift', 'tables', 'orders', 'billing', 'bill_history', 'menu', 'inventory', 'reports', 'customers'],
+  manager: ['shift', 'tables', 'orders', 'billing', 'bill_history', 'inventory', 'menu', 'customers', 'reports'],
   cashier: ['shift', 'billing', 'bill_history', 'orders', 'customers'],
   waiter: ['shift', 'tables', 'orders', 'menu'],
-  kitchen: ['shift', 'kitchen'],
+  kitchen: ['shift', 'orders'],
 };
 
 // Fallback demo users — used only while Supabase loads, or if offline

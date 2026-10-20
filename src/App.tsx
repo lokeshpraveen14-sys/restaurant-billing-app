@@ -19,7 +19,6 @@ const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const TableManagement = lazy(() => import('./pages/TableManagement'));
 const OrderTaking = lazy(() => import('./pages/OrderTaking'));
-const KitchenDisplay = lazy(() => import('./pages/KitchenDisplay'));
 const Billing = lazy(() => import('./pages/Billing'));
 const MenuManagement = lazy(() => import('./pages/MenuManagement'));
 const Inventory = lazy(() => import('./pages/Inventory'));
@@ -89,7 +88,6 @@ function RequirePermission({ module, children }: { module: string, children: Rea
     const perms = useAuthStore.getState().rolePermissions[currentUser.role] ?? [];
     if (perms.includes('tables' as any)) return <Navigate to="/tables" replace />;
     if (perms.includes('billing' as any)) return <Navigate to="/billing" replace />;
-    if (perms.includes('kitchen' as any)) return <Navigate to="/kitchen" replace />;
     if (perms.includes('orders' as any)) return <Navigate to="/order" replace />;
     if (perms.includes('shift' as any)) return <Navigate to="/shift" replace />;
     return <Navigate to="/login" replace />;
@@ -156,7 +154,6 @@ export default function App() {
                   <Route path="/" element={<RequirePermission module="admin"><Dashboard /></RequirePermission>} />
                   <Route path="/tables" element={<RequirePermission module="tables"><TableManagement /></RequirePermission>} />
                   <Route path="/order" element={<RequirePermission module="orders"><OrderTaking /></RequirePermission>} />
-                  <Route path="/kitchen" element={<RequirePermission module="kitchen"><KitchenDisplay /></RequirePermission>} />
                   <Route path="/billing" element={<RequirePermission module="billing"><Billing /></RequirePermission>} />
                   <Route path="/menu" element={<RequirePermission module="menu"><MenuManagement /></RequirePermission>} />
                   <Route path="/bakery" element={<RequirePermission module="billing"><BakeryCounter /></RequirePermission>} />

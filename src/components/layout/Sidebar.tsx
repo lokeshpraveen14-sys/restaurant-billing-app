@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  SquaresFour, Table, ClipboardText, CookingPot, Receipt, Package,
+  SquaresFour, Table, ClipboardText, Receipt, Package,
   ChartBar, Gear, Users, ForkKnife, Storefront, CaretDoubleLeft,
   CaretDoubleRight, SignOut, Drop, Timer, ChartLine, Bank, FileText
 } from '@phosphor-icons/react';
@@ -24,7 +24,6 @@ const NAV_GROUPS = [
       { label: 'Dashboard', path: '/', icon: <SquaresFour size={20} />, module: 'admin' },
       { label: 'Tables', path: '/tables', icon: <Table size={20} />, module: 'tables' },
       { label: 'New Order', path: '/order', icon: <ClipboardText size={20} />, module: 'orders' },
-      { label: 'Kitchen Display', path: '/kitchen', icon: <CookingPot size={20} />, module: 'kitchen' },
       { label: 'Billing', path: '/billing', icon: <Receipt size={20} />, module: 'billing' },
       { label: 'Bill History', path: '/bills', icon: <Receipt size={20} />, module: 'bill_history' },
       { label: 'Head Count', path: '/headcount', icon: <Users size={20} />, module: 'admin' },
