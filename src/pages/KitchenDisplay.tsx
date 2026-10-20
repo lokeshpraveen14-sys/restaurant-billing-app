@@ -167,8 +167,8 @@ export default function KitchenDisplay() {
     // 1. Fetch immediately
     fetchKitchenOrders();
 
-    // 2. Polling every 8 seconds as reliable fallback
-    const poll = setInterval(fetchKitchenOrders, 8000);
+    // 2. Gentle polling every 60 seconds as fallback (Realtime WebSocket handles instant updates)
+    const poll = setInterval(fetchKitchenOrders, 60000);
 
     // 3. Real-time subscription for instant updates
     if (channelRef.current) {

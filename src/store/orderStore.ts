@@ -53,19 +53,17 @@ const syncOrderToDB = async (order: Order) => {
   
   const { error } = await supabase.from('orders').upsert({
     id: order.id,
-    local_id: order.localId,
     table_id: isValidUUID(order.tableId) ? order.tableId : null,
     table_number: order.tableNumber || null,
     order_type: order.orderType,
     status: order.status,
     staff_id: order.staffId,
     staff_name: order.staffName,
-    // guest_count: order.guestCount || null, // Removed temporarily: causes PGRST204 crash if column missing in Supabase
-    seats: order.seats || null,
+    guest_count: order.guestCount || 1,
     items: order.items,
+    kot_printed: Boolean(order.kotPrintedAt),
     created_at: new Date(order.createdAt).toISOString(),
     updated_at: new Date().toISOString(),
-    kot_printed_at: order.kotPrintedAt ? new Date(order.kotPrintedAt).toISOString() : null,
   });
   if (error) {
     console.error('Failed to sync order to DB:', error);
