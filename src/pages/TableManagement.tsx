@@ -43,7 +43,7 @@ export default function TableManagement() {
   const [actionModal, setActionModal] = useState<{ type: 'free' | 'reserved' | 'occupied'; tableId: string; tableNumber: string } | null>(null);
   const [guestsCount, setGuestsCount] = useState('');
   const [reservationDetails, setReservationDetails] = useState('');
-  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order'>('seat');
+  const [actionMode, setActionMode] = useState<'seat' | 'reserve' | 'edit' | 'select_order' | 'ghost_occupied'>('seat');
   const [editTableData, setEditTableData] = useState({ number: '', capacity: '4', section: '' });
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
 
@@ -91,8 +91,15 @@ export default function TableManagement() {
 
     // Always check for active orders first
     const activeOrders = getOrdersByTable(tableId, table.number);
-    if (activeOrders.length > 0) {
-      // Show sub-table modal so they can either select the existing order or seat a new guest (sub-table)
+
+    // If exactly 1 active order, navigate straight to the order to see the cart!
+    if (activeOrders.length === 1) {
+      navigate(`/order?table=${tableId}&orderId=${activeOrders[0].id}`);
+      return;
+    }
+
+    // If multiple active orders (sub-tables), show order selection modal
+    if (activeOrders.length > 1) {
       setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
       setActionMode('select_order');
       return;
@@ -117,6 +124,10 @@ export default function TableManagement() {
     } else if (status === 'cleaning') {
       updateTableStatus(tableId, 'free');
       toast.success('Table Ready', 'Table marked as free');
+    } else if (status === 'occupied') {
+      // Occupied table with 0 active orders in system — open action modal to unfreeze!
+      setActionModal({ type: 'occupied', tableId, tableNumber: table.number });
+      setActionMode('ghost_occupied');
     }
   };
 
@@ -234,13 +245,47 @@ export default function TableManagement() {
             {displayTables.filter(t => t.status !== 'merged').map((table) => {
               const activeOrders = getOrdersByTable(table.id, table.number);
               const computedStatus = getEffectiveStatus(table);
+              const totalItems = activeOrders.reduce((s, o) => s + o.items.filter(i => i.status !== 'void').length, 0);
+              const totalAmt = activeOrders.reduce((s, o) => s + o.items.reduce((sum, i) => sum + (i.status !== 'void' ? (i.totalPrice || 0) : 0), 0), 0);
+
             return (
               <div
                 key={table.id}
                 className={`table-card ${computedStatus}`}
                 onClick={() => handleTableClick(table.id, table.status)}
                 title={`${table.number} — ${STATUS_LABELS[computedStatus]}${table.reservedFor ? ': ' + table.reservedFor : ''}`}
+                style={{ position: 'relative' }}
               >
+                {/* Top-left: Split bill / Sub-table button if 1 active bill */}
+                {activeOrders.length === 1 && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    title="Add split bill / sub-table"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActionModal({ type: 'occupied', tableId: table.id, tableNumber: table.number });
+                      setActionMode('select_order');
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      left: 6,
+                      padding: '2px 6px',
+                      fontSize: '0.65rem',
+                      height: 'auto',
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      zIndex: 2,
+                    }}
+                  >
+                    <Plus size={10} /> Bill
+                  </button>
+                )}
+
                 <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, alignItems: 'center' }}>
                   {activeOrders.length > 1 && (
                     <span style={{ fontSize: '0.65rem', background: 'var(--bg-card)', color: 'var(--text-primary)', padding: '2px 6px', borderRadius: 4, fontWeight: 700, border: '1px solid var(--border)' }}>
@@ -264,6 +309,15 @@ export default function TableManagement() {
                     {formatElapsed(table.occupiedSince)}
                   </div>
                 )}
+                {activeOrders.length > 0 ? (
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--primary)', marginTop: 2 }}>
+                    {totalItems} items • ₹{totalAmt.toFixed(0)}
+                  </div>
+                ) : (computedStatus === 'occupied' ? (
+                  <div style={{ fontSize: '0.65rem', color: 'var(--danger, #ef4444)', marginTop: 2, fontWeight: 500 }}>
+                    Click to release / order
+                  </div>
+                ) : null)}
                 {table.reservedFor && (
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 4, textAlign: 'center', padding: '0 4px', lineHeight: 1.3 }}>
                     {table.reservedFor}
@@ -334,8 +388,64 @@ export default function TableManagement() {
       {actionModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
           <div className="card" style={{ width: 400, maxWidth: '90vw' }}>
-            
-            {actionMode === 'select_order' ? (
+            {actionMode === 'ghost_occupied' ? (
+              // Table marked occupied but no orders found in system
+              <>
+                <div className="card-header">
+                  <div className="card-title">Table {actionModal.tableNumber} (Occupied)</div>
+                </div>
+                <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    This table is currently marked as <strong>Occupied</strong>, but has no active orders in the system.
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={() => {
+                        const table = tables.find(t => t.id === actionModal.tableId);
+                        const capacity = table?.capacity || 4;
+                        navigate(`/order?table=${actionModal.tableId}&guests=${capacity}&new=true`);
+                        setActionModal(null);
+                      }}
+                    >
+                      <Plus size={16} /> Open Cart / Take New Order
+                    </button>
+
+                    <button 
+                      className="btn btn-ghost" 
+                      style={{ color: 'var(--danger, #ef4444)', border: '1px solid var(--danger, #ef4444)' }}
+                      onClick={() => {
+                        updateTableStatus(actionModal.tableId, 'free');
+                        toast.success('Table Ready', `Table ${actionModal.tableNumber} marked as free`);
+                        setActionModal(null);
+                      }}
+                    >
+                      <Trash size={16} /> Release Table (Mark Free)
+                    </button>
+
+                    <button 
+                      className="btn btn-ghost" 
+                      onClick={() => {
+                        const table = tables.find(t => t.id === actionModal.tableId);
+                        if (table) {
+                          setEditTableData({
+                            number: table.number,
+                            capacity: table.capacity.toString(),
+                            section: table.section,
+                          });
+                        }
+                        setActionMode('edit');
+                      }}
+                    >
+                      Edit Table Details
+                    </button>
+                    
+                    <button className="btn btn-ghost" onClick={() => setActionModal(null)}>Cancel</button>
+                  </div>
+                </div>
+              </>
+            ) : actionMode === 'select_order' ? (
               // Multiple Orders / Occupied Table Modal
               <>
                 <div className="card-header">

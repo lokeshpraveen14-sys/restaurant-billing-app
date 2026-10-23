@@ -62,3 +62,6 @@ CREATE TABLE public.staff_users (
 ALTER TABLE public.staff_users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "public_all_staff" ON public.staff_users FOR ALL USING (true) WITH CHECK (true);
 ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_users;
+
+-- 4. Fix orders table_number to support alphanumeric table numbers (e.g. C2, C4, C6, D1)
+ALTER TABLE public.orders ALTER COLUMN table_number TYPE TEXT;

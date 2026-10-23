@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useUIStore } from './uiStore';
+import { useTableStore } from './tableStore';
 import { Order, OrderItem, OrderType, OrderStatus } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -28,11 +29,21 @@ interface OrderState {
 
 // Map a raw DB row to an Order object
 function mapDbOrder(o: any): Order {
+  let tableNumber = o.table_number !== null && o.table_number !== undefined ? String(o.table_number) : undefined;
+  if (o.table_id) {
+    try {
+      const table = useTableStore.getState().tables.find(t => t.id === o.table_id);
+      if (table && table.number) {
+        tableNumber = table.number;
+      }
+    } catch (_) {}
+  }
+
   return {
     id: o.id,
     localId: o.local_id,
     tableId: o.table_id || undefined,
-    tableNumber: o.table_number || undefined,
+    tableNumber,
     orderType: o.order_type as OrderType,
     status: o.status as OrderStatus,
     staffId: o.staff_id,
@@ -49,9 +60,9 @@ function mapDbOrder(o: any): Order {
 
 const syncOrderToDB = async (order: Order) => {
   // Only pass table_id if it's a valid UUID, otherwise pass null to avoid postgres uuid syntax error
-  const isValidUUID = (id: string | null | undefined) => id && id.length === 36;
+  const isValidUUID = (id: string | null | undefined) => Boolean(id && id.length === 36);
   
-  const { error } = await supabase.from('orders').upsert({
+  const payload: any = {
     id: order.id,
     table_id: isValidUUID(order.tableId) ? order.tableId : null,
     table_number: order.tableNumber || null,
@@ -64,9 +75,23 @@ const syncOrderToDB = async (order: Order) => {
     kot_printed: Boolean(order.kotPrintedAt),
     created_at: new Date(order.createdAt).toISOString(),
     updated_at: new Date().toISOString(),
-  });
+  };
+
+  const { error } = await supabase.from('orders').upsert(payload);
   if (error) {
     console.error('Failed to sync order to DB:', error);
+    // If postgres table_number column is integer (22P02), fallback by parsing number or setting null
+    // so the order and its cart items are STILL successfully saved in DB!
+    if (error.code === '22P02' || error.message?.includes('integer')) {
+      const numOnly = parseInt(String(order.tableNumber || '').replace(/\D/g, ''), 10);
+      payload.table_number = isNaN(numOnly) ? null : numOnly;
+      const { error: retryError } = await supabase.from('orders').upsert(payload);
+      if (retryError) {
+        console.error('Retry syncing order to DB failed:', retryError);
+      } else {
+        console.log('✅ Order synced to DB with fallback table_number');
+      }
+    }
   }
 };
 
@@ -276,8 +301,10 @@ export const useOrderStore = create<OrderState>()(
 
       getOrdersByTable: (tableId, tableNumber) => {
         return get().orders.filter(
-          (o) => (o.tableId === tableId || (tableNumber && o.tableNumber === tableNumber))
-                 && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
+          (o) => (
+            (tableId && o.tableId === tableId) ||
+            (tableNumber && o.tableNumber && String(o.tableNumber).trim().toUpperCase() === String(tableNumber).trim().toUpperCase())
+          ) && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
         );
       },
 
