@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoPrintKot: false,
   upiId: 'railway@upi',
   financialYear: '2025-26',
-  invoicePrefix: 'BILL',
+  invoicePrefix: 'TX',
   invoiceCounter: 1,
   outlet: 'Main Branch',
   currency: 'INR',
@@ -51,29 +51,37 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({ settings: { ...state.settings, ...updates } })),
 
       incrementInvoiceCounter: () => {
-        // Read current, then increment — done synchronously to avoid race with Zustand async writes
         let counter = 0;
         set((state) => {
-          counter = state.settings.invoiceCounter;
-          return { settings: { ...state.settings, invoiceCounter: state.settings.invoiceCounter + 1 } };
+          // If local counter was corrupted to > 999,999, reset to 1
+          const safeCounter = (state.settings.invoiceCounter > 999999) ? 1 : state.settings.invoiceCounter;
+          counter = safeCounter;
+          return { settings: { ...state.settings, invoiceCounter: safeCounter + 1 } };
         });
         return counter;
       },
 
       syncInvoiceCounter: (invoiceNumber: string) => {
-        const match = invoiceNumber.match(/(\d+)$/);
-        if (match) {
-          const counter = parseInt(match[1], 10);
-          if (!isNaN(counter)) {
-            set((state) => {
-              // If the db counter is greater than or equal to our local next counter,
-              // we need to advance our local counter to prevent duplicates.
-              if (counter >= state.settings.invoiceCounter) {
-                return { settings: { ...state.settings, invoiceCounter: counter + 1 } };
-              }
-              return state;
-            });
-          }
+        if (!invoiceNumber || typeof invoiceNumber !== 'string') return;
+        const currentPrefix = get().settings.invoicePrefix;
+        // Strictly only sync counters for the CURRENT prefix (e.g. "TX/")
+        // NEVER let old "INV/" numbers contaminate the active counter
+        if (!invoiceNumber.startsWith(currentPrefix + '/')) return;
+
+        // Strictly only match pure 1-6 digit numbers (ignore any corrupted 8-digit numbers)
+        const parts = invoiceNumber.split('/');
+        const seqPart = parts[parts.length - 1];
+        if (!seqPart || !/^\d{1,6}$/.test(seqPart)) return;
+
+        const counter = parseInt(seqPart, 10);
+        if (!isNaN(counter)) {
+          set((state) => {
+            const currentLocal = (state.settings.invoiceCounter > 999999) ? 1 : state.settings.invoiceCounter;
+            if (counter >= currentLocal) {
+              return { settings: { ...state.settings, invoiceCounter: counter + 1 } };
+            }
+            return state.settings.invoiceCounter > 999999 ? { settings: { ...state.settings, invoiceCounter: currentLocal } } : state;
+          });
         }
       },
 
@@ -172,13 +180,13 @@ export const useSettingsStore = create<SettingsState>()(
         const existing = supabase.getChannels().find(c => c.topic === 'realtime:public:app_settings');
         if (existing) return;
 
-        // Force upgrade the broken 'INV' series to 'BILL'
-        if (get().settings.invoicePrefix === 'INV') {
-          set((state) => ({ settings: { ...state.settings, invoicePrefix: 'BILL' } }));
+        // Upgrade legacy 'INV' or 'BILL' series to clean 'TX' series
+        if (get().settings.invoicePrefix === 'INV' || get().settings.invoicePrefix === 'BILL') {
+          set((state) => ({ settings: { ...state.settings, invoicePrefix: 'TX' } }));
         }
 
         supabase
-.channel('public:app_settings')
+          .channel('public:app_settings')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
             const row = payload.new as any;
             if (!row) return;

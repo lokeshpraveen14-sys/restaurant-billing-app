@@ -42,10 +42,14 @@ export default function Billing() {
   const [upiRef, setUpiRef] = useState('');
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const handlePrint = async (printerId: string = 'billing', bill?: Bill | null) => {
+    if (isPrinting) return;
     const b = bill || billGenerated;
     if (!b) return;
+    setIsPrinting(true);
+    try {
     const lines = buildBillReceipt({
       restaurantName: settings.restaurantName,
       address:        settings.address,
@@ -72,6 +76,9 @@ export default function Billing() {
       toast.error('Print Error', result.error || 'Failed to print');
     } else {
       toast.success('Printed!', 'Sent to thermal printer');
+    }
+    } finally {
+      setTimeout(() => setIsPrinting(false), 2000);
     }
   };
 
@@ -495,11 +502,12 @@ export default function Billing() {
                     <button
                       key={p.id}
                       className="btn btn-secondary"
-                      style={{ width: '100%', justifyContent: 'flex-start', opacity: billGenerated ? 1 : 0.45, cursor: billGenerated ? 'pointer' : 'not-allowed' }}
-                      onClick={() => billGenerated && handlePrint(p.id)}
-                      title={!billGenerated ? 'Generate bill first' : `Print to ${p.name}`}
+                      style={{ width: '100%', justifyContent: 'flex-start', opacity: (billGenerated && !isPrinting) ? 1 : 0.45, cursor: (billGenerated && !isPrinting) ? 'pointer' : 'not-allowed' }}
+                      disabled={!billGenerated || isPrinting}
+                      onClick={() => billGenerated && !isPrinting && handlePrint(p.id)}
+                      title={!billGenerated ? 'Generate bill first' : isPrinting ? 'Printing in progress...' : `Print to ${p.name}`}
                     >
-                      <Printer size={18} /> {p.name}
+                      <Printer size={18} /> {isPrinting ? 'Sending to printer...' : p.name}
                       <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>({p.role})</span>
                     </button>
                   ))}

@@ -27,7 +27,7 @@ SELECT
   ) AS counter
 FROM bills
 WHERE invoice_number LIKE '%/%/%'
-  AND SPLIT_PART(invoice_number, '/', 3) ~ '^\d+'
+  AND SPLIT_PART(invoice_number, '/', 3) ~ '^\d{1,6}$'
 GROUP BY 1
 ON CONFLICT (id) DO UPDATE
   SET counter = GREATEST(invoice_counters.counter, EXCLUDED.counter);
