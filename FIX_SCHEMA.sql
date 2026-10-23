@@ -1,9 +1,6 @@
 -- Fix incorrect schema in the new project
 
-DROP TABLE IF EXISTS public.menu_items;
-DROP TABLE IF EXISTS public.menu_categories CASCADE;
-DROP TABLE IF EXISTS public.restaurant_tables;
-DROP TABLE IF EXISTS public.staff_users;
+-- Safe schema definition for new project (DO NOT DROP EXISTING DATA)
 
 -- 1. Recreate menu_items to match old project EXACTLY
 CREATE TABLE public.menu_items (

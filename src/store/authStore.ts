@@ -27,13 +27,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, PermissionModule[]> = {
   kitchen: ['shift', 'orders'],
 };
 
-// Fallback demo users — used only while Supabase loads, or if offline
+// Fallback staff users — used while Supabase loads, or if offline
 export const DEMO_USERS: User[] = [
-  { id: '1', name: 'Admin User', email: 'admin@railwaycoach.com', role: 'admin', pin: '1234', active: true, createdAt: new Date() },
-  { id: '2', name: 'Ravi Kumar', email: 'manager@railwaycoach.com', role: 'manager', pin: '2345', active: true, createdAt: new Date() },
-  { id: '3', name: 'Priya Sharma', email: 'cashier@railwaycoach.com', role: 'cashier', pin: '3456', active: true, createdAt: new Date() },
-  { id: '4', name: 'Mohan Raj', email: 'waiter@railwaycoach.com', role: 'waiter', pin: '4567', active: true, createdAt: new Date() },
-  { id: '5', name: 'Chef Suresh', email: 'kitchen@railwaycoach.com', role: 'kitchen', pin: '5678', active: true, createdAt: new Date() },
+  { id: '1', name: 'Admin User', email: 'admin@railwaycoach.com', role: 'admin', pin: '0303', active: true, createdAt: new Date() },
+  { id: '2', name: 'Parthipan', email: 'manager@railwaycoach.com', role: 'manager', pin: '1234', active: true, createdAt: new Date() },
+  { id: '3', name: 'Satya ', email: 'cashier@railwaycoach.com', role: 'cashier', pin: '1111', active: true, createdAt: new Date() },
+  { id: '4', name: 'Swathi ', email: 'waiter@railwaycoach.com', role: 'cashier', pin: '3333', active: true, createdAt: new Date() },
+  { id: '5', name: 'Darshini', email: 'kitchen@railwaycoach.com', role: 'cashier', pin: '2222', active: true, createdAt: new Date() },
 ];
 
 function mapDbUser(row: any): User {
