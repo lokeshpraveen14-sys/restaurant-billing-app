@@ -289,12 +289,11 @@ export const useOrderStore = create<OrderState>()(
       },
 
       voidOrder: (orderId, _reason) => {
+        // Remove from state immediately so it's never persisted in a stale 'void' state.
+        // (matching what updateOrderStatus does for 'void' / 'paid')
         set((state) => ({
-          orders: state.orders.map((o) =>
-            o.id === orderId
-              ? { ...o, status: 'void', items: o.items.map((i) => ({ ...i, status: 'void' as const })) }
-              : o
-          ),
+          orders: state.orders.filter((o) => o.id !== orderId),
+          activeOrder: state.activeOrder?.id === orderId ? null : state.activeOrder,
         }));
         deleteOrderFromDB(orderId);
       },
@@ -444,6 +443,14 @@ export const useOrderStore = create<OrderState>()(
     }),
     {
       name: 'railway-coach-orders', // localStorage key
+      // v2: voidOrder now removes from state immediately — bumping version clears stale
+      //     void/paid orders that were persisted by the old bug on ALL devices automatically.
+      version: 2,
+      migrate: (_persistedState, fromVersion) => {
+        // Any device on version < 2 gets a clean slate — Supabase is the source of truth.
+        console.log(`[orderStore] Migrating localStorage from v${fromVersion} → v2, clearing stale data.`);
+        return { orders: [], activeOrder: null, ordersLoaded: false };
+      },
       // Only persist active orders and activeOrder — NOT ordersLoaded (always starts false)
       // This prevents the QuotaExceededError caused by closed/voided orders accumulating in localStorage.
       partialize: (state) => ({

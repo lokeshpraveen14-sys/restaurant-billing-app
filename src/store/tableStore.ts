@@ -233,6 +233,15 @@ export const useTableStore = create<TableState>()(
           });
       }
     }),
-    { name: 'railway-coach-tables' }
+    {
+      name: 'railway-coach-tables',
+      // v2: clearing stale table status data (phantom 'occupied') on all devices automatically.
+      //     Supabase initTableSync() re-fetches authoritative state on every load.
+      version: 2,
+      migrate: (_persistedState, fromVersion) => {
+        console.log(`[tableStore] Migrating localStorage from v${fromVersion} → v2, clearing stale data.`);
+        return { tables: [], selectedTableId: null };
+      },
+    }
   )
 );
