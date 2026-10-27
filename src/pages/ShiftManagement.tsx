@@ -26,7 +26,7 @@ import TopBar from '../components/layout/TopBar';
 import { useReactToPrint } from 'react-to-print';
 
 export default function ShiftManagement() {
-  const { activeShifts, shifts, openShift, closeShift, getActiveShiftForStaff } = useShiftStore();
+  const { activeShifts, shifts, openShift, closeShift, getActiveShiftForStaff, recalculateShiftTotals } = useShiftStore();
   const { currentUser, allUsers } = useAuthStore();
   const { bills, fetchBillsForShift } = useBillStore();
   const toast = useToast();
@@ -80,13 +80,15 @@ export default function ShiftManagement() {
         currentShift.openedAt,
         currentShift.closedAt
       );
+      // Automatically recalculate authoritative totals excluding voided/revised bills
+      await recalculateShiftTotals(currentShift.id, fetched);
       if (showToast) {
         toast.success('Shift Synced', `Loaded ${fetched.length} bills for ${currentShift.staffName}`);
       }
     } finally {
       setLoadingShiftBills(false);
     }
-  }, [currentShift, fetchBillsForShift, toast]);
+  }, [currentShift, fetchBillsForShift, recalculateShiftTotals, toast]);
 
   // Only pull data from cloud when the selected active shift changes
   React.useEffect(() => {
@@ -175,13 +177,29 @@ export default function ShiftManagement() {
   const computedRevenue = shiftBills.reduce((s, b) => s + b.totalAmount, 0);
   const computedCovers = shiftBills.reduce((s, b) => s + (b.guestCount || 0), 0);
 
-  // Fallback to shift DB totals if bills are still loading from server
-  const shiftCash = shiftBills.length > 0 ? computedCash : (currentShift?.totalCash || 0);
-  const shiftUPI = shiftBills.length > 0 ? computedUPI : (currentShift?.totalUPI || 0);
-  const shiftCard = shiftBills.length > 0 ? computedCard : (currentShift?.totalCard || 0);
-  const shiftRevenue = shiftBills.length > 0 ? computedRevenue : (currentShift?.totalRevenue || 0);
-  const shiftCovers = shiftBills.length > 0 ? computedCovers : (currentShift?.totalCovers || 0);
-  const shiftOrdersCount = Math.max(shiftBills.length, currentShift?.totalOrders || 0);
+  // Authoritative metrics: when bills have loaded or voided/revised bills exist, computed metrics must be used!
+  // Fallback to shift DB totals only while initial network fetch is actively pending
+  const hasLoadedBills =
+    !loadingShiftBills ||
+    shiftBills.length > 0 ||
+    shiftVoidedBills.length > 0 ||
+    shiftRevisedBills.length > 0;
+
+  const shiftCash = hasLoadedBills ? computedCash : (currentShift?.totalCash || 0);
+  const shiftUPI = hasLoadedBills ? computedUPI : (currentShift?.totalUPI || 0);
+  const shiftCard = hasLoadedBills ? computedCard : (currentShift?.totalCard || 0);
+  const shiftRevenue = hasLoadedBills ? computedRevenue : (currentShift?.totalRevenue || 0);
+  const shiftCovers = hasLoadedBills ? computedCovers : (currentShift?.totalCovers || 0);
+  const shiftOrdersCount = hasLoadedBills ? shiftBills.length : (currentShift?.totalOrders || 0);
+
+  const getShiftLiveRevenue = (s: Shift) => {
+    const shiftPaid = bills.filter((b) => isBillInShift(b, s) && (b.status === 'paid' || !b.status));
+    const hasBillsInStore = bills.some((b) => isBillInShift(b, s));
+    if (hasBillsInStore) {
+      return shiftPaid.reduce((sum, b) => sum + b.totalAmount, 0);
+    }
+    return s.totalRevenue || 0;
+  };
 
   const shiftVoidedTotal = shiftVoidedBills.reduce((s, b) => s + b.totalAmount, 0);
   const shiftRevisedTotal = shiftRevisedBills.reduce((s, b) => s + b.totalAmount, 0);
@@ -621,7 +639,7 @@ export default function ShiftManagement() {
                       >
                         <span style={{ color: 'var(--text-muted)' }}>Opening: ₹{s.openingBalance}</span>
                         <span style={{ fontWeight: 700, color: 'var(--status-free)' }}>
-                          ₹{s.totalRevenue || 0}
+                          ₹{getShiftLiveRevenue(s)}
                         </span>
                       </div>
                     </button>

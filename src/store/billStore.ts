@@ -4,6 +4,7 @@ import { Bill } from '../types';
 import { supabase } from '../lib/supabase';
 import { useSettingsStore } from './settingsStore';
 import { useAccountingStore } from './accountingStore';
+import { useShiftStore } from './shiftStore';
 
 interface BillState {
   bills: Bill[];
@@ -150,6 +151,7 @@ export const useBillStore = create<BillState>()(
       },
 
   voidBill: async (billId: string, voidedBy: string, voidReason?: string, shiftId?: string) => {
+    const targetBill = get().bills.find((b) => b.id === billId);
     const voidedAt = new Date();
     // Optimistic UI update
     set((state) => ({
@@ -166,6 +168,11 @@ export const useBillStore = create<BillState>()(
           : b
       ),
     }));
+
+    // Reverse payment & totals from cashier's shift
+    if (targetBill) {
+      useShiftStore.getState().voidBillInShift(targetBill, shiftId);
+    }
 
     // Update in Supabase
     const { error } = await supabase
@@ -185,6 +192,7 @@ export const useBillStore = create<BillState>()(
   },
 
   reviseBill: async (billId: string, revisedBy: string, revisedReason?: string, shiftId?: string) => {
+    const targetBill = get().bills.find((b) => b.id === billId);
     const revisedAt = new Date();
     // Optimistic UI update
     set((state) => ({
@@ -201,6 +209,11 @@ export const useBillStore = create<BillState>()(
           : b
       ),
     }));
+
+    // Reverse from shift because the bill is reopened into a new order to be billed again
+    if (targetBill) {
+      useShiftStore.getState().voidBillInShift(targetBill, shiftId);
+    }
 
     // Update in Supabase
     const { error } = await supabase

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Shift } from '../types';
+import { Shift, Bill } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAccountingStore } from './accountingStore';
 import { useAuthStore } from './authStore';
@@ -31,6 +31,8 @@ interface ShiftState {
     staffId?: string,
     shiftId?: string
   ) => Promise<void>;
+  voidBillInShift: (bill: Partial<Bill>, targetShiftId?: string) => Promise<void>;
+  recalculateShiftTotals: (shiftId: string, shiftBills: Bill[]) => Promise<void>;
   initShiftSync: () => Promise<void>;
 }
 
@@ -305,6 +307,123 @@ export const useShiftStore = create<ShiftState>()(
           })
           .eq('id', updatedShift.id)
           .then();
+      },
+
+      voidBillInShift: async (bill: Partial<Bill>, targetShiftId?: string) => {
+        const state = get();
+        const shiftId = targetShiftId || bill.shiftId || bill.voidShiftId;
+        const target =
+          (shiftId ? state.activeShifts.find((s) => s.id === shiftId && s.status === 'open') : null) ||
+          (bill.staffId ? state.activeShifts.find((s) => s.staffId === bill.staffId && s.status === 'open') : null) ||
+          (state.currentShift?.status === 'open' ? state.currentShift : null) ||
+          state.activeShifts[0];
+
+        if (!target) return;
+
+        const cashAmount = (bill.payments || [])
+          .filter((p) => p.mode === 'cash')
+          .reduce((sum, p) => sum + p.amount, 0);
+        const upiAmount = (bill.payments || [])
+          .filter((p) => p.mode === 'upi')
+          .reduce((sum, p) => sum + p.amount, 0);
+        const cardAmount = (bill.payments || [])
+          .filter((p) => p.mode === 'card')
+          .reduce((sum, p) => sum + p.amount, 0);
+        const total = bill.totalAmount || 0;
+        const covers = bill.guestCount || 0;
+
+        const updatedShift: Shift = {
+          ...target,
+          totalCash: Math.max(0, (target.totalCash || 0) - cashAmount),
+          totalUPI: Math.max(0, (target.totalUPI || 0) - upiAmount),
+          totalCard: Math.max(0, (target.totalCard || 0) - cardAmount),
+          totalRevenue: Math.max(0, (target.totalRevenue || 0) - total),
+          totalOrders: Math.max(0, (target.totalOrders || 0) - 1),
+          totalCovers: Math.max(0, (target.totalCovers || 0) - covers),
+        };
+
+        set((s) => ({
+          activeShifts: s.activeShifts.map((sh) => (sh.id === updatedShift.id ? updatedShift : sh)),
+          currentShift: s.currentShift?.id === updatedShift.id ? updatedShift : s.currentShift,
+        }));
+
+        try {
+          await supabase
+            .from('shifts')
+            .update({
+              total_cash: updatedShift.totalCash,
+              total_upi: updatedShift.totalUPI,
+              total_card: updatedShift.totalCard,
+              total_revenue: updatedShift.totalRevenue,
+              total_orders: updatedShift.totalOrders,
+              total_covers: updatedShift.totalCovers,
+            })
+            .eq('id', updatedShift.id);
+        } catch (err) {
+          console.error('Failed to update shift after voiding bill in Supabase:', err);
+        }
+      },
+
+      recalculateShiftTotals: async (shiftId: string, shiftBills: Bill[]) => {
+        const state = get();
+        const target =
+          state.activeShifts.find((s) => s.id === shiftId) ||
+          (state.currentShift?.id === shiftId ? state.currentShift : null);
+
+        if (!target) return;
+
+        // Paid bills only (exclude voided and revised bills)
+        const paidBills = shiftBills.filter((b) => b.status === 'paid' || !b.status);
+
+        const totalCash = paidBills.reduce(
+          (s, b) =>
+            s + (b.payments || []).filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0),
+          0
+        );
+        const totalUPI = paidBills.reduce(
+          (s, b) =>
+            s + (b.payments || []).filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0),
+          0
+        );
+        const totalCard = paidBills.reduce(
+          (s, b) =>
+            s + (b.payments || []).filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0),
+          0
+        );
+        const totalRevenue = paidBills.reduce((s, b) => s + (b.totalAmount || 0), 0);
+        const totalCovers = paidBills.reduce((s, b) => s + (b.guestCount || 0), 0);
+        const totalOrders = paidBills.length;
+
+        const updatedShift: Shift = {
+          ...target,
+          totalCash,
+          totalUPI,
+          totalCard,
+          totalRevenue,
+          totalOrders,
+          totalCovers,
+        };
+
+        set((s) => ({
+          activeShifts: s.activeShifts.map((sh) => (sh.id === updatedShift.id ? updatedShift : sh)),
+          currentShift: s.currentShift?.id === updatedShift.id ? updatedShift : s.currentShift,
+        }));
+
+        try {
+          await supabase
+            .from('shifts')
+            .update({
+              total_cash: totalCash,
+              total_upi: totalUPI,
+              total_card: totalCard,
+              total_revenue: totalRevenue,
+              total_orders: totalOrders,
+              total_covers: totalCovers,
+            })
+            .eq('id', updatedShift.id);
+        } catch (err) {
+          console.error('Failed to update recalculated shift totals in Supabase:', err);
+        }
       },
 
       initShiftSync: async () => {

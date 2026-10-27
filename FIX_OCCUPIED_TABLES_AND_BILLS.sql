@@ -36,3 +36,42 @@ CREATE POLICY "public_all_orders" ON public.orders FOR ALL USING (true) WITH CHE
 -- 6. Emergency Full Reset (uncomment ONLY if you want to clear ALL tables to free right now):
 -- UPDATE public.restaurant_tables SET status = 'free', occupied_since = NULL, reserved_for = NULL;
 -- DELETE FROM public.orders;
+
+-- 7. Fix any active open shifts where totals include voided bills:
+UPDATE public.shifts s
+SET 
+  total_cash = COALESCE((
+    SELECT SUM(p->>'amount')::NUMERIC 
+    FROM public.bills b, jsonb_array_elements(b.payments) p 
+    WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
+      AND (b.status = 'paid' OR b.status IS NULL)
+      AND p->>'mode' = 'cash'
+  ), 0),
+  total_upi = COALESCE((
+    SELECT SUM(p->>'amount')::NUMERIC 
+    FROM public.bills b, jsonb_array_elements(b.payments) p 
+    WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
+      AND (b.status = 'paid' OR b.status IS NULL)
+      AND p->>'mode' = 'upi'
+  ), 0),
+  total_card = COALESCE((
+    SELECT SUM(p->>'amount')::NUMERIC 
+    FROM public.bills b, jsonb_array_elements(b.payments) p 
+    WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
+      AND (b.status = 'paid' OR b.status IS NULL)
+      AND p->>'mode' = 'card'
+  ), 0),
+  total_revenue = COALESCE((
+    SELECT SUM(b.total_amount) 
+    FROM public.bills b 
+    WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
+      AND (b.status = 'paid' OR b.status IS NULL)
+  ), 0),
+  total_orders = COALESCE((
+    SELECT COUNT(*) 
+    FROM public.bills b 
+    WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
+      AND (b.status = 'paid' OR b.status IS NULL)
+  ), 0)
+WHERE s.status = 'open';
+
