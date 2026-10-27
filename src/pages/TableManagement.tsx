@@ -3,8 +3,9 @@ import { useTableStore } from '../store/tableStore';
 import { useOrderStore } from '../store/orderStore';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../store/uiStore';
-import { Table, Plus, Users, GitMerge, ArrowsSplit, SquaresFour, PencilSimple, Trash } from '@phosphor-icons/react';
+import { Table, Plus, Users, GitMerge, ArrowsSplit, SquaresFour, PencilSimple, Trash, ArrowsClockwise } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
+import { useAuthStore } from '../store/authStore';
 import { TableStatus, Table as TableType } from '../types';
 
 const STATUS_LABELS: Record<TableStatus, string> = {
@@ -24,6 +25,7 @@ export default function TableManagement() {
   const updateTableStatus = useTableStore(s => s.updateTableStatus);
   const addTable = useTableStore(s => s.addTable);
   const deleteTable = useTableStore(s => s.deleteTable);
+  const releaseTable = useTableStore(s => s.releaseTable);
   
   const getOrdersByTable = useOrderStore(s => s.getOrdersByTable);
   const voidOrder = useOrderStore(s => s.voidOrder);
@@ -31,6 +33,8 @@ export default function TableManagement() {
 
   const navigate = useNavigate();
   const toast = useToast();
+  const currentUser = useAuthStore(s => s.currentUser);
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const [activeSection, setActiveSection] = useState('All');
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -193,6 +197,57 @@ export default function TableManagement() {
         title="Table Management"
         actions={
           <div style={{ display: 'flex', gap: '8px' }}>
+            {isAdmin && (
+              <button
+                className="btn btn-secondary btn-sm"
+                title="Wipe browser local storage and re-sync clean from database"
+                onClick={async () => {
+                  if (confirm('Clear all local browser storage and cached tables/orders? This will wipe any overlapping local data and reload fresh from the database.')) {
+                    try {
+                      localStorage.removeItem('railway-coach-orders');
+                      localStorage.removeItem('railway-coach-tables');
+                      localStorage.removeItem('railway-coach-ui');
+                      if ('caches' in window) {
+                        const names = await caches.keys();
+                        await Promise.all(names.map(name => caches.delete(name)));
+                      }
+                      if ('serviceWorker' in navigator) {
+                        const registrations = await navigator.serviceWorker.getRegistrations();
+                        for (const reg of registrations) {
+                          await reg.unregister();
+                        }
+                      }
+                      toast.success('Local Storage Cleared', 'Reloading fresh...');
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 500);
+                    } catch (err) {
+                      console.error('Failed to clear cache:', err);
+                      window.location.reload();
+                    }
+                  }
+                }}
+              >
+                <ArrowsClockwise size={16} /> Clear Local Cache
+              </button>
+            )}
+            {statusCounts.occupied > 0 && (
+              <button
+                className="btn btn-outline btn-sm"
+                style={{ color: 'var(--danger, #ef4444)', borderColor: 'var(--danger, #ef4444)' }}
+                onClick={async () => {
+                  if (confirm(`Emergency Clear: Are you sure you want to release ALL ${statusCounts.occupied} occupied tables and set them to Free?`)) {
+                    const occupiedTables = tables.filter(t => getEffectiveStatus(t) === 'occupied' || t.status === 'occupied');
+                    for (const t of occupiedTables) {
+                      await releaseTable(t.id);
+                    }
+                    toast.success('All Tables Released', 'All tables have been set to Free');
+                  }
+                }}
+              >
+                <Trash size={16} /> Release All ({statusCounts.occupied})
+              </button>
+            )}
             <button className="btn btn-primary btn-sm" onClick={() => setIsAddModalOpen(true)}>
               <Plus size={16} /> Add Table
             </button>
@@ -283,6 +338,42 @@ export default function TableManagement() {
                     }}
                   >
                     <Plus size={10} /> Bill
+                  </button>
+                )}
+
+                {/* Instant Release Table button on card for quick unfreeze */}
+                {computedStatus === 'occupied' && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    title="Release table (mark free)"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const msg = totalItems > 0
+                        ? `Release Table ${table.number}? This will cancel the active order (${totalItems} items, ₹${totalAmt.toFixed(0)}) and set the table to Free.`
+                        : `Release Table ${table.number} and set to Free?`;
+                      if (confirm(msg)) {
+                        await releaseTable(table.id);
+                        toast.success('Table Released', `Table ${table.number} is now free`);
+                      }
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      right: 26,
+                      padding: '2px 6px',
+                      fontSize: '0.65rem',
+                      height: 'auto',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      color: 'var(--danger, #ef4444)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      borderRadius: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      zIndex: 3,
+                    }}
+                  >
+                    <Trash size={10} /> Free
                   </button>
                 )}
 
@@ -415,8 +506,8 @@ export default function TableManagement() {
                     <button 
                       className="btn btn-ghost" 
                       style={{ color: 'var(--danger, #ef4444)', border: '1px solid var(--danger, #ef4444)' }}
-                      onClick={() => {
-                        updateTableStatus(actionModal.tableId, 'free');
+                      onClick={async () => {
+                        await releaseTable(actionModal.tableId);
                         toast.success('Table Ready', `Table ${actionModal.tableNumber} marked as free`);
                         setActionModal(null);
                       }}
@@ -477,23 +568,27 @@ export default function TableManagement() {
                             ₹{order.items.reduce((s,i) => s + (i.status !== 'void' ? (i.totalPrice || 0) : 0), 0).toFixed(2)}
                           </div>
                         </button>
-                        {/* Release button — only for empty orders (0 items) */}
-                        {order.items.filter(i => i.status !== 'void').length === 0 && (
-                          <button
-                            title="Release this bill"
-                            style={{ padding: '0 14px', background: 'var(--danger, #ef4444)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                            onClick={() => {
-                              voidOrder(order.id, 'Released by staff');
-                              const remaining = getOrdersByTable(actionModal.tableId, actionModal.tableNumber).filter(o => o.id !== order.id);
-                              if (remaining.length === 0) {
-                                updateTableStatus(actionModal.tableId, 'free');
-                                setActionModal(null);
+                        {/* Release/Void button for any order */}
+                        <button
+                          title="Void / Release this bill"
+                          style={{ padding: '0 14px', background: 'var(--danger, #ef4444)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          onClick={async () => {
+                            const itemCount = order.items.filter(i => i.status !== 'void').length;
+                            if (itemCount > 0) {
+                              if (!confirm(`Void Order #${(order.localId || order.id).slice(0,6).toUpperCase()} (${itemCount} items)?`)) {
+                                return;
                               }
-                            }}
-                          >
-                            <Trash size={15} weight="bold" />
-                          </button>
-                        )}
+                            }
+                            voidOrder(order.id, 'Released by staff');
+                            const remaining = getOrdersByTable(actionModal.tableId, actionModal.tableNumber).filter(o => o.id !== order.id);
+                            if (remaining.length === 0) {
+                              await releaseTable(actionModal.tableId);
+                              setActionModal(null);
+                            }
+                          }}
+                        >
+                          <Trash size={15} weight="bold" />
+                        </button>
                       </div>
                     ))}
                   </div>

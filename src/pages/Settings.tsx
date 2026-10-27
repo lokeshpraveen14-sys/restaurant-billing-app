@@ -7,6 +7,7 @@ import TopBar from '../components/layout/TopBar';
 import { supabase } from '../lib/supabase';
 import { useAuthStore, ALL_MODULES, DEFAULT_ROLE_PERMISSIONS, PermissionModule } from '../store/authStore';
 import { UserRole } from '../types';
+import { APP_VERSION, BUILD_TIMESTAMP } from '../version';
 
 const GST_RATES = [0, 5, 12, 18, 28] as const;
 
@@ -589,21 +590,51 @@ export default function Settings() {
 
               {activeTab === 'system' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Version Info Card */}
+                  <div style={{ background: 'var(--bg-elevated)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Application Version</div>
+                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Build: {BUILD_TIMESTAMP}</div>
+                      </div>
+                      <span className="badge badge-primary" style={{ fontSize: '0.875rem', padding: '4px 10px', fontWeight: 800 }}>
+                        {APP_VERSION}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Clear Local Storage Card */}
                   <div style={{ background: 'var(--bg-elevated)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: 'var(--text-primary)', fontWeight: 600 }}>
                       <ArrowsClockwise size={20} />
-                      Hard Refresh / Update App
+                      Clear Local Storage & Overlapping Data
                     </div>
                     <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 16 }}>
-                      If you are experiencing bugs or the app feels out of sync, clicking this button will clear the browser's application cache and force-download the latest code updates from the server.
+                      Wipes all locally cached orders, ghost tables, and service worker caches. Fixes overlapping local data issues and reloads clean from the server.
                     </div>
-                    <button 
-                      className="btn btn-secondary" 
-                      onClick={handleHardRefresh}
-                      style={{ color: 'var(--status-billing)', borderColor: 'var(--status-billing)' }}
-                    >
-                      <Warning size={16} /> Force Reload & Update
-                    </button>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <button 
+                        className="btn btn-secondary" 
+                        onClick={() => {
+                          if (confirm('Clear local browser storage and reload? This removes any corrupt cached orders and pulls fresh state from the database.')) {
+                            localStorage.removeItem('railway-coach-orders');
+                            localStorage.removeItem('railway-coach-tables');
+                            localStorage.removeItem('railway-coach-ui');
+                            handleHardRefresh();
+                          }
+                        }}
+                        style={{ color: 'var(--danger, #ef4444)', borderColor: 'var(--danger, #ef4444)' }}
+                      >
+                        <Warning size={16} /> Clear All Local Storage
+                      </button>
+                      <button 
+                        className="btn btn-secondary" 
+                        onClick={handleHardRefresh}
+                        style={{ color: 'var(--status-billing)', borderColor: 'var(--status-billing)' }}
+                      >
+                        <ArrowsClockwise size={16} /> Hard Refresh & Update
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

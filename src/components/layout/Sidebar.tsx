@@ -8,6 +8,7 @@ import {
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import { hasPermission } from '../../store/authStore';
+import { APP_VERSION } from '../../version';
 
 interface NavItem {
   label: string;
@@ -135,10 +136,16 @@ export default function Sidebar() {
           )}
         </div>
 
+        {!sidebarCollapsed && (
+          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 6, letterSpacing: '0.5px' }}>
+            Railway Coach {APP_VERSION}
+          </div>
+        )}
+
         <button
           onClick={toggleSidebar}
           className="btn btn-ghost btn-sm"
-          style={{ width: '100%', marginTop: 8, justifyContent: 'center' }}
+          style={{ width: '100%', marginTop: 6, justifyContent: 'center' }}
           title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {sidebarCollapsed ? <CaretDoubleRight size={16} /> : <CaretDoubleLeft size={16} />}

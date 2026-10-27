@@ -2,6 +2,7 @@ import React from 'react';
 import { Bell, WifiHigh, WifiSlash, Sun, Moon, CornersOut, CornersIn } from '@phosphor-icons/react';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
+import { APP_VERSION, BUILD_TIMESTAMP } from '../../version';
 
 interface TopBarProps {
   title: string;
@@ -72,6 +73,24 @@ export default function TopBar({ title, actions }: TopBarProps) {
             : <><WifiSlash size={16} color="var(--status-reserved)" /><span style={{ color: 'var(--status-reserved)' }}>Offline</span></>
           }
         </div>
+
+        {/* Version Code Badge to verify deploy lane */}
+        <span 
+          className="hide-on-mobile"
+          title={`Build: ${BUILD_TIMESTAMP}`}
+          style={{
+            fontSize: '0.68rem',
+            padding: '2px 8px',
+            borderRadius: 12,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            color: 'var(--primary, #6366f1)',
+            fontWeight: 800,
+            letterSpacing: '0.5px'
+          }}
+        >
+          {APP_VERSION}
+        </span>
 
         {/* Time */}
         <div className="hide-on-mobile">

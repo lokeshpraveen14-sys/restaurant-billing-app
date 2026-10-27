@@ -23,6 +23,7 @@ interface OrderState {
   voidOrder: (orderId: string, reason: string) => void;
   getOrdersByTable: (tableId: string, tableNumber?: string) => Order[];
   getActiveKitchenOrders: () => Order[];
+  clearAllOrdersForTable: (tableId: string, tableNumber?: string) => Promise<void>;
   fetchActiveOrders: () => Promise<void>;
   initOrderSync: () => void;
 }
@@ -96,9 +97,17 @@ const syncOrderToDB = async (order: Order) => {
 };
 
 const deleteOrderFromDB = async (orderId: string) => {
-  const { error } = await supabase.from('orders').delete().eq('id', orderId);
-  if (error) {
-    console.error('Failed to delete order from DB:', error);
+  try {
+    // 1. Mark status as 'paid' immediately so that any active-order queries
+    // will ignore this order even if DELETE is delayed or rejected by DB policies
+    await supabase.from('orders').update({ status: 'paid', updated_at: new Date().toISOString() }).eq('id', orderId);
+    // 2. Delete the order row
+    const { error } = await supabase.from('orders').delete().eq('id', orderId);
+    if (error) {
+      console.warn('Notice from deleteOrderFromDB (status is already set to paid):', error.message);
+    }
+  } catch (err) {
+    console.error('Error in deleteOrderFromDB:', err);
   }
 };
 
@@ -290,12 +299,34 @@ export const useOrderStore = create<OrderState>()(
 
       voidOrder: (orderId, _reason) => {
         // Remove from state immediately so it's never persisted in a stale 'void' state.
-        // (matching what updateOrderStatus does for 'void' / 'paid')
         set((state) => ({
           orders: state.orders.filter((o) => o.id !== orderId),
           activeOrder: state.activeOrder?.id === orderId ? null : state.activeOrder,
         }));
-        deleteOrderFromDB(orderId);
+        // Update to void and delete from DB
+        supabase.from('orders').update({ status: 'void', updated_at: new Date().toISOString() }).eq('id', orderId).then(() => {
+          deleteOrderFromDB(orderId);
+        });
+      },
+
+      clearAllOrdersForTable: async (tableId, tableNumber) => {
+        const matchingOrders = get().orders.filter(o => {
+          if (o.tableId && tableId) return o.tableId === tableId;
+          if (tableNumber && o.tableNumber) {
+            return String(o.tableNumber).trim().toUpperCase() === String(tableNumber).trim().toUpperCase();
+          }
+          return false;
+        });
+
+        const orderIds = new Set(matchingOrders.map(o => o.id));
+        set(state => ({
+          orders: state.orders.filter(o => !orderIds.has(o.id)),
+          activeOrder: state.activeOrder && orderIds.has(state.activeOrder.id) ? null : state.activeOrder
+        }));
+
+        for (const o of matchingOrders) {
+          await deleteOrderFromDB(o.id);
+        }
       },
 
       getOrdersByTable: (tableId, tableNumber) => {
@@ -359,12 +390,16 @@ export const useOrderStore = create<OrderState>()(
 
           set((state) => {
             const dbIds = new Set(dbOrders.map(o => o.id));
-            // Keep local-only orders (offline-created, not yet in DB)
+            // CRITICAL FIX: ONLY keep orders that were created OFFLINE locally on THIS device
+            // and have never been synced yet (syncStatus === 'local').
+            // Orders that were previously synced (syncStatus === 'synced') but are NOT in dbOrders
+            // were PAID, VOIDED, or DELETED in the database — we MUST discard them and NEVER
+            // resurrect or re-upload them to Supabase!
             const localOnly = state.orders.filter(
-              o => !dbIds.has(o.id) && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
+              o => !dbIds.has(o.id) && o.syncStatus === 'local' && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
             );
 
-            // Retry syncing any local-only orders to DB now that we're online
+            // Retry syncing genuinely offline-created orders to DB now that we're online
             localOnly.forEach(o => syncOrderToDB(o));
 
             // DB is authoritative for items/status — merge with local fields not stored in DB
@@ -479,12 +514,10 @@ export const useOrderStore = create<OrderState>()(
     }),
     {
       name: 'railway-coach-orders', // localStorage key
-      // v2: voidOrder now removes from state immediately — bumping version clears stale
-      //     void/paid orders that were persisted by the old bug on ALL devices automatically.
-      version: 2,
+      // v3: wipe old zombie orders from localStorage on all devices automatically
+      version: 3,
       migrate: (_persistedState, fromVersion) => {
-        // Any device on version < 2 gets a clean slate — Supabase is the source of truth.
-        console.log(`[orderStore] Migrating localStorage from v${fromVersion} → v2, clearing stale data.`);
+        console.log(`[orderStore] Migrating localStorage from v${fromVersion} → v3, purging stale zombie orders.`);
         return { orders: [], activeOrder: null, ordersLoaded: false };
       },
       // Only persist active orders and activeOrder — NOT ordersLoaded (always starts false)

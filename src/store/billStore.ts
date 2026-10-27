@@ -101,8 +101,7 @@ export const useBillStore = create<BillState>()(
 
         const createdIso = (bill.createdAt instanceof Date ? bill.createdAt : new Date(bill.createdAt || Date.now())).toISOString();
 
-        // Push to Supabase in the BACKGROUND — don't await, don't block the UI
-        supabase.from('bills').upsert({
+        const billPayload: any = {
           id: bill.id,
           invoice_number: bill.invoiceNumber,
           order_id: bill.orderId,
@@ -130,9 +129,23 @@ export const useBillStore = create<BillState>()(
           shift_id: bill.shiftId || null,
           staff_id: bill.staffId || null,
           created_at: createdIso,
-        }, { onConflict: 'id' }).then(({ error }) => {
-          if (error) console.warn('[addBill] Background Supabase sync failed (will retry on next sync):', error.message);
-          else console.log('[addBill] Synced to Supabase ✓', bill.invoiceNumber);
+        };
+
+        supabase.from('bills').upsert(billPayload, { onConflict: 'id' }).then(async ({ error }) => {
+          if (error) {
+            console.warn('[addBill] Background Supabase sync error:', error.message);
+            // Fallback for integer table_number column if DB column has not been converted to TEXT yet
+            if (error.code === '22P02' || error.message?.includes('integer')) {
+              const numOnly = parseInt(String(bill.tableNumber || '').replace(/\D/g, ''), 10);
+              billPayload.table_number = isNaN(numOnly) ? null : numOnly;
+              const { error: retryError } = await supabase.from('bills').upsert(billPayload, { onConflict: 'id' });
+              if (!retryError) {
+                console.log('[addBill] Synced to Supabase with fallback table_number ✓', bill.invoiceNumber);
+              }
+            }
+          } else {
+            console.log('[addBill] Synced to Supabase ✓', bill.invoiceNumber);
+          }
         });
       },
 

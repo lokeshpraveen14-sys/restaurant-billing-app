@@ -48,6 +48,7 @@ export default function OrderTaking() {
   
   const tables = useTableStore(s => s.tables);
   const updateTableStatus = useTableStore(s => s.updateTableStatus);
+  const releaseTable = useTableStore(s => s.releaseTable);
   const currentUser = useAuthStore(s => s.currentUser);
   const ingredients = useInventoryStore(s => s.ingredients);
   const settings = useSettingsStore(s => s.settings);
@@ -112,11 +113,13 @@ export default function OrderTaking() {
       if (order && order.items.filter(i => i.status !== 'void').length === 0) {
         voidOrder(order.id, 'Auto-released: no items added');
         // If this was the only order on the table, reset table to free
-        const remaining = useOrderStore.getState().orders.filter(
-          o => o.tableId === order.tableId && o.id !== order.id && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
-        );
-        if (remaining.length === 0 && order.tableId) {
-          useTableStore.getState().updateTableStatus(order.tableId, 'free');
+        if (order.tableId) {
+          const remaining = useOrderStore.getState().orders.filter(
+            o => o.tableId === order.tableId && o.id !== order.id && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
+          );
+          if (remaining.length === 0) {
+            useTableStore.getState().releaseTable(order.tableId);
+          }
         }
       }
       useOrderStore.getState().setActiveOrder(null);
@@ -256,17 +259,22 @@ export default function OrderTaking() {
         title={table ? `Order — Table ${table.number}` : 'New Order'}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
-            {table && cartItems.length === 0 && (
+            {table && (
               <button 
                 className="btn btn-ghost btn-sm" 
-                style={{ color: 'var(--status-occupied)' }}
-                onClick={() => {
-                  updateTableStatus(table.id, 'free');
+                style={{ color: 'var(--danger, #ef4444)', border: '1px solid var(--danger, #ef4444)' }}
+                onClick={async () => {
+                  if (cartItems.length > 0) {
+                    if (!confirm(`Release Table ${table.number} and cancel this order (${cartItems.length} items)?`)) {
+                      return;
+                    }
+                  }
+                  await releaseTable(table.id);
                   navigate('/tables');
-                  toast.success('Table Released', 'Table marked as free');
+                  toast.success('Table Released', `Table ${table.number} marked as free`);
                 }}
               >
-                Release Table
+                <Trash size={14} /> Release Table
               </button>
             )}
             <div className="tabs" style={{ padding: 3 }}>

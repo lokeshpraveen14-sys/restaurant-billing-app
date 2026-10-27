@@ -186,7 +186,7 @@ export default function Billing() {
     updateOrderStatus(order.id, 'paid');
 
     if (order.tableId && siblingOrders.length === 0) {
-      updateTableStatus(order.tableId, 'free');
+      useTableStore.getState().releaseTable(order.tableId);
     }
     toast.success('Bill Generated', `Invoice ${invoiceNumber} created`);
     } finally {

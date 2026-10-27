@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Table, TableStatus } from '../types';
 import { supabase } from '../lib/supabase';
+import { useOrderStore } from './orderStore';
 
 const INITIAL_TABLES: Table[] = [
   // Main Hall
@@ -16,6 +17,7 @@ interface TableState {
   setSelectedTable: (id: string | null) => void;
   addTable: (table: Omit<Table, 'id' | 'status'>) => Promise<void>;
   deleteTable: (tableId: string) => Promise<void>;
+  releaseTable: (tableId: string) => Promise<void>;
   getTablesBySection: () => Record<string, Table[]>;
   initTableSync: () => void;
 }
@@ -134,6 +136,37 @@ export const useTableStore = create<TableState>()(
         }
       },
 
+      releaseTable: async (tableId: string) => {
+        // 1. Mark table as free in local state immediately
+        set((state) => ({
+          tables: state.tables.map((t) =>
+            t.id === tableId
+              ? { ...t, status: 'free' as TableStatus, occupiedSince: undefined, currentOrderId: undefined, reservedFor: undefined }
+              : t
+          ),
+        }));
+
+        // 2. Clear all active orders associated with this table
+        const table = get().tables.find(t => t.id === tableId);
+        try {
+          await useOrderStore.getState().clearAllOrdersForTable(tableId, table?.number);
+        } catch (err) {
+          console.error('Failed to clear orders for table:', err);
+        }
+
+        // 3. Update Supabase restaurant_tables row
+        try {
+          await supabase.from('restaurant_tables').update({
+            status: 'free',
+            reserved_for: null,
+            occupied_since: null,
+            updated_at: new Date().toISOString()
+          }).eq('id', tableId);
+        } catch (err) {
+          console.error('Failed to update table status to free in DB:', err);
+        }
+      },
+
       getTablesBySection: () => {
         const tables = get().tables;
         return tables.reduce<Record<string, Table[]>>((acc, table) => {
@@ -235,11 +268,9 @@ export const useTableStore = create<TableState>()(
     }),
     {
       name: 'railway-coach-tables',
-      // v2: clearing stale table status data (phantom 'occupied') on all devices automatically.
-      //     Supabase initTableSync() re-fetches authoritative state on every load.
-      version: 2,
+      version: 3,
       migrate: (_persistedState, fromVersion) => {
-        console.log(`[tableStore] Migrating localStorage from v${fromVersion} → v2, clearing stale data.`);
+        console.log(`[tableStore] Migrating localStorage from v${fromVersion} → v3, clearing stale data.`);
         return { tables: [], selectedTableId: null };
       },
     }
