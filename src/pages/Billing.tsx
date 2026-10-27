@@ -177,12 +177,16 @@ export default function Billing() {
     const upiPaid = paymentMode === 'upi' ? totalAmount : 0;
     const cardPaid = paymentMode === 'card' ? totalAmount : 0;
     addBillToShift(cashPaid, upiPaid, cardPaid, totalAmount, order.guestCount || 0, currentUser?.id, activeShift?.id);
+
+    // Capture sibling orders BEFORE updateOrderStatus removes this order from state
+    const siblingOrders = order.tableId
+      ? useOrderStore.getState().getOrdersByTable(order.tableId, order.tableNumber).filter(o => o.id !== order.id)
+      : [];
+
     updateOrderStatus(order.id, 'paid');
-    if (order.tableId) {
-      const otherActiveOrders = useOrderStore.getState().getOrdersByTable(order.tableId, order.tableNumber).filter(o => o.id !== order.id);
-      if (otherActiveOrders.length === 0) {
-        updateTableStatus(order.tableId, 'free');
-      }
+
+    if (order.tableId && siblingOrders.length === 0) {
+      updateTableStatus(order.tableId, 'free');
     }
     toast.success('Bill Generated', `Invoice ${invoiceNumber} created`);
     } finally {

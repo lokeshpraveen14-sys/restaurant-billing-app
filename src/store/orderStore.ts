@@ -299,12 +299,21 @@ export const useOrderStore = create<OrderState>()(
       },
 
       getOrdersByTable: (tableId, tableNumber) => {
-        return get().orders.filter(
-          (o) => (
-            (tableId && o.tableId === tableId) ||
-            (tableNumber && o.tableNumber && String(o.tableNumber).trim().toUpperCase() === String(tableNumber).trim().toUpperCase())
-          ) && ['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)
-        );
+        return get().orders.filter((o) => {
+          if (!['open', 'kot_sent', 'preparing', 'ready'].includes(o.status)) return false;
+
+          // If the order has a tableId, ONLY match by tableId (strict — prevents cross-table ghost orders)
+          if (o.tableId) {
+            return tableId ? o.tableId === tableId : false;
+          }
+
+          // Fallback: order was created without a tableId (legacy / offline) — match by tableNumber only
+          return (
+            tableNumber &&
+            o.tableNumber &&
+            String(o.tableNumber).trim().toUpperCase() === String(tableNumber).trim().toUpperCase()
+          );
+        });
       },
 
       getActiveKitchenOrders: () => {
@@ -320,7 +329,34 @@ export const useOrderStore = create<OrderState>()(
           .limit(3000);
 
         if (!error && data) {
-          const dbOrders = data.map(mapDbOrder);
+          let dbOrders = data.map(mapDbOrder);
+
+          // ── ORPHAN CLEANUP ───────────────────────────────────────────────────────────
+          // Cross-check: if a 'paid' bill already exists for an 'open' order in DB,
+          // that order was paid but never closed (crash/race). Delete it from DB now
+          // so it never re-appears as an occupied table.
+          if (dbOrders.length > 0) {
+            const orderIds = dbOrders.map(o => o.id);
+            const { data: billRows } = await supabase
+              .from('bills')
+              .select('order_id')
+              .in('order_id', orderIds)
+              .not('status', 'eq', 'void');
+
+            if (billRows && billRows.length > 0) {
+              const billedOrderIds = new Set(billRows.map((b: any) => b.order_id));
+              const orphans = dbOrders.filter(o => billedOrderIds.has(o.id));
+              if (orphans.length > 0) {
+                console.warn(`[fetchActiveOrders] Purging ${orphans.length} orphan open order(s) that already have bills:`, orphans.map(o => o.id));
+                // Delete each orphan from DB (fire-and-forget)
+                orphans.forEach(o => deleteOrderFromDB(o.id));
+                // Remove from the list we're about to set into state
+                dbOrders = dbOrders.filter(o => !billedOrderIds.has(o.id));
+              }
+            }
+          }
+          // ────────────────────────────────────────────────────────────────────────────
+
           set((state) => {
             const dbIds = new Set(dbOrders.map(o => o.id));
             // Keep local-only orders (offline-created, not yet in DB)
