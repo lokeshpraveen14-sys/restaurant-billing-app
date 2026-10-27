@@ -41,22 +41,25 @@ CREATE POLICY "public_all_orders" ON public.orders FOR ALL USING (true) WITH CHE
 UPDATE public.shifts s
 SET 
   total_cash = COALESCE((
-    SELECT SUM(p->>'amount')::NUMERIC 
-    FROM public.bills b, jsonb_array_elements(b.payments) p 
+    SELECT SUM( (p->>'amount')::NUMERIC )
+    FROM public.bills b,
+         jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(b.payments::jsonb, '[]'::jsonb)) = 'array' THEN b.payments::jsonb ELSE '[]'::jsonb END) p 
     WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
       AND (b.status = 'paid' OR b.status IS NULL)
       AND p->>'mode' = 'cash'
   ), 0),
   total_upi = COALESCE((
-    SELECT SUM(p->>'amount')::NUMERIC 
-    FROM public.bills b, jsonb_array_elements(b.payments) p 
+    SELECT SUM( (p->>'amount')::NUMERIC )
+    FROM public.bills b,
+         jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(b.payments::jsonb, '[]'::jsonb)) = 'array' THEN b.payments::jsonb ELSE '[]'::jsonb END) p 
     WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
       AND (b.status = 'paid' OR b.status IS NULL)
       AND p->>'mode' = 'upi'
   ), 0),
   total_card = COALESCE((
-    SELECT SUM(p->>'amount')::NUMERIC 
-    FROM public.bills b, jsonb_array_elements(b.payments) p 
+    SELECT SUM( (p->>'amount')::NUMERIC )
+    FROM public.bills b,
+         jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(b.payments::jsonb, '[]'::jsonb)) = 'array' THEN b.payments::jsonb ELSE '[]'::jsonb END) p 
     WHERE (b.shift_id = s.id OR (b.staff_id = s.staff_id AND b.created_at >= s.opened_at AND (s.closed_at IS NULL OR b.created_at <= s.closed_at)))
       AND (b.status = 'paid' OR b.status IS NULL)
       AND p->>'mode' = 'card'
