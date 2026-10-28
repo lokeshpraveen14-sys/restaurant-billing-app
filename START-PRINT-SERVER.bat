@@ -3,9 +3,9 @@ title Restaurant Billing - Print Server
 color 0A
 
 echo.
-echo  =============================================
-echo    Restaurant Billing - Print Bridge Server
-echo  =============================================
+echo  ======================================================
+echo    Restaurant Billing - Resilient Thermal Print Server
+echo  ======================================================
 echo.
 
 :: Check if Node.js is installed
@@ -15,7 +15,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo  ERROR: Node.js is not installed!
     echo.
     echo  Please download and install Node.js from:
-    echo  https://nodejs.org  (click the LTS version)
+    echo  https://nodejs.org  (LTS version)
     echo.
     echo  After installing, double-click this file again.
     echo.
@@ -23,18 +23,20 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Navigate to the print-server folder (same folder as this .bat file)
+:: Navigate to the print-server folder
 cd /d "%~dp0print-server"
 
 echo  Starting print server...
 echo  Keep this window open while billing.
 echo.
 
+:run_server
 node server.js
 
-:: If server crashes or exits, pause so the user can read the error
+:: If server exits unexpectedly, wait 3 seconds and restart automatically
 echo.
-echo  ============================================
-echo   Server stopped. Press any key to close.
-echo  ============================================
-pause
+echo  [WARNING] Print server process stopped.
+echo  Auto-restarting in 3 seconds... (Press Ctrl+C to stop)
+timeout /t 3 /nobreak >nul
+echo.
+goto run_server

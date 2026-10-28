@@ -330,7 +330,7 @@ export const useBillStore = create<BillState>()(
       .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false })
-      .limit(2000);
+      .limit(250);
 
     if (!error && data) {
       const dbBills = data.map(mapDbBill);

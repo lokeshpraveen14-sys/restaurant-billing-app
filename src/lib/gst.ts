@@ -247,7 +247,7 @@ export async function getNextInvoiceNumber(
             if (error || !data) throw error;
             return data as string;
           }),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000)),
       ]);
 
       if (rpcResult) {

@@ -252,6 +252,31 @@ export async function printReceipt(
   const escData   = buildEscPos(lines, charWidth);
   const b64       = strToBase64(escData);
 
+  // 1. FAST PATH: Attempt direct local LAN print bridge (http://127.0.0.1:7878)
+  // When running on the cashier PC/laptop, this prints in 15ms directly without touching the cloud/internet
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 800);
+    const localRes = await fetch('http://127.0.0.1:7878/print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        printer_ip: printer.ip,
+        printer_port: printer.port || 9100,
+        receipt_data: b64,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (localRes.ok) {
+      return { success: true };
+    }
+  } catch {
+    // Local bridge not running on this client device (e.g. mobile/tablet) -> seamlessly fall back to Supabase queue
+  }
+
+  // 2. CLOUD QUEUE FALLBACK: Route via Supabase print_jobs for remote mobile/tablet devices
   try {
     const { error } = await supabase.from('print_jobs').insert({
       printer_ip: printer.ip,
