@@ -69,9 +69,13 @@ export default function ShiftManagement() {
     return myActiveShift || null;
   }, [selectedShiftId, activeShifts, myActiveShift, isAdmin]);
 
+  const lastSyncedShiftIdRef = React.useRef<string | null>(null);
+  const isSyncingRef = React.useRef(false);
+
   // Sync bills from cloud for the current shift so cross-device bills (tab to laptop) appear immediately
   const syncShiftBills = React.useCallback(async (showToast = false) => {
-    if (!currentShift) return;
+    if (!currentShift || isSyncingRef.current) return;
+    isSyncingRef.current = true;
     setLoadingShiftBills(true);
     try {
       const fetched = await fetchBillsForShift(
@@ -85,17 +89,21 @@ export default function ShiftManagement() {
       if (showToast) {
         toast.success('Shift Synced', `Loaded ${fetched.length} bills for ${currentShift.staffName}`);
       }
+    } catch (err) {
+      console.error('Error syncing shift bills:', err);
     } finally {
       setLoadingShiftBills(false);
+      isSyncingRef.current = false;
     }
-  }, [currentShift, fetchBillsForShift, recalculateShiftTotals, toast]);
+  }, [currentShift?.id, currentShift?.staffId, currentShift?.openedAt, currentShift?.closedAt, currentShift?.staffName, fetchBillsForShift, recalculateShiftTotals, toast]);
 
-  // Only pull data from cloud when the selected active shift changes
+  // Only pull data from cloud ONCE when currentShift ID changes (initial load or tab switch)
   React.useEffect(() => {
-    if (currentShift) {
+    if (currentShift?.id && currentShift.id !== lastSyncedShiftIdRef.current) {
+      lastSyncedShiftIdRef.current = currentShift.id;
       syncShiftBills(false);
     }
-  }, [currentShift?.id, syncShiftBills]);
+  }, [currentShift?.id]);
 
   // Load bills for past closed shift in detail modal
   React.useEffect(() => {

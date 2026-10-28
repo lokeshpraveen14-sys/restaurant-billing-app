@@ -394,6 +394,17 @@ export const useShiftStore = create<ShiftState>()(
         const totalCovers = paidBills.reduce((s, b) => s + (b.guestCount || 0), 0);
         const totalOrders = paidBills.length;
 
+        // Guard: if totals are already identical, do not trigger state update or DB write
+        const isUnchanged =
+          (target.totalCash || 0) === totalCash &&
+          (target.totalUPI || 0) === totalUPI &&
+          (target.totalCard || 0) === totalCard &&
+          (target.totalRevenue || 0) === totalRevenue &&
+          (target.totalOrders || 0) === totalOrders &&
+          (target.totalCovers || 0) === totalCovers;
+
+        if (isUnchanged) return;
+
         const updatedShift: Shift = {
           ...target,
           totalCash,
