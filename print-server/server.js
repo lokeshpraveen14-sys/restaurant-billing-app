@@ -286,7 +286,7 @@ function startDaemon() {
   console.log('║       Restaurant Billing – Cloud & Local Print Bridge     ║');
   console.log('╠══════════════════════════════════════════════════════════╣');
   console.log('║  Mode 1: Direct Local Bridge (http://localhost:7878)      ║');
-  console.log('║  Mode 2: Cloud Queue (Auto-syncs every 2.5s)             ║');
+  console.log('║  Mode 2: Cloud Queue (Smart Egress Watchdog)             ║');
   console.log('║  Features: Sequential Queues + Auto-Recovery + No Drops  ║');
   console.log('║  Keep this window OPEN while billing.                    ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
