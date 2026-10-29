@@ -71,6 +71,8 @@ export function mapDbBill(b: any): Bill {
     revisedReason: isRevised ? b.revised_reason || revisedReason : undefined,
     revisedShiftId: b.revised_shift_id || b.void_shift_id || undefined,
     guestCount: b.guest_count,
+    customerName: b.customer_name || undefined,
+    customerPhone: b.customer_phone || undefined,
     customerGstin: b.customer_gstin || undefined,
     placeOfSupply: b.place_of_supply || undefined,
     hsnCodes: b.hsn_codes || undefined,
@@ -122,6 +124,8 @@ export const useBillStore = create<BillState>()(
           staff_name: bill.staffName,
           status: newBill.status,
           guest_count: bill.guestCount,
+          customer_name: bill.customerName || null,
+          customer_phone: bill.customerPhone || null,
           customer_gstin: bill.customerGstin || null,
           hsn_codes: bill.hsnCodes || null,
           place_of_supply: bill.placeOfSupply || null,
@@ -248,7 +252,7 @@ export const useBillStore = create<BillState>()(
 
     let query = supabase
       .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at', { count: 'exact' })
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at', { count: 'exact' })
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString());
 
@@ -300,7 +304,7 @@ export const useBillStore = create<BillState>()(
 
     const { data, error } = await supabase
       .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false })
       .limit(2000);
@@ -327,7 +331,7 @@ export const useBillStore = create<BillState>()(
 
     const { data, error } = await supabase
       .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
+      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false })
       .limit(250);
@@ -402,7 +406,7 @@ export const useBillStore = create<BillState>()(
     try {
       let query = supabase
         .from('bills')
-        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at');
+        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at');
 
       if (openedAt) {
         const startIso = (openedAt instanceof Date ? openedAt : new Date(openedAt)).toISOString();

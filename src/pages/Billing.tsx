@@ -43,6 +43,9 @@ export default function Billing() {
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  // Optional customer details — completely optional
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
 
   const handlePrint = async (printerId: string = 'billing', bill?: Bill | null) => {
     if (isPrinting) return;
@@ -58,6 +61,8 @@ export default function Billing() {
       tableNumber:    b.tableNumber,
       orderType:      b.orderType,
       staffName:      b.staffName,
+      customerName:   b.customerName,
+      customerPhone:  b.customerPhone,
       items:          b.items,
       subtotal:       b.subtotal,
       totalGST:       b.totalGST,
@@ -158,6 +163,8 @@ export default function Billing() {
       payments: [{ mode: paymentMode, amount: totalAmount }],
       amountPaid: parseFloat(cashTendered) || totalAmount,
       changeDue: Math.max(0, changeDue),
+      customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
       staffName: currentUser?.name || order.staffName,
       staffId: currentUser?.id,
       shiftId: activeShift?.id,
@@ -410,6 +417,39 @@ export default function Billing() {
                     <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>✓ All prices are inclusive of GST (GSTIN: {settings.gstin})</span>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Customer Info — optional */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">Customer Info <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>(optional)</span></div>
+              </div>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Customer Name</label>
+                  <input
+                    id="customer-name"
+                    className="input"
+                    type="text"
+                    placeholder="e.g. Rahul Kumar"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    maxLength={80}
+                  />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Phone Number</label>
+                  <input
+                    id="customer-phone"
+                    className="input"
+                    type="tel"
+                    placeholder="e.g. 9876543210"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value.replace(/[^\d+\- ]/g, ''))}
+                    maxLength={15}
+                  />
+                </div>
               </div>
             </div>
 

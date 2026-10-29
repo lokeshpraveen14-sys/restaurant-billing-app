@@ -294,6 +294,8 @@ export default function BillHistory() {
       tableNumber: bill.tableNumber,
       orderType: bill.orderType,
       staffName: bill.staffName,
+      customerName: bill.customerName,
+      customerPhone: bill.customerPhone,
       items: bill.items,
       subtotal: bill.subtotal,
       totalGST: bill.totalGST,
@@ -1082,6 +1084,15 @@ export default function BillHistory() {
                   </div>
                 </div>
               </div>
+
+              {/* Customer info if present */}
+              {(selectedBill.customerName || selectedBill.customerPhone) && (
+                <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: '0.85rem', border: '1px solid var(--border)' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>👤 Customer</div>
+                  {selectedBill.customerName && <div style={{ fontWeight: 600 }}>{selectedBill.customerName}</div>}
+                  {selectedBill.customerPhone && <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>📞 {selectedBill.customerPhone}</div>}
+                </div>
+              )}
 
               {/* Void Audit Box */}
               {selectedBill.status === 'void' && (

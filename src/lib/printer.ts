@@ -88,6 +88,8 @@ export interface BillPrintData {
   tableNumber?:   string;
   orderType:      string;
   staffName?:     string;
+  customerName?:  string;
+  customerPhone?: string;
   items:          Array<{ menuItemName: string; quantity: number; totalPrice: number; gstRate?: number }>;
   subtotal:       number;
   totalGST:       number;
@@ -148,6 +150,8 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
       ? { type: 'item', left: 'Table', leftVal: data.tableNumber }
       : { type: 'item', left: 'Type',  leftVal: data.orderType },
     ...(data.staffName ? [{ type: 'item' as const, left: 'Waiter', leftVal: data.staffName }] : []),
+    ...(data.customerName  ? [{ type: 'item' as const, left: 'Customer', leftVal: data.customerName }] : []),
+    ...(data.customerPhone ? [{ type: 'item' as const, left: 'Phone',   leftVal: data.customerPhone }] : []),
     { type: 'divider' },
     { type: 'item', bold: true, left: 'Item', leftVal: 'Amount' },
     ...(data.totalGST > 0 ? [{ type: 'text' as const, center: true, text: '* Prices are inclusive of GST *' }] : []),
