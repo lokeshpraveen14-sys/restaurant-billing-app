@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { useTableStore } from '../store/tableStore';
@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import { useToast } from '../store/uiStore';
 import { calculateGSTBreakdown, gstRoundOff, getNextInvoiceNumber, generateInvoiceNumber, formatAmount, calculateServiceCharge, calculateDiscount, determineIsInterState, sumCGST, sumSGST, sumIGST } from '../lib/gst';
 import { Bill, Payment, PaymentMode, DiscountType } from '../types';
-import { Printer, FilePdf, CurrencyInr, Receipt } from '@phosphor-icons/react';
+import { Printer, FilePdf, CurrencyInr, Receipt, UserCircle, CheckCircle } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useReactToPrint } from 'react-to-print';
 import { QRCodeSVG } from 'qrcode.react';
@@ -26,6 +26,7 @@ export default function Billing() {
   const settings = useSettingsStore(s => s.settings);
   const incrementInvoiceCounter = useSettingsStore(s => s.incrementInvoiceCounter);
   const addBill = useBillStore(s => s.addBill);
+  const localBills = useBillStore(s => s.bills);
   const addBillToShift = useShiftStore(s => s.addBillToShift);
   const getActiveShiftForStaff = useShiftStore(s => s.getActiveShiftForStaff);
   const currentUser = useAuthStore(s => s.currentUser);
@@ -46,6 +47,34 @@ export default function Billing() {
   // Optional customer details — completely optional
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [phoneAutoFilled, setPhoneAutoFilled] = useState(false);
+
+  // Build phone → customer name lookup from previously stored bills (in-memory, zero cost)
+  const phoneToName = useMemo(() => {
+    const map = new Map<string, string>();
+    localBills
+      .filter(b => b.customerPhone && b.customerName && b.status !== 'void')
+      .forEach(b => {
+        const phone = b.customerPhone!.replace(/\s/g, '');
+        if (!map.has(phone)) map.set(phone, b.customerName!);
+      });
+    return map;
+  }, [localBills]);
+
+  // When phone changes, look up existing customer
+  const handlePhoneChange = (raw: string) => {
+    const cleaned = raw.replace(/[^\d+\- ]/g, '');
+    setCustomerPhone(cleaned);
+    setPhoneAutoFilled(false);
+    const digits = cleaned.replace(/\D/g, '');
+    if (digits.length >= 7) {
+      const found = phoneToName.get(digits) || phoneToName.get(cleaned.replace(/\s/g, ''));
+      if (found && !customerName) {
+        setCustomerName(found);
+        setPhoneAutoFilled(true);
+      }
+    }
+  };
 
   const handlePrint = async (printerId: string = 'billing', bill?: Bill | null) => {
     if (isPrinting) return;
@@ -423,21 +452,14 @@ export default function Billing() {
             {/* Customer Info — optional */}
             <div className="card">
               <div className="card-header">
-                <div className="card-title">Customer Info <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>(optional)</span></div>
+                <div className="card-title">
+                  <UserCircle size={17} style={{ display: 'inline', marginRight: 6 }} />
+                  Customer Info <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>(optional)</span>
+                </div>
               </div>
               <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label className="input-label">Customer Name</label>
-                  <input
-                    id="customer-name"
-                    className="input"
-                    type="text"
-                    placeholder="e.g. Rahul Kumar"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    maxLength={80}
-                  />
-                </div>
+
+                {/* Phone FIRST — this is the lookup key */}
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label className="input-label">Phone Number</label>
                   <input
@@ -446,10 +468,41 @@ export default function Billing() {
                     type="tel"
                     placeholder="e.g. 9876543210"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value.replace(/[^\d+\- ]/g, ''))}
+                    onChange={(e) => handlePhoneChange(e.target.value)}
                     maxLength={15}
                   />
+                  {/* Returning customer suggestion */}
+                  {phoneAutoFilled && customerName && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6, marginTop: 6,
+                      padding: '6px 10px', background: 'rgba(34,197,94,0.08)',
+                      border: '1px solid rgba(34,197,94,0.25)', borderRadius: 'var(--radius-sm)',
+                      fontSize: '0.8rem', color: 'var(--status-free)',
+                    }}>
+                      <CheckCircle size={15} weight="fill" />
+                      <span>Returning customer — <strong>{customerName}</strong> auto-filled</span>
+                      <button
+                        style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                        onClick={() => { setCustomerName(''); setPhoneAutoFilled(false); }}
+                      >✕ Clear</button>
+                    </div>
+                  )}
                 </div>
+
+                {/* Name SECOND — pre-filled for returning customers */}
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Customer Name</label>
+                  <input
+                    id="customer-name"
+                    className="input"
+                    type="text"
+                    placeholder="e.g. Rahul Kumar"
+                    value={customerName}
+                    onChange={(e) => { setCustomerName(e.target.value); setPhoneAutoFilled(false); }}
+                    maxLength={80}
+                  />
+                </div>
+
               </div>
             </div>
 
