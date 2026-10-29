@@ -55,20 +55,21 @@ export default function Billing() {
     localBills
       .filter(b => b.customerPhone && b.customerName && b.status !== 'void')
       .forEach(b => {
-        const phone = b.customerPhone!.replace(/\s/g, '');
-        if (!map.has(phone)) map.set(phone, b.customerName!);
+        const phone = b.customerPhone!.replace(/\D/g, '').slice(-10);
+        if (phone && !map.has(phone)) map.set(phone, b.customerName!);
       });
     return map;
   }, [localBills]);
 
-  // When phone changes, look up existing customer
+  // When phone changes, strictly enforce 10 numeric digits to stop accidental typing
   const handlePhoneChange = (raw: string) => {
-    const cleaned = raw.replace(/[^\d+\- ]/g, '');
-    setCustomerPhone(cleaned);
+    // Only allow digits 0-9 and strictly cap at 10 digits
+    const digitsOnly = raw.replace(/\D/g, '').slice(0, 10);
+    setCustomerPhone(digitsOnly);
     setPhoneAutoFilled(false);
-    const digits = cleaned.replace(/\D/g, '');
-    if (digits.length >= 7) {
-      const found = phoneToName.get(digits) || phoneToName.get(cleaned.replace(/\s/g, ''));
+
+    if (digitsOnly.length >= 7) {
+      const found = phoneToName.get(digitsOnly);
       if (found && !customerName) {
         setCustomerName(found);
         setPhoneAutoFilled(true);
@@ -461,15 +462,28 @@ export default function Billing() {
 
                 {/* Phone FIRST — this is the lookup key */}
                 <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label className="input-label">Phone Number</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label className="input-label" style={{ margin: 0 }}>Phone Number</label>
+                    {customerPhone.length > 0 && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        color: customerPhone.length === 10 ? 'var(--status-free)' : 'var(--text-muted)'
+                      }}>
+                        {customerPhone.length}/10 digits {customerPhone.length === 10 && '✓'}
+                      </span>
+                    )}
+                  </div>
                   <input
                     id="customer-phone"
                     className="input"
                     type="tel"
-                    placeholder="e.g. 9876543210"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="10-digit mobile (e.g. 9876543210)"
                     value={customerPhone}
                     onChange={(e) => handlePhoneChange(e.target.value)}
-                    maxLength={15}
+                    maxLength={10}
                   />
                   {/* Returning customer suggestion */}
                   {phoneAutoFilled && customerName && (
