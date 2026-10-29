@@ -6,6 +6,17 @@ import { useSettingsStore } from './settingsStore';
 import { useAccountingStore } from './accountingStore';
 import { useShiftStore } from './shiftStore';
 
+export interface CustomerBillSummary {
+  id: string;
+  invoiceNumber: string;
+  customerName?: string;
+  customerPhone?: string;
+  totalAmount: number;
+  tableNumber?: string;
+  payments?: { mode: string; amount: number }[];
+  createdAt: Date;
+}
+
 interface BillState {
   bills: Bill[];
   addBill: (bill: Bill) => Promise<void>;
@@ -23,6 +34,7 @@ interface BillState {
     endDate: Date,
     staffFilter?: { staffId?: string; staffName?: string }
   ) => Promise<Bill[]>;
+  fetchCustomerBills: (startDate?: Date, endDate?: Date) => Promise<CustomerBillSummary[]>;
   initBillSync: () => void;
   refreshTodayBills: () => Promise<void>;
   fetchBillsForShift: (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date) => Promise<Bill[]>;
@@ -295,6 +307,41 @@ export const useBillStore = create<BillState>()(
       page++;
     }
     return allBills;
+  },
+
+  fetchCustomerBills: async (startDate?: Date, endDate?: Date) => {
+    try {
+      // Lean projection: Only download 8 essential columns, strictly omitting `items` JSON
+      let query = supabase
+        .from('bills')
+        .select('id,invoice_number,customer_name,customer_phone,total_amount,table_number,payments,created_at')
+        .neq('status', 'void')
+        .or('customer_phone.not.is.null,customer_name.not.is.null')
+        .order('created_at', { ascending: false });
+
+      if (startDate) query = query.gte('created_at', startDate.toISOString());
+      if (endDate) query = query.lte('created_at', endDate.toISOString());
+
+      const { data, error } = await query.limit(5000);
+      if (error || !data) {
+        console.warn('[fetchCustomerBills] Remote query failed or columns not found (using local bills):', error?.message);
+        return [];
+      }
+
+      return data.map((b: any) => ({
+        id: b.id,
+        invoiceNumber: b.invoice_number,
+        customerName: b.customer_name || undefined,
+        customerPhone: b.customer_phone || undefined,
+        totalAmount: Number(b.total_amount || 0),
+        tableNumber: b.table_number || undefined,
+        payments: b.payments as any,
+        createdAt: new Date(b.created_at),
+      }));
+    } catch (err) {
+      console.warn('[fetchCustomerBills] Error querying customer bills:', err);
+      return [];
+    }
   },
 
   refreshTodayBills: async () => {
