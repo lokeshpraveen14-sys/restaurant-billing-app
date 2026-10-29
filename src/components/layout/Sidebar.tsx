@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   SquaresFour, Table, ClipboardText, Receipt, Package,
   ChartBar, Gear, Users, ForkKnife, Storefront, CaretDoubleLeft,
-  CaretDoubleRight, SignOut, Drop, Timer, ChartLine, Bank, FileText
+  CaretDoubleRight, SignOut, Drop, Timer, ChartLine, Bank, FileText, UserCircle
 } from '@phosphor-icons/react';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
@@ -52,6 +52,7 @@ const NAV_GROUPS = [
     label: 'Admin',
     items: [
       { label: 'Staff', path: '/staff', icon: <Users size={20} />, module: 'admin' },
+      { label: 'Customers', path: '/customers', icon: <UserCircle size={20} />, module: 'admin' },
       { label: 'Accounting', path: '/accounting', icon: <Bank size={20} />, module: 'admin' },
       { label: 'Settings', path: '/settings', icon: <Gear size={20} />, module: 'admin' },
     ] as NavItem[],

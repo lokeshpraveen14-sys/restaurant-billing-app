@@ -33,6 +33,7 @@ const ShiftManagement = lazy(() => import('./pages/ShiftManagement'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const HeadCount = lazy(() => import('./pages/HeadCount'));
 const Accounting = lazy(() => import('./pages/Accounting'));
+const Customers = lazy(() => import('./pages/Customers'));
 
 function PageSkeleton() {
   return (
@@ -168,6 +169,7 @@ export default function App() {
                   <Route path="/staff" element={<RequirePermission module="admin"><StaffManagement /></RequirePermission>} />
                   <Route path="/accounting" element={<RequirePermission module="admin"><Accounting /></RequirePermission>} />
                   <Route path="/headcount" element={<RequirePermission module="admin"><HeadCount /></RequirePermission>} />
+                  <Route path="/customers" element={<RequirePermission module="admin"><Customers /></RequirePermission>} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </ProtectedLayout>
