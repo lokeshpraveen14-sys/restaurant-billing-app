@@ -304,7 +304,8 @@ export default function BillHistory() {
       discountAmount: bill.discountAmount,
       roundOff: bill.roundOff,
       totalAmount: bill.totalAmount,
-      paymentMode: bill.payments?.[0]?.mode || 'cash',
+      paymentMode: bill.payments && bill.payments.length > 1 ? 'split' : (bill.payments?.[0]?.mode || 'cash'),
+      payments: bill.payments,
       amountPaid: bill.amountPaid,
       changeDue: bill.changeDue,
     });
@@ -865,7 +866,18 @@ export default function BillHistory() {
                               Revised
                             </span>
                           ) : (
-                            <span className="badge badge-success">Paid</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                              <span className="badge badge-success">Paid</span>
+                              {bill.payments && bill.payments.length > 1 ? (
+                                <span style={{ fontSize: '0.68rem', color: 'var(--accent)', fontWeight: 700 }}>
+                                  Split ({bill.payments.map((p) => p.mode.toUpperCase()).join('+')})
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                                  {bill.payments?.[0]?.mode || 'cash'}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </>
@@ -1271,6 +1283,41 @@ export default function BillHistory() {
                 >
                   <span>Total</span>
                   <span>{formatAmount(selectedBill.totalAmount)}</span>
+                </div>
+
+                {/* Payment Breakdown */}
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: '8px 12px',
+                    background: 'var(--bg)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border)',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                    Payment Summary
+                  </div>
+                  {selectedBill.payments && selectedBill.payments.length > 1 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent)', fontWeight: 600 }}>
+                        <span>⚡ Split Payment</span>
+                        <span>{selectedBill.payments.length} tenders</span>
+                      </div>
+                      {selectedBill.payments.map((p, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                          <span style={{ textTransform: 'capitalize' }}>{p.mode}</span>
+                          <span style={{ fontWeight: 600 }}>{formatAmount(p.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                      <span style={{ textTransform: 'capitalize' }}>{selectedBill.payments?.[0]?.mode || 'cash'}</span>
+                      <span style={{ fontWeight: 600 }}>{formatAmount(selectedBill.totalAmount)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

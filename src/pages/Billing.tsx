@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import { useToast } from '../store/uiStore';
 import { calculateGSTBreakdown, gstRoundOff, getNextInvoiceNumber, generateInvoiceNumber, formatAmount, calculateServiceCharge, calculateDiscount, determineIsInterState, sumCGST, sumSGST, sumIGST } from '../lib/gst';
 import { Bill, Payment, PaymentMode, DiscountType } from '../types';
-import { Printer, FilePdf, CurrencyInr, Receipt, UserCircle, CheckCircle } from '@phosphor-icons/react';
+import { Printer, FilePdf, CurrencyInr, Receipt, UserCircle, CheckCircle, CreditCard, QrCode } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useReactToPrint } from 'react-to-print';
 import { QRCodeSVG } from 'qrcode.react';
@@ -41,6 +41,11 @@ export default function Billing() {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [cashTendered, setCashTendered] = useState('');
   const [upiRef, setUpiRef] = useState('');
+  // Split payment state
+  const [splitCash, setSplitCash] = useState('');
+  const [splitUpi, setSplitUpi] = useState('');
+  const [splitCard, setSplitCard] = useState('');
+  const [splitCashTendered, setSplitCashTendered] = useState('');
   const [billGenerated, setBillGenerated] = useState<Bill | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -101,7 +106,8 @@ export default function Billing() {
       discountAmount: b.discountAmount,
       roundOff:       b.roundOff,
       totalAmount:    b.totalAmount,
-      paymentMode:    b.payments?.[0]?.mode || 'cash',
+      paymentMode:    b.payments && b.payments.length > 1 ? 'split' : (b.payments?.[0]?.mode || 'cash'),
+      payments:       b.payments,
       amountPaid:     b.amountPaid,
       changeDue:      b.changeDue,
       gstBreakdown:   b.gstBreakdown,
@@ -131,7 +137,73 @@ export default function Billing() {
   // Final total (prices are already GST-inclusive, so totalGST is just the tax component of taxableBase)
   const { rounded, roundOff } = gstRoundOff(taxableBase);
   const totalAmount = rounded;
-  const changeDue = paymentMode === 'cash' && cashTendered ? parseFloat(cashTendered) - totalAmount : 0;
+
+  const numSplitCash = parseFloat(splitCash) || 0;
+  const numSplitUpi = parseFloat(splitUpi) || 0;
+  const numSplitCard = parseFloat(splitCard) || 0;
+
+  const isSplitMode = paymentMode === 'split_cash_upi' || paymentMode === 'split_card_upi';
+  const currentSplitAllocated = paymentMode === 'split_cash_upi'
+    ? numSplitCash + numSplitUpi
+    : paymentMode === 'split_card_upi'
+    ? numSplitCard + numSplitUpi
+    : totalAmount;
+
+  const splitDifference = Math.round((totalAmount - currentSplitAllocated) * 100) / 100;
+  const isSplitBalanced = !isSplitMode || (Math.abs(splitDifference) < 0.01 && (
+    paymentMode === 'split_cash_upi' ? (numSplitCash > 0 && numSplitUpi > 0) : (numSplitCard > 0 && numSplitUpi > 0)
+  ));
+
+  const changeDue = paymentMode === 'cash'
+    ? (cashTendered ? parseFloat(cashTendered) - totalAmount : 0)
+    : paymentMode === 'split_cash_upi'
+    ? (splitCashTendered ? parseFloat(splitCashTendered) - numSplitCash : 0)
+    : 0;
+
+  // Split auto-balancing handlers
+  const handleSplitCashChange = (val: string) => {
+    setSplitCash(val);
+    const c = parseFloat(val);
+    if (!isNaN(c) && c >= 0 && c <= totalAmount) {
+      const remaining = Math.max(0, Math.round((totalAmount - c) * 100) / 100);
+      setSplitUpi(remaining > 0 ? remaining.toString() : '0');
+    }
+  };
+
+  const handleSplitUpiChange = (val: string) => {
+    setSplitUpi(val);
+    const u = parseFloat(val);
+    if (!isNaN(u) && u >= 0 && u <= totalAmount) {
+      if (paymentMode === 'split_cash_upi') {
+        const remaining = Math.max(0, Math.round((totalAmount - u) * 100) / 100);
+        setSplitCash(remaining > 0 ? remaining.toString() : '0');
+      } else if (paymentMode === 'split_card_upi') {
+        const remaining = Math.max(0, Math.round((totalAmount - u) * 100) / 100);
+        setSplitCard(remaining > 0 ? remaining.toString() : '0');
+      }
+    }
+  };
+
+  const handleSplitCardChange = (val: string) => {
+    setSplitCard(val);
+    const cd = parseFloat(val);
+    if (!isNaN(cd) && cd >= 0 && cd <= totalAmount) {
+      const remaining = Math.max(0, Math.round((totalAmount - cd) * 100) / 100);
+      setSplitUpi(remaining > 0 ? remaining.toString() : '0');
+    }
+  };
+
+  const setEvenSplit = () => {
+    const half = Math.round((totalAmount / 2) * 100) / 100;
+    const remaining = Math.round((totalAmount - half) * 100) / 100;
+    if (paymentMode === 'split_cash_upi') {
+      setSplitCash(half.toString());
+      setSplitUpi(remaining.toString());
+    } else if (paymentMode === 'split_card_upi') {
+      setSplitCard(half.toString());
+      setSplitUpi(remaining.toString());
+    }
+  };
 
   const handleGenerateBill = async () => {
     if (!order) return;
@@ -190,8 +262,29 @@ export default function Billing() {
       roundOff,
       totalAmount,
       parcelCharge: applyParcelCharge ? settings.parcelCharge : 0,
-      payments: [{ mode: paymentMode, amount: totalAmount }],
-      amountPaid: parseFloat(cashTendered) || totalAmount,
+      payments: (() => {
+        if (paymentMode === 'cash') return [{ mode: 'cash' as const, amount: totalAmount }];
+        if (paymentMode === 'upi') return [{ mode: 'upi' as const, amount: totalAmount, reference: upiRef || undefined }];
+        if (paymentMode === 'card') return [{ mode: 'card' as const, amount: totalAmount }];
+        if (paymentMode === 'split_cash_upi') {
+          return [
+            { mode: 'cash' as const, amount: numSplitCash },
+            { mode: 'upi' as const, amount: numSplitUpi, reference: upiRef || undefined },
+          ];
+        }
+        if (paymentMode === 'split_card_upi') {
+          return [
+            { mode: 'card' as const, amount: numSplitCard },
+            { mode: 'upi' as const, amount: numSplitUpi, reference: upiRef || undefined },
+          ];
+        }
+        return [{ mode: 'cash' as const, amount: totalAmount }];
+      })(),
+      amountPaid: paymentMode === 'cash' && cashTendered
+        ? (parseFloat(cashTendered) || totalAmount)
+        : paymentMode === 'split_cash_upi' && splitCashTendered
+        ? (parseFloat(splitCashTendered) || numSplitCash) + numSplitUpi
+        : totalAmount,
       changeDue: Math.max(0, changeDue),
       customerName: customerName.trim() || undefined,
       customerPhone: customerPhone.trim() || undefined,
@@ -209,10 +302,23 @@ export default function Billing() {
 
     setBillGenerated(bill);
     addBill(bill);
-    // Track this bill in the active shift of this cashier
-    const cashPaid = paymentMode === 'cash' ? totalAmount : 0;
-    const upiPaid = paymentMode === 'upi' ? totalAmount : 0;
-    const cardPaid = paymentMode === 'card' ? totalAmount : 0;
+
+    // Track this bill in the active shift of this cashier with exact split breakdown
+    let cashPaid = 0;
+    let upiPaid = 0;
+    let cardPaid = 0;
+
+    if (paymentMode === 'cash') cashPaid = totalAmount;
+    else if (paymentMode === 'upi') upiPaid = totalAmount;
+    else if (paymentMode === 'card') cardPaid = totalAmount;
+    else if (paymentMode === 'split_cash_upi') {
+      cashPaid = numSplitCash;
+      upiPaid = numSplitUpi;
+    } else if (paymentMode === 'split_card_upi') {
+      cardPaid = numSplitCard;
+      upiPaid = numSplitUpi;
+    }
+
     addBillToShift(cashPaid, upiPaid, cardPaid, totalAmount, order.guestCount || 0, currentUser?.id, activeShift?.id);
 
     // Capture sibling orders BEFORE updateOrderStatus removes this order from state
@@ -233,7 +339,13 @@ export default function Billing() {
 
 
 
-  const upiQRValue = `upi://pay?pa=${settings.upiId}&pn=${encodeURIComponent(settings.restaurantName)}&am=${totalAmount}&cu=INR`;
+  const upiAmountForQR = paymentMode === 'upi'
+    ? totalAmount
+    : isSplitMode
+    ? numSplitUpi
+    : 0;
+
+  const upiQRValue = `upi://pay?pa=${settings.upiId}&pn=${encodeURIComponent(settings.restaurantName)}&am=${upiAmountForQR > 0 ? upiAmountForQR.toFixed(2) : totalAmount.toFixed(2)}&cu=INR`;
 
   return (
     <>
@@ -522,24 +634,100 @@ export default function Billing() {
 
             {/* Payment Mode */}
             <div className="card">
-              <div className="card-header"><div className="card-title">Payment Mode</div></div>
+              <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="card-title">Payment Mode</div>
+                <span className="badge badge-muted" style={{ fontSize: '0.72rem' }}>
+                  {paymentMode === 'split_cash_upi' ? 'Split: Cash + UPI' : paymentMode === 'split_card_upi' ? 'Split: Card + UPI' : paymentMode.toUpperCase()}
+                </span>
+              </div>
 
               <div className="card-body">
-                <div className="payment-mode-grid">
-                  {(['cash', 'upi', 'card'] as PaymentMode[]).map((mode) => (
+                {/* Single Payment Tender */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                    Single Payment
+                  </div>
+                  <div className="payment-mode-grid">
                     <button
-                      key={mode}
-                      className={`payment-mode-btn ${paymentMode === mode ? 'active' : ''}`}
-                      onClick={() => setPaymentMode(mode)}
+                      type="button"
+                      className={`payment-mode-btn ${paymentMode === 'cash' ? 'active' : ''}`}
+                      onClick={() => setPaymentMode('cash')}
                     >
                       <CurrencyInr size={22} />
-                      <span style={{ textTransform: 'capitalize' }}>{mode}</span>
+                      <span>Cash</span>
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      className={`payment-mode-btn ${paymentMode === 'upi' ? 'active' : ''}`}
+                      onClick={() => setPaymentMode('upi')}
+                    >
+                      <QrCode size={22} />
+                      <span>UPI</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`payment-mode-btn ${paymentMode === 'card' ? 'active' : ''}`}
+                      onClick={() => setPaymentMode('card')}
+                    >
+                      <CreditCard size={22} />
+                      <span>Card</span>
+                    </button>
+                  </div>
                 </div>
 
+                {/* Split Payment Tender (Cash + UPI and Card + UPI) */}
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                    Split Payment (Multi-Tender)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)' }}>
+                    <button
+                      type="button"
+                      className={`payment-mode-btn ${paymentMode === 'split_cash_upi' ? 'active' : ''}`}
+                      onClick={() => {
+                        setPaymentMode('split_cash_upi');
+                        if (!splitCash && !splitUpi) {
+                          const half = Math.round((totalAmount / 2) * 100) / 100;
+                          setSplitCash(half.toString());
+                          setSplitUpi((Math.round((totalAmount - half) * 100) / 100).toString());
+                        }
+                      }}
+                      style={{ padding: '10px 12px' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <CurrencyInr size={18} />
+                        <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>+</span>
+                        <QrCode size={18} />
+                      </div>
+                      <span style={{ fontWeight: 700 }}>Cash + UPI</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`payment-mode-btn ${paymentMode === 'split_card_upi' ? 'active' : ''}`}
+                      onClick={() => {
+                        setPaymentMode('split_card_upi');
+                        if (!splitCard && !splitUpi) {
+                          const half = Math.round((totalAmount / 2) * 100) / 100;
+                          setSplitCard(half.toString());
+                          setSplitUpi((Math.round((totalAmount - half) * 100) / 100).toString());
+                        }
+                      }}
+                      style={{ padding: '10px 12px' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <CreditCard size={18} />
+                        <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>+</span>
+                        <QrCode size={18} />
+                      </div>
+                      <span style={{ fontWeight: 700 }}>Card + UPI</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── Single Cash Tender ── */}
                 {paymentMode === 'cash' && (
-                  <div className="input-group" style={{ marginTop: 16 }}>
+                  <div className="input-group" style={{ marginTop: 14 }}>
                     <label className="input-label">Cash Tendered (₹)</label>
                     <input
                       className="input"
@@ -559,8 +747,9 @@ export default function Billing() {
                   </div>
                 )}
 
+                {/* ── Single UPI ── */}
                 {paymentMode === 'upi' && settings.upiId && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 16 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 14 }}>
                     <div style={{ background: 'white', padding: 12, borderRadius: 'var(--radius-md)' }}>
                       <QRCodeSVG value={upiQRValue} size={140} />
                     </div>
@@ -568,7 +757,231 @@ export default function Billing() {
                       <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>{settings.upiId}</div>
                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent)' }}>{formatAmount(totalAmount)}</div>
                     </div>
-                    <input className="input" placeholder="UPI Reference No." value={upiRef} onChange={(e) => setUpiRef(e.target.value)} />
+                    <input className="input" placeholder="UPI Reference / Transaction ID (optional)" value={upiRef} onChange={(e) => setUpiRef(e.target.value)} />
+                  </div>
+                )}
+
+                {/* ── SPLIT CASH + UPI DETAILS ── */}
+                {paymentMode === 'split_cash_upi' && (
+                  <div style={{
+                    marginTop: 14,
+                    padding: '14px',
+                    background: 'var(--bg)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                        Split Verification (Total: {formatAmount(totalAmount)})
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                        onClick={setEvenSplit}
+                      >
+                        50 / 50 Split
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                      <div className="input-group" style={{ marginBottom: 0 }}>
+                        <label className="input-label" style={{ fontSize: '0.75rem' }}>Cash Amount (₹)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          className="input"
+                          placeholder="0.00"
+                          value={splitCash}
+                          onChange={(e) => handleSplitCashChange(e.target.value)}
+                        />
+                      </div>
+                      <div className="input-group" style={{ marginBottom: 0 }}>
+                        <label className="input-label" style={{ fontSize: '0.75rem' }}>UPI Amount (₹)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          className="input"
+                          placeholder="0.00"
+                          value={splitUpi}
+                          onChange={(e) => handleSplitUpiChange(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Balance validation alert */}
+                    {Math.abs(splitDifference) < 0.01 && numSplitCash > 0 && numSplitUpi > 0 ? (
+                      <div style={{
+                        padding: '8px 10px',
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.78rem',
+                        color: 'var(--status-free)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 10,
+                      }}>
+                        <CheckCircle size={15} weight="fill" />
+                        <span>Balanced: <strong>Cash {formatAmount(numSplitCash)}</strong> + <strong>UPI {formatAmount(numSplitUpi)}</strong> = {formatAmount(totalAmount)}</span>
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '8px 10px',
+                        background: splitDifference > 0 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        border: splitDifference > 0 ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.78rem',
+                        color: splitDifference > 0 ? '#eab308' : '#ef4444',
+                        marginBottom: 10,
+                      }}>
+                        {splitDifference > 0
+                          ? `⚠️ ${formatAmount(splitDifference)} remaining to allocate to match ${formatAmount(totalAmount)}`
+                          : `❌ Split exceeds bill total by ${formatAmount(-splitDifference)}`}
+                      </div>
+                    )}
+
+                    {/* Optional: Cash Tendered to calculate change */}
+                    {numSplitCash > 0 && (
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 10 }}>
+                        <label className="input-label" style={{ fontSize: '0.75rem' }}>Cash Tendered by Customer (Optional for change)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          className="input"
+                          placeholder={`e.g. ${Math.ceil(numSplitCash / 50) * 50 || numSplitCash}`}
+                          value={splitCashTendered}
+                          onChange={(e) => setSplitCashTendered(e.target.value)}
+                        />
+                        {splitCashTendered && parseFloat(splitCashTendered) >= numSplitCash && (
+                          <div style={{ padding: '8px 10px', background: 'var(--status-free-bg)', borderRadius: 'var(--radius-sm)', marginTop: 6, fontSize: '0.8rem', color: 'var(--status-free)', fontWeight: 700 }}>
+                            Change to Return: {formatAmount(parseFloat(splitCashTendered) - numSplitCash)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Dynamic UPI QR Code for the exact UPI portion */}
+                    {numSplitUpi > 0 && settings.upiId && (
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          Scan to Pay UPI portion: <strong style={{ color: 'var(--accent)' }}>{formatAmount(numSplitUpi)}</strong>
+                        </div>
+                        <div style={{ background: 'white', padding: 8, borderRadius: 'var(--radius-md)' }}>
+                          <QRCodeSVG value={upiQRValue} size={110} />
+                        </div>
+                        <input
+                          className="input"
+                          placeholder="UPI Ref / Txn ID (optional)"
+                          style={{ fontSize: '0.8rem' }}
+                          value={upiRef}
+                          onChange={(e) => setUpiRef(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── SPLIT CARD + UPI DETAILS ── */}
+                {paymentMode === 'split_card_upi' && (
+                  <div style={{
+                    marginTop: 14,
+                    padding: '14px',
+                    background: 'var(--bg)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                        Split Verification (Total: {formatAmount(totalAmount)})
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                        onClick={setEvenSplit}
+                      >
+                        50 / 50 Split
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                      <div className="input-group" style={{ marginBottom: 0 }}>
+                        <label className="input-label" style={{ fontSize: '0.75rem' }}>Card Amount (₹)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          className="input"
+                          placeholder="0.00"
+                          value={splitCard}
+                          onChange={(e) => handleSplitCardChange(e.target.value)}
+                        />
+                      </div>
+                      <div className="input-group" style={{ marginBottom: 0 }}>
+                        <label className="input-label" style={{ fontSize: '0.75rem' }}>UPI Amount (₹)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          className="input"
+                          placeholder="0.00"
+                          value={splitUpi}
+                          onChange={(e) => handleSplitUpiChange(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Balance validation alert */}
+                    {Math.abs(splitDifference) < 0.01 && numSplitCard > 0 && numSplitUpi > 0 ? (
+                      <div style={{
+                        padding: '8px 10px',
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.78rem',
+                        color: 'var(--status-free)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 10,
+                      }}>
+                        <CheckCircle size={15} weight="fill" />
+                        <span>Balanced: <strong>Card {formatAmount(numSplitCard)}</strong> + <strong>UPI {formatAmount(numSplitUpi)}</strong> = {formatAmount(totalAmount)}</span>
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '8px 10px',
+                        background: splitDifference > 0 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        border: splitDifference > 0 ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.78rem',
+                        color: splitDifference > 0 ? '#eab308' : '#ef4444',
+                        marginBottom: 10,
+                      }}>
+                        {splitDifference > 0
+                          ? `⚠️ ${formatAmount(splitDifference)} remaining to allocate to match ${formatAmount(totalAmount)}`
+                          : `❌ Split exceeds bill total by ${formatAmount(-splitDifference)}`}
+                      </div>
+                    )}
+
+                    {/* Dynamic UPI QR Code for the exact UPI portion */}
+                    {numSplitUpi > 0 && settings.upiId && (
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          Scan to Pay UPI portion: <strong style={{ color: 'var(--accent)' }}>{formatAmount(numSplitUpi)}</strong>
+                        </div>
+                        <div style={{ background: 'white', padding: 8, borderRadius: 'var(--radius-md)' }}>
+                          <QRCodeSVG value={upiQRValue} size={110} />
+                        </div>
+                        <input
+                          className="input"
+                          placeholder="UPI Ref / Txn ID (optional)"
+                          style={{ fontSize: '0.8rem' }}
+                          value={upiRef}
+                          onChange={(e) => setUpiRef(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -579,7 +992,7 @@ export default function Billing() {
               <button
                 className="btn btn-primary btn-lg"
                 onClick={handleGenerateBill}
-                disabled={cartItems.length === 0 || isGenerating}
+                disabled={cartItems.length === 0 || isGenerating || !isSplitBalanced}
                 style={{ width: '100%' }}
               >
                 {isGenerating ? (
@@ -593,6 +1006,12 @@ export default function Billing() {
                   </>
                 )}
               </button>
+              {!isSplitBalanced && (
+                <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#eab308' }}>
+                  ⚠️ Please balance split amounts to equal {formatAmount(totalAmount)} to generate bill
+                </div>
+              )}
+            </div>
             {/* Printer Section — always visible */}
             <div style={{ marginTop: 8, padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -624,7 +1043,6 @@ export default function Billing() {
                   ))}
                 </div>
               )}
-            </div>
             </div>
           </div>
         </div>

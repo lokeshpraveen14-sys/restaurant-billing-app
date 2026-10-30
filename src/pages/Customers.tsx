@@ -606,7 +606,9 @@ export default function Customers() {
                                               <span className="badge badge-muted">Table {bill.tableNumber}</span>
                                             )}
                                             <span className="badge badge-muted" style={{ textTransform: 'capitalize' }}>
-                                              {bill.payments?.[0]?.mode || 'cash'}
+                                              {bill.payments && bill.payments.length > 1
+                                                ? bill.payments.map((p: any) => `${(p.mode || '').toUpperCase()}: ${formatAmount(p.amount)}`).join(' + ')
+                                                : bill.payments?.[0]?.mode || 'cash'}
                                             </span>
                                           </div>
                                           <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{formatAmount(bill.totalAmount)}</span>

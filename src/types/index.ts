@@ -128,7 +128,7 @@ export interface GSTBreakdown {
 }
 
 export type DiscountType = 'flat' | 'percent';
-export type PaymentMode = 'cash' | 'upi' | 'card' | 'split';
+export type PaymentMode = 'cash' | 'upi' | 'card' | 'split' | 'split_cash_upi' | 'split_card_upi';
 
 export interface Payment {
   mode: PaymentMode;

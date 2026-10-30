@@ -98,6 +98,7 @@ export interface BillPrintData {
   roundOff:       number;
   totalAmount:    number;
   paymentMode:    string;
+  payments?:      Array<{ mode: string; amount: number }>;
   amountPaid?:    number;
   changeDue?:     number;
   parcelCharge?:  number;
@@ -166,7 +167,16 @@ export function buildBillReceipt(data: BillPrintData): ReceiptLine[] {
     { type: 'divider' },
     { type: 'item', bold: true, left: 'TOTAL (Incl. GST)', leftVal: fmt(data.totalAmount) },
     { type: 'divider' },
-    { type: 'item', left: 'Payment', leftVal: data.paymentMode.toUpperCase() },
+    ...(data.payments && data.payments.length > 1
+      ? [
+          { type: 'item' as const, left: 'Payment Mode', leftVal: 'SPLIT' },
+          ...data.payments.map((p) => ({
+            type: 'item' as const,
+            left: `  ${p.mode.toUpperCase()}`,
+            leftVal: fmt(p.amount),
+          })),
+        ]
+      : [{ type: 'item' as const, left: 'Payment', leftVal: data.paymentMode.toUpperCase() }]),
     ...(data.amountPaid ? [{ type: 'item' as const, left: 'Cash Tendered', leftVal: fmt(data.amountPaid) }] : []),
     ...(data.changeDue  ? [{ type: 'item' as const, left: 'Change Due',    leftVal: fmt(data.changeDue)  }] : []),
     ...gstFootnoteLines,
