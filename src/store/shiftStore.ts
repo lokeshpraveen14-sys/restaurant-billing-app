@@ -458,7 +458,10 @@ export const useShiftStore = create<ShiftState>()(
             openingBalance: Number(s.opening_balance || 0),
             closingBalance: s.closing_balance ? Number(s.closing_balance) : undefined,
             actualClosingBalance: s.closing_balance ? Number(s.closing_balance) : undefined,
-            expectedClosingBalance: s.closing_balance ? Number(s.closing_balance) : undefined,
+            // expectedClosingBalance = opening cash + cash collected during shift
+            expectedClosingBalance: s.closing_balance
+              ? Number(s.opening_balance || 0) + Number(s.total_cash || 0)
+              : undefined,
             totalCash: Number(s.total_cash || 0),
             totalUPI: Number(s.total_upi || 0),
             totalCard: Number(s.total_card || 0),
@@ -510,6 +513,10 @@ export const useShiftStore = create<ShiftState>()(
               openingBalance: Number(newRow.opening_balance || 0),
               closingBalance: newRow.closing_balance ? Number(newRow.closing_balance) : undefined,
               actualClosingBalance: newRow.closing_balance ? Number(newRow.closing_balance) : undefined,
+              // expectedClosingBalance = opening cash + cash collected
+              expectedClosingBalance: newRow.closing_balance
+                ? Number(newRow.opening_balance || 0) + Number(newRow.total_cash || 0)
+                : undefined,
               totalCash: Number(newRow.total_cash || 0),
               totalUPI: Number(newRow.total_upi || 0),
               totalCard: Number(newRow.total_card || 0),
@@ -528,14 +535,37 @@ export const useShiftStore = create<ShiftState>()(
                 newActive = [mapped, ...state.activeShifts.filter((s) => s.id !== mapped.id)];
                 newClosed = state.shifts.filter((s) => s.id !== mapped.id);
               } else {
+                // Shift was closed
                 newActive = state.activeShifts.filter((s) => s.id !== mapped.id);
                 newClosed = [mapped, ...state.shifts.filter((s) => s.id !== mapped.id)];
               }
 
-              const currentUser = useAuthStore.getState().currentUser;
-              const updatedCurrent = currentUser
-                ? newActive.find((s) => s.staffId === currentUser.id) || null
-                : newActive[0] || null;
+              // CRITICAL FIX: Only update currentShift when:
+              // 1. The event is for the currentShift itself (to reflect updated totals or closure)
+              // 2. Or currentShift is null (need to assign one)
+              // NEVER null-out currentShift due to unrelated shift updates (prevents auto-close bug)
+              let updatedCurrent = state.currentShift;
+              if (!state.currentShift) {
+                // No shift active — try to find one for the logged-in user
+                const currentUser = useAuthStore.getState().currentUser;
+                updatedCurrent = currentUser
+                  ? newActive.find((s) => s.staffId === currentUser.id) || null
+                  : newActive[0] || null;
+              } else if (state.currentShift.id === mapped.id) {
+                // The current shift itself was updated
+                if (mapped.status === 'open') {
+                  // Updated but still open — use latest mapped data
+                  updatedCurrent = mapped;
+                } else {
+                  // Current shift was closed — find user's next open shift or null
+                  const currentUser = useAuthStore.getState().currentUser;
+                  updatedCurrent = currentUser
+                    ? newActive.find((s) => s.staffId === currentUser.id) || null
+                    : newActive[0] || null;
+                }
+              }
+              // If the event is for a different shift (e.g., another cashier's totals updated),
+              // leave currentShift untouched to prevent accidental auto-closing.
 
               return {
                 activeShifts: newActive,

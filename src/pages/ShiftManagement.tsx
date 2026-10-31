@@ -247,10 +247,33 @@ export default function ShiftManagement() {
       return;
     }
 
-    // Determine target metrics for the shift being closed
-    const targetBills = bills.filter(
+    // CRITICAL FIX: Always fetch fresh bills from server before closing
+    // to avoid showing 0s in shift history on multi-device setups
+    let freshBills: Bill[] = [];
+    try {
+      freshBills = await fetchBillsForShift(
+        targetShift.id,
+        targetShift.staffId,
+        targetShift.openedAt,
+        targetShift.closedAt
+      );
+    } catch (err) {
+      console.error('Error fetching bills before close:', err);
+      // Fall back to local bills if fetch fails
+      freshBills = bills.filter(
+        (b) => isBillInShift(b, targetShift) && (b.status === 'paid' || !b.status)
+      );
+    }
+
+    // Merge fetched bills with local bills (deduplicate by ID)
+    const localBills = bills.filter(
       (b) => isBillInShift(b, targetShift) && (b.status === 'paid' || !b.status)
     );
+    const allBillsMap = new Map<string, Bill>();
+    localBills.forEach((b) => allBillsMap.set(b.id, b));
+    freshBills.forEach((b) => allBillsMap.set(b.id, b));
+    const targetBills = Array.from(allBillsMap.values());
+
     const targetCash = targetBills.reduce(
       (s, b) => s + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0),
       0
