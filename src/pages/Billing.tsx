@@ -454,6 +454,8 @@ export default function Billing() {
                     <input
                       className="input"
                       type="number"
+                      inputMode="decimal"
+                      onWheel={(e) => (e.target as HTMLElement).blur()}
                       min={0}
                       max={discountType === 'percent' ? 100 : subtotalWithCharges}
                       value={discountValue || ''}
@@ -732,6 +734,8 @@ export default function Billing() {
                     <input
                       className="input"
                       type="number"
+                      inputMode="decimal"
+                      onWheel={(e) => (e.target as HTMLElement).blur()}
                       placeholder={totalAmount.toFixed(2)}
                       value={cashTendered}
                       onChange={(e) => setCashTendered(e.target.value)}
@@ -790,6 +794,8 @@ export default function Billing() {
                         <input
                           type="number"
                           step="any"
+                          inputMode="decimal"
+                          onWheel={(e) => (e.target as HTMLElement).blur()}
                           className="input"
                           placeholder="0.00"
                           value={splitCash}
@@ -801,6 +807,8 @@ export default function Billing() {
                         <input
                           type="number"
                           step="any"
+                          inputMode="decimal"
+                          onWheel={(e) => (e.target as HTMLElement).blur()}
                           className="input"
                           placeholder="0.00"
                           value={splitUpi}
@@ -849,6 +857,8 @@ export default function Billing() {
                         <input
                           type="number"
                           step="any"
+                          inputMode="decimal"
+                          onWheel={(e) => (e.target as HTMLElement).blur()}
                           className="input"
                           placeholder={`e.g. ${Math.ceil(numSplitCash / 50) * 50 || numSplitCash}`}
                           value={splitCashTendered}
@@ -912,6 +922,8 @@ export default function Billing() {
                         <input
                           type="number"
                           step="any"
+                          inputMode="decimal"
+                          onWheel={(e) => (e.target as HTMLElement).blur()}
                           className="input"
                           placeholder="0.00"
                           value={splitCard}
@@ -923,6 +935,8 @@ export default function Billing() {
                         <input
                           type="number"
                           step="any"
+                          inputMode="decimal"
+                          onWheel={(e) => (e.target as HTMLElement).blur()}
                           className="input"
                           placeholder="0.00"
                           value={splitUpi}

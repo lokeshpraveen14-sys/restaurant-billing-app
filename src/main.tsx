@@ -15,6 +15,14 @@ if (!window.crypto.randomUUID) {
   };
 }
 
+// Prevent mouse scroll / trackpad wheel from changing numbers in input fields globally
+document.addEventListener('wheel', (e) => {
+  const el = document.activeElement;
+  if (el && el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'number') {
+    (el as HTMLElement).blur();
+  }
+}, { passive: true });
+
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
