@@ -5,6 +5,7 @@ import { useBillStore } from '../store/billStore';
 import { useToast } from '../store/uiStore';
 import { formatAmount } from '../lib/gst';
 import { Shift, Bill } from '../types';
+import { supabase } from '../lib/supabase';
 import {
   Timer,
   CheckCircle,
@@ -21,6 +22,7 @@ import {
   Eye,
   XCircle,
   ShieldCheck,
+  Calculator,
 } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useReactToPrint } from 'react-to-print';
@@ -42,6 +44,8 @@ export default function ShiftManagement() {
   const [detailModalShift, setDetailModalShift] = useState<Shift | null>(null);
   const [shiftTab, setShiftTab] = useState<'paid' | 'voided' | 'revised'>('paid');
   const [loadingShiftBills, setLoadingShiftBills] = useState(false);
+  const [loadingModalBills, setLoadingModalBills] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   const printRef = React.useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({ content: () => printRef.current });
@@ -108,12 +112,13 @@ export default function ShiftManagement() {
   // Load bills for past closed shift in detail modal
   React.useEffect(() => {
     if (detailModalShift) {
+      setLoadingModalBills(true);
       fetchBillsForShift(
         detailModalShift.id,
         detailModalShift.staffId,
         detailModalShift.openedAt,
         detailModalShift.closedAt
-      );
+      ).finally(() => setLoadingModalBills(false));
     }
   }, [detailModalShift?.id, fetchBillsForShift]);
 
@@ -313,6 +318,67 @@ export default function ShiftManagement() {
     const revised = bills.filter((b) => b.status === 'revised' && isBillInShift(b, detailModalShift));
     return { paid, voided, revised };
   }, [detailModalShift, bills]);
+
+  // Computed totals for the detail modal — prefer bill-computed values over stale DB zeros
+  const modalComputedCash = modalShiftBills.paid.reduce(
+    (s, b) => s + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0), 0
+  );
+  const modalComputedUPI = modalShiftBills.paid.reduce(
+    (s, b) => s + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0), 0
+  );
+  const modalComputedCard = modalShiftBills.paid.reduce(
+    (s, b) => s + b.payments.filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0), 0
+  );
+  const modalComputedRevenue = modalShiftBills.paid.reduce((s, b) => s + b.totalAmount, 0);
+  const modalComputedOrders = modalShiftBills.paid.length;
+  // Use computed if bills loaded, else fall back to stored DB values
+  const modalCash = !loadingModalBills && modalShiftBills.paid.length > 0
+    ? modalComputedCash
+    : (detailModalShift?.totalCash || 0);
+  const modalUPI = !loadingModalBills && modalShiftBills.paid.length > 0
+    ? modalComputedUPI
+    : (detailModalShift?.totalUPI || 0);
+  const modalCard = !loadingModalBills && modalShiftBills.paid.length > 0
+    ? modalComputedCard
+    : (detailModalShift?.totalCard || 0);
+  const modalRevenue = !loadingModalBills && modalShiftBills.paid.length > 0
+    ? modalComputedRevenue
+    : (detailModalShift?.totalRevenue || 0);
+  const modalOrders = !loadingModalBills && modalShiftBills.paid.length > 0
+    ? modalComputedOrders
+    : (detailModalShift?.totalOrders || 0);
+
+  // Recalculate & save a stale closed shift back to DB
+  const handleRecalculateClosedShift = async (s: Shift) => {
+    setRecalculating(true);
+    try {
+      const fetched = await fetchBillsForShift(s.id, s.staffId, s.openedAt, s.closedAt);
+      const paid = fetched.filter((b) => b.status === 'paid' || !b.status);
+      const cash = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0), 0);
+      const upi  = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0), 0);
+      const card = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0), 0);
+      const revenue = paid.reduce((acc, b) => acc + b.totalAmount, 0);
+      const covers  = paid.reduce((acc, b) => acc + (b.guestCount || 0), 0);
+      const orders  = paid.length;
+      // Update in Supabase
+      await supabase.from('shifts').update({
+        total_cash: cash,
+        total_upi: upi,
+        total_card: card,
+        total_revenue: revenue,
+        total_covers: covers,
+        total_orders: orders,
+      }).eq('id', s.id);
+      toast.success('Recalculated', `${s.staffName}'s shift totals updated from ${orders} bills`);
+      // Refresh shift list
+      useShiftStore.getState().initShiftSync();
+    } catch (err) {
+      console.error('Recalculate failed:', err);
+      toast.error('Error', 'Failed to recalculate shift');
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   return (
     <>
@@ -1197,16 +1263,25 @@ export default function ShiftManagement() {
                     <th style={{ textAlign: 'right' }}>Revenue</th>
                     <th style={{ textAlign: 'center' }}>Details</th>
                   </tr>
-                </thead>
-                <tbody>
-                  {shifts.map((rawShift) => {
+                 </thead>
+                 <tbody>
+                   {shifts.map((rawShift) => {
                     const s = {
                       ...rawShift,
                       openedAt: new Date(rawShift.openedAt),
                       closedAt: rawShift.closedAt ? new Date(rawShift.closedAt) : undefined,
                     };
+                    // Compute live totals from local bills if available (fixes stale 0s)
+                    const sBills = bills.filter((b) => isBillInShift(b, s) && (b.status === 'paid' || !b.status));
+                    const hasBills = sBills.length > 0;
+                    const dispCash = hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0), 0) : s.totalCash;
+                    const dispUPI = hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0), 0) : s.totalUPI;
+                    const dispCard = hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0), 0) : s.totalCard;
+                    const dispRevenue = hasBills ? sBills.reduce((acc, b) => acc + b.totalAmount, 0) : s.totalRevenue;
+                    const dispOrders = hasBills ? sBills.length : s.totalOrders;
+                    const isStale = s.totalRevenue === 0 && !hasBills;
                     return (
-                      <tr key={s.id}>
+                      <tr key={s.id} style={isStale ? { opacity: 0.7 } : undefined}>
                         <td style={{ fontWeight: 600 }}>{s.staffName}</td>
                         <td style={{ fontSize: '0.85rem' }}>{s.openedAt.toLocaleString('en-IN')}</td>
                         <td style={{ fontSize: '0.85rem' }}>
@@ -1215,20 +1290,34 @@ export default function ShiftManagement() {
                         <td style={{ color: 'var(--text-muted)' }}>
                           {formatDuration(s.openedAt, s.closedAt)}
                         </td>
-                        <td>{s.totalOrders}</td>
-                        <td style={{ color: '#22c55e', fontWeight: 600 }}>{formatAmount(s.totalCash)}</td>
-                        <td style={{ color: '#f59e0b', fontWeight: 600 }}>{formatAmount(s.totalUPI)}</td>
-                        <td style={{ color: '#3b82f6', fontWeight: 600 }}>{formatAmount(s.totalCard)}</td>
+                        <td>{dispOrders}</td>
+                        <td style={{ color: '#22c55e', fontWeight: 600 }}>{formatAmount(dispCash)}</td>
+                        <td style={{ color: '#f59e0b', fontWeight: 600 }}>{formatAmount(dispUPI)}</td>
+                        <td style={{ color: '#3b82f6', fontWeight: 600 }}>{formatAmount(dispCard)}</td>
                         <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent)' }}>
-                          {formatAmount(s.totalRevenue)}
+                          {formatAmount(dispRevenue)}
+                          {isStale && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>needs fix</span>}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => setDetailModalShift(s)}
-                          >
-                            <Eye size={16} /> View
-                          </button>
+                          <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => setDetailModalShift(s)}
+                            >
+                              <Eye size={16} /> View
+                            </button>
+                            {s.totalRevenue === 0 && (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ color: 'var(--status-occupied)', fontSize: '0.75rem' }}
+                                onClick={() => handleRecalculateClosedShift(s)}
+                                disabled={recalculating}
+                                title="Recalculate totals from bills and save to DB"
+                              >
+                                <Calculator size={13} /> Fix
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1500,20 +1589,52 @@ export default function ShiftManagement() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
-                <div style={{ padding: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cash Sales</div>
-                  <div style={{ fontWeight: 700, color: '#22c55e' }}>{formatAmount(detailModalShift.totalCash)}</div>
+              {loadingModalBills ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                  <ArrowsClockwise size={20} className="animate-spin" style={{ marginBottom: 6 }} />
+                  <div>Loading bills from server...</div>
                 </div>
-                <div style={{ padding: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>UPI Sales</div>
-                  <div style={{ fontWeight: 700, color: '#f59e0b' }}>{formatAmount(detailModalShift.totalUPI)}</div>
-                </div>
-                <div style={{ padding: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Card Sales</div>
-                  <div style={{ fontWeight: 700, color: '#3b82f6' }}>{formatAmount(detailModalShift.totalCard)}</div>
-                </div>
-              </div>
+              ) : (
+                <>
+                  {/* Summary row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div style={{ padding: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Orders</div>
+                      <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>{modalOrders}</div>
+                    </div>
+                    <div style={{ padding: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Cash Sales</div>
+                      <div style={{ fontWeight: 700, color: '#22c55e' }}>{formatAmount(modalCash)}</div>
+                    </div>
+                    <div style={{ padding: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>UPI Sales</div>
+                      <div style={{ fontWeight: 700, color: '#f59e0b' }}>{formatAmount(modalUPI)}</div>
+                    </div>
+                    <div style={{ padding: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Card Sales</div>
+                      <div style={{ fontWeight: 700, color: '#3b82f6' }}>{formatAmount(modalCard)}</div>
+                    </div>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    background: 'var(--accent-dim)',
+                    borderRadius: 6,
+                    marginBottom: 12,
+                    fontSize: '0.875rem',
+                  }}>
+                    <span style={{ fontWeight: 700 }}>Total Revenue: {formatAmount(modalRevenue)}</span>
+                    {/* If DB values were 0 but bills found, show recalculate prompt */}
+                    {(detailModalShift?.totalRevenue || 0) === 0 && modalRevenue > 0 && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--status-occupied)', fontWeight: 600 }}>
+                        ⚠️ DB had 0 — computed from {modalOrders} bills
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
 
               {/* Voided Bills in this past shift */}
               <div style={{ marginBottom: 14 }}>
@@ -1578,6 +1699,16 @@ export default function ShiftManagement() {
               </div>
             </div>
             <div className="modal-footer">
+              {/* Recalculate & Save button to fix stale 0 values */}
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleRecalculateClosedShift(detailModalShift)}
+                disabled={recalculating || loadingModalBills}
+                title="Recompute totals from actual bills and save to database"
+              >
+                <Calculator size={14} />
+                {recalculating ? 'Saving...' : 'Fix & Save Totals'}
+              </button>
               <button className="btn btn-secondary btn-sm" onClick={() => setDetailModalShift(null)}>
                 Close
               </button>
