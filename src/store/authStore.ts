@@ -27,13 +27,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, PermissionModule[]> = {
   kitchen: ['shift', 'orders'],
 };
 
-// Fallback staff users — used while Supabase loads, or if offline
+// Fallback staff users — updated to match Supabase staff_users
 export const DEMO_USERS: User[] = [
-  { id: '1', name: 'Admin User', email: 'admin@railwaycoach.com', role: 'admin', pin: '0303', active: true, createdAt: new Date() },
+  { id: '1', name: 'Admin User', email: 'admin@railwaycoach.com', role: 'admin', pin: '0494', active: true, createdAt: new Date('2026-09-24T02:15:30.131Z') },
   { id: '2', name: 'Parthipan', email: 'manager@railwaycoach.com', role: 'manager', pin: '1234', active: true, createdAt: new Date() },
-  { id: '3', name: 'Satya ', email: 'cashier@railwaycoach.com', role: 'cashier', pin: '1111', active: true, createdAt: new Date() },
-  { id: '4', name: 'Swathi ', email: 'waiter@railwaycoach.com', role: 'cashier', pin: '3333', active: true, createdAt: new Date() },
-  { id: '5', name: 'Darshini', email: 'kitchen@railwaycoach.com', role: 'cashier', pin: '2222', active: true, createdAt: new Date() },
+  { id: '3', name: 'Sathya ', email: 'cashier@railwaycoach.com', role: 'cashier', pin: '1108', active: true, createdAt: new Date('2026-09-15T10:34:16.869Z') },
+  { id: '4', name: 'Swathi ', email: 'waiter@railwaycoach.com', role: 'cashier', pin: '1030', active: true, createdAt: new Date('2026-09-15T10:34:16.869Z') },
+  { id: '5', name: 'Darshini', email: 'kitchen@railwaycoach.com', role: 'cashier', pin: '2004', active: true, createdAt: new Date('2026-09-15T10:34:16.869Z') },
+  { id: '65b2ffa1-c68b-4727-8053-6404d57b3e70', name: 'sub', email: 'sub@railwaycoach.com', role: 'cashier', pin: '2222', active: true, createdAt: new Date('2026-10-28T19:44:32.958Z') },
+  { id: '4e516304-0b55-47d8-8714-f53b59a714b3', name: 'ac sub', email: 'acsub@railwaycoach.com', role: 'cashier', pin: '1111', active: true, createdAt: new Date('2026-10-28T19:44:09.197Z') },
 ];
 
 function mapDbUser(row: any): User {

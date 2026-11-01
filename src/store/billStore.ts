@@ -459,17 +459,9 @@ export const useBillStore = create<BillState>()(
         const startIso = (openedAt instanceof Date ? openedAt : new Date(openedAt)).toISOString();
         if (closedAt) {
           const endIso = (closedAt instanceof Date ? closedAt : new Date(closedAt)).toISOString();
-          if (staffId) {
-            query = query.or(`shift_id.eq.${shiftId},and(staff_id.eq.${staffId},created_at.gte.${startIso},created_at.lte.${endIso})`);
-          } else {
-            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},created_at.lte.${endIso})`);
-          }
+          query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},created_at.lte.${endIso})`);
         } else {
-          if (staffId) {
-            query = query.or(`shift_id.eq.${shiftId},and(staff_id.eq.${staffId},created_at.gte.${startIso})`);
-          } else {
-            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso})`);
-          }
+          query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso})`);
         }
       } else {
         query = query.eq('shift_id', shiftId);

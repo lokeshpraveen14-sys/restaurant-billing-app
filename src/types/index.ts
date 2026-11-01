@@ -5,7 +5,7 @@ export type UserRole = 'admin' | 'manager' | 'cashier' | 'waiter' | 'kitchen';
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   role: UserRole;
   pin?: string; // 4-digit PIN for quick login
   active: boolean;

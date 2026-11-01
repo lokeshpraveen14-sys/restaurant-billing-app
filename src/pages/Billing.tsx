@@ -29,8 +29,10 @@ export default function Billing() {
   const localBills = useBillStore(s => s.bills);
   const addBillToShift = useShiftStore(s => s.addBillToShift);
   const getActiveShiftForStaff = useShiftStore(s => s.getActiveShiftForStaff);
+  const activeShifts = useShiftStore(s => s.activeShifts);
+  const currentShift = useShiftStore(s => s.currentShift);
   const currentUser = useAuthStore(s => s.currentUser);
-  const activeShift = getActiveShiftForStaff(currentUser?.id);
+  const activeShift = getActiveShiftForStaff(currentUser?.id) || currentShift || activeShifts[0];
   const toast = useToast();
   const cartItems = order?.items.filter((i) => i.status !== 'void') || [];
 

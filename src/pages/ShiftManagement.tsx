@@ -125,13 +125,29 @@ export default function ShiftManagement() {
   // Helper to check if a bill was created in this shift
   const isBillInShift = (b: Bill, s: Shift) => {
     if (b.shiftId && b.shiftId === s.id) return true;
+    if (b.shiftId && b.shiftId !== s.id) return false;
     const bTime = new Date(b.createdAt).getTime();
     const sOpen = new Date(s.openedAt).getTime();
     const sClose = s.closedAt ? new Date(s.closedAt).getTime() : Infinity;
+    if (bTime < sOpen || bTime > sClose) return false;
+
     const isSameStaff =
       (b.staffId && s.staffId && String(b.staffId).trim() === String(s.staffId).trim()) ||
       (b.staffName && s.staffName && b.staffName.toLowerCase().trim() === s.staffName.toLowerCase().trim());
-    return isSameStaff && bTime >= sOpen && bTime <= sClose;
+    if (isSameStaff) return true;
+
+    // If bill does not have shiftId explicitly attached:
+    // Check if another shift existed that matches the bill's staff exactly
+    const otherMatchingShift = shifts.find(
+      (os) =>
+        os.id !== s.id &&
+        ((b.staffId && os.staffId && String(b.staffId).trim() === String(os.staffId).trim()) ||
+         (b.staffName && os.staffName && b.staffName.toLowerCase().trim() === os.staffName.toLowerCase().trim())) &&
+        bTime >= new Date(os.openedAt).getTime() &&
+        bTime <= (os.closedAt ? new Date(os.closedAt).getTime() : Infinity)
+    );
+    // If no other shift explicitly claims this bill (e.g. sub-counter or waiter billed while this shift was open), it belongs to this shift
+    return !otherMatchingShift;
   };
 
   // 1. Paid bills for selected active shift
@@ -276,7 +292,7 @@ export default function ShiftManagement() {
     );
     const allBillsMap = new Map<string, Bill>();
     localBills.forEach((b) => allBillsMap.set(b.id, b));
-    freshBills.forEach((b) => allBillsMap.set(b.id, b));
+    freshBills.filter((b) => isBillInShift(b, targetShift) && (b.status === 'paid' || !b.status)).forEach((b) => allBillsMap.set(b.id, b));
     const targetBills = Array.from(allBillsMap.values());
 
     const targetCash = targetBills.reduce(
@@ -302,6 +318,11 @@ export default function ShiftManagement() {
       targetCard,
       closeNotes
     );
+
+    // Tag all closed shift bills with shift_id in Supabase
+    if (targetBills.length > 0) {
+      supabase.from('bills').update({ shift_id: targetShift.id }).in('id', targetBills.map((b) => b.id)).then();
+    }
 
     setCloseNotes('');
     setActualCash('');
@@ -353,7 +374,7 @@ export default function ShiftManagement() {
     setRecalculating(true);
     try {
       const fetched = await fetchBillsForShift(s.id, s.staffId, s.openedAt, s.closedAt);
-      const paid = fetched.filter((b) => b.status === 'paid' || !b.status);
+      const paid = fetched.filter((b) => isBillInShift(b, s) && (b.status === 'paid' || !b.status));
       const cash = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0), 0);
       const upi  = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0), 0);
       const card = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0), 0);
@@ -369,7 +390,24 @@ export default function ShiftManagement() {
         total_covers: covers,
         total_orders: orders,
       }).eq('id', s.id);
-      toast.success('Recalculated', `${s.staffName}'s shift totals updated from ${orders} bills`);
+
+      // Permanently tag matching bills with shift_id in Supabase
+      if (paid.length > 0) {
+        await supabase.from('bills').update({ shift_id: s.id }).in('id', paid.map((b) => b.id));
+      }
+
+      // Update detailModalShift state if modal is open for this shift
+      setDetailModalShift((prev) => prev && prev.id === s.id ? {
+        ...prev,
+        totalCash: cash,
+        totalUPI: upi,
+        totalCard: card,
+        totalRevenue: revenue,
+        totalCovers: covers,
+        totalOrders: orders,
+      } : prev);
+
+      toast.success('Recalculated', `${s.staffName}'s shift totals updated from ${orders} bills (₹${revenue.toLocaleString('en-IN')})`);
       // Refresh shift list
       useShiftStore.getState().initShiftSync();
     } catch (err) {
