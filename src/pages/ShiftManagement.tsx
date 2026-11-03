@@ -1484,6 +1484,8 @@ export default function ShiftManagement() {
                         ['Card Collected', formatAmount(shiftCard)],
                         ['Total Net Revenue', formatAmount(shiftRevenue)],
                         ['Expected Cash in Drawer', formatAmount(closingBalance)],
+                        ['Float to Leave in Drawer', formatAmount(targetShift.openingBalance || 1000)],
+                        ['Net Cash Handover to Safe', formatAmount(shiftCash)],
                       ].map(([k, v]) => (
                         <div
                           key={k}
@@ -1493,9 +1495,11 @@ export default function ShiftManagement() {
                             padding: '4px 0',
                             fontSize: '0.85rem',
                             borderBottom: '1px solid var(--border)',
+                            color: k.includes('Handover') ? 'var(--brand-color)' : undefined,
+                            fontWeight: k.includes('Handover') || k.includes('Expected') ? 700 : undefined,
                           }}
                         >
-                          <span style={{ color: 'var(--text-muted)' }}>{k}</span>
+                          <span style={{ color: k.includes('Handover') ? 'var(--brand-color)' : 'var(--text-muted)' }}>{k}</span>
                           <span style={{ fontWeight: 600 }}>{v}</span>
                         </div>
                       ))}
@@ -1519,9 +1523,13 @@ export default function ShiftManagement() {
                         <span style={{ color: 'var(--text-muted)' }}>Shift Duration</span>
                         <span style={{ fontWeight: 600 }}>{formatDuration(new Date(targetShift.openedAt))}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.9rem' }}>
                         <span style={{ color: 'var(--text-muted)' }}>Initial Drawer Float</span>
                         <span style={{ fontWeight: 600 }}>{formatAmount(targetShift.openingBalance)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Float to Leave for Next Shift</span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{formatAmount(targetShift.openingBalance || 1000)}</span>
                       </div>
                     </div>
                   )}
@@ -1669,6 +1677,64 @@ export default function ShiftManagement() {
                       <span style={{ fontSize: '0.75rem', color: 'var(--status-occupied)', fontWeight: 600 }}>
                         ⚠️ DB had 0 — computed from {modalOrders} bills
                       </span>
+                    )}
+                  </div>
+
+                  {/* Cash Drawer Reconciliation */}
+                  <div style={{
+                    background: 'var(--bg-elevated)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '12px 14px',
+                    marginBottom: 14,
+                    border: '1px solid var(--border)',
+                    fontSize: '0.85rem'
+                  }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>💵 Cash Drawer & Handover Breakdown</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>Expected vs Handover</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Opening Float (Starting Change):</span>
+                      <span style={{ fontWeight: 600 }}>{formatAmount(detailModalShift.openingBalance)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Cash Sales Collected:</span>
+                      <span style={{ fontWeight: 600, color: '#22c55e' }}>+ {formatAmount(modalCash)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderTop: '1px dashed var(--border)', fontWeight: 700 }}>
+                      <span>Expected Cash in Drawer:</span>
+                      <span>{formatAmount((detailModalShift.openingBalance || 0) + modalCash)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Float Left for Next Shift:</span>
+                      <span style={{ fontWeight: 600, color: 'var(--accent)' }}>− {formatAmount(detailModalShift.openingBalance || 1000)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderTop: '1px dashed var(--border)', fontWeight: 700, color: 'var(--brand-color)' }}>
+                      <span>Net Cash to Hand Over to Safe:</span>
+                      <span>{formatAmount(modalCash)}</span>
+                    </div>
+                    {detailModalShift.closingBalance !== undefined && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', marginTop: 8, background: 'var(--bg-surface)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                        <div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>Actual Cash Count Entered:</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Physical count typed by cashier upon closing</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{formatAmount(detailModalShift.closingBalance)}</span>
+                          {(() => {
+                            const expected = (detailModalShift.openingBalance || 0) + modalCash;
+                            const diff = (detailModalShift.closingBalance || 0) - expected;
+                            if (Math.abs(diff) < 0.01) {
+                              return <div style={{ fontSize: '0.7rem', color: 'var(--status-free)', fontWeight: 600 }}>Exact Match ✅</div>;
+                            }
+                            return (
+                              <div style={{ fontSize: '0.7rem', color: diff > 0 ? 'var(--accent)' : 'var(--status-occupied)', fontWeight: 600 }}>
+                                {diff > 0 ? `+${formatAmount(diff)} Over` : `-${formatAmount(Math.abs(diff))} Short`}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </>
