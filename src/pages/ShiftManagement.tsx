@@ -1309,15 +1309,19 @@ export default function ShiftManagement() {
                       openedAt: new Date(rawShift.openedAt),
                       closedAt: rawShift.closedAt ? new Date(rawShift.closedAt) : undefined,
                     };
-                    // Compute live totals from local bills if available (fixes stale 0s)
-                    const sBills = bills.filter((b) => isBillInShift(b, s) && (b.status === 'paid' || !b.status));
+                    // Use authoritative stored DB totals for closed shifts.
+                    // ONLY if stored totals are 0 (stale uncalculated shift) do we compute from local bills.
+                    const isRecorded = (s.totalRevenue > 0) || (s.totalOrders > 0);
+                    const sBills = !isRecorded
+                      ? bills.filter((b) => isBillInShift(b, s) && (b.status === 'paid' || !b.status))
+                      : [];
                     const hasBills = sBills.length > 0;
-                    const dispCash = hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0), 0) : s.totalCash;
-                    const dispUPI = hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0), 0) : s.totalUPI;
-                    const dispCard = hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0), 0) : s.totalCard;
-                    const dispRevenue = hasBills ? sBills.reduce((acc, b) => acc + b.totalAmount, 0) : s.totalRevenue;
-                    const dispOrders = hasBills ? sBills.length : s.totalOrders;
-                    const isStale = s.totalRevenue === 0 && !hasBills;
+                    const dispCash = isRecorded ? s.totalCash : (hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0), 0) : 0);
+                    const dispUPI = isRecorded ? s.totalUPI : (hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0), 0) : 0);
+                    const dispCard = isRecorded ? s.totalCard : (hasBills ? sBills.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'card').reduce((a, p) => a + p.amount, 0), 0) : 0);
+                    const dispRevenue = isRecorded ? s.totalRevenue : (hasBills ? sBills.reduce((acc, b) => acc + b.totalAmount, 0) : 0);
+                    const dispOrders = isRecorded ? s.totalOrders : (hasBills ? sBills.length : 0);
+                    const isStale = !isRecorded && !hasBills;
                     return (
                       <tr key={s.id} style={isStale ? { opacity: 0.7 } : undefined}>
                         <td style={{ fontWeight: 600 }}>{s.staffName}</td>
