@@ -44,8 +44,14 @@ export default function Dashboard() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await refreshTodayBills();
+    await useBillStore.getState().syncPendingBills();
     setRefreshing(false);
   };
+
+  React.useEffect(() => {
+    refreshTodayBills().catch(() => {});
+    useBillStore.getState().syncPendingBills().catch(() => {});
+  }, [refreshTodayBills]);
 
   const occupiedTables = tables.filter((t) => t.status === 'occupied').length;
   const freeTables = tables.filter((t) => t.status === 'free').length;

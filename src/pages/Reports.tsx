@@ -70,6 +70,7 @@ export default function Reports() {
   const fetchFiltered = async (start: Date, end: Date): Promise<Bill[]> => {
     let result: Bill[] = [];
     try {
+      await useBillStore.getState().syncPendingBills().catch(() => {});
       const supabaseBills = await fetchAllBillsForDateRange(start, end);
       const localFiltered = localBills.filter(b => { const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt); return d >= start && d <= end; });
       const allById: Record<string, Bill> = {};
