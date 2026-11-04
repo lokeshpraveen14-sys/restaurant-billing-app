@@ -86,7 +86,8 @@ export default function ShiftManagement() {
         currentShift.id,
         currentShift.staffId,
         currentShift.openedAt,
-        currentShift.closedAt
+        currentShift.closedAt,
+        currentShift.staffName
       );
       // Automatically recalculate authoritative totals excluding voided/revised bills
       await recalculateShiftTotals(currentShift.id, fetched);
@@ -117,7 +118,8 @@ export default function ShiftManagement() {
         detailModalShift.id,
         detailModalShift.staffId,
         detailModalShift.openedAt,
-        detailModalShift.closedAt
+        detailModalShift.closedAt,
+        detailModalShift.staffName
       ).finally(() => setLoadingModalBills(false));
     }
   }, [detailModalShift?.id, fetchBillsForShift]);
@@ -283,7 +285,8 @@ export default function ShiftManagement() {
         targetShift.id,
         targetShift.staffId,
         targetShift.openedAt,
-        targetShift.closedAt
+        targetShift.closedAt,
+        targetShift.staffName
       );
     } catch (err) {
       console.error('Error fetching bills before close:', err);
@@ -380,7 +383,7 @@ export default function ShiftManagement() {
   const handleRecalculateClosedShift = async (s: Shift) => {
     setRecalculating(true);
     try {
-      const fetched = await fetchBillsForShift(s.id, s.staffId, s.openedAt, s.closedAt);
+      const fetched = await fetchBillsForShift(s.id, s.staffId, s.openedAt, s.closedAt, s.staffName);
       const paid = fetched.filter((b) => isBillInShift(b, s) && (b.status === 'paid' || !b.status));
       const cash = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'cash').reduce((a, p) => a + p.amount, 0), 0);
       const upi  = paid.reduce((acc, b) => acc + b.payments.filter((p) => p.mode === 'upi').reduce((a, p) => a + p.amount, 0), 0);
@@ -718,7 +721,7 @@ export default function ShiftManagement() {
                       key={s.id}
                       onClick={() => {
                         setSelectedShiftId(s.id);
-                        fetchBillsForShift(s.id, s.staffId, s.openedAt, s.closedAt);
+                        fetchBillsForShift(s.id, s.staffId, s.openedAt, s.closedAt, s.staffName);
                       }}
                       style={{
                         display: 'flex',

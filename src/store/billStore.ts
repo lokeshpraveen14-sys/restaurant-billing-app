@@ -40,7 +40,7 @@ interface BillState {
   syncAllLocalBillsToCloud: () => Promise<{ uploaded: number; total: number }>;
   initBillSync: () => void;
   refreshTodayBills: () => Promise<void>;
-  fetchBillsForShift: (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date) => Promise<Bill[]>;
+  fetchBillsForShift: (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date, staffName?: string) => Promise<Bill[]>;
 }
 
 export function mapDbBill(b: any): Bill {
@@ -590,7 +590,7 @@ export const useBillStore = create<BillState>()(
         .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: false })
-        .limit(250);
+        .limit(2000);
 
       if (!error && data) {
         const dbBills = data.map(mapDbBill);
@@ -655,21 +655,40 @@ export const useBillStore = create<BillState>()(
     }
   },
 
-  fetchBillsForShift: async (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date) => {
+  fetchBillsForShift: async (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date, staffName?: string) => {
     if (!shiftId) return [];
 
     try {
       let query = supabase
         .from('bills')
-        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at');
+        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
+        .limit(2000);
 
       if (openedAt) {
         const startIso = (openedAt instanceof Date ? openedAt : new Date(openedAt)).toISOString();
-        if (closedAt) {
-          const endIso = (closedAt instanceof Date ? closedAt : new Date(closedAt)).toISOString();
-          query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},created_at.lte.${endIso})`);
+        const endIso = closedAt ? (closedAt instanceof Date ? closedAt : new Date(closedAt)).toISOString() : null;
+
+        // If staff identifier is provided, strictly guard time-window fallback to ONLY this staff
+        if (staffName && staffName.trim()) {
+          const cleanName = staffName.trim();
+          if (endIso) {
+            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},created_at.lte.${endIso},staff_name.ilike.%${cleanName}%)`);
+          } else {
+            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},staff_name.ilike.%${cleanName}%)`);
+          }
+        } else if (staffId && staffId.trim()) {
+          const cleanId = staffId.trim();
+          if (endIso) {
+            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},created_at.lte.${endIso},staff_id.eq.${cleanId})`);
+          } else {
+            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},staff_id.eq.${cleanId})`);
+          }
         } else {
-          query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso})`);
+          if (endIso) {
+            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso},created_at.lte.${endIso})`);
+          } else {
+            query = query.or(`shift_id.eq.${shiftId},and(created_at.gte.${startIso})`);
+          }
         }
       } else {
         query = query.eq('shift_id', shiftId);

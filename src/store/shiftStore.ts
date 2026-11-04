@@ -372,8 +372,15 @@ export const useShiftStore = create<ShiftState>()(
 
         if (!target) return;
 
-        // Paid bills only (exclude voided and revised bills)
-        const paidBills = shiftBills.filter((b) => b.status === 'paid' || !b.status);
+        // Paid bills only for THIS shift or THIS staff (prevent cross-contamination)
+        const paidBills = shiftBills.filter((b) => {
+          if (b.status === 'void') return false;
+          if (b.shiftId && b.shiftId === shiftId) return true;
+          if (b.shiftId && b.shiftId !== shiftId) return false;
+          if (target.staffId && b.staffId && String(b.staffId).trim() === String(target.staffId).trim()) return true;
+          if (target.staffName && b.staffName && b.staffName.toLowerCase().trim() === target.staffName.toLowerCase().trim()) return true;
+          return false;
+        });
 
         const totalCash = paidBills.reduce(
           (s, b) =>
