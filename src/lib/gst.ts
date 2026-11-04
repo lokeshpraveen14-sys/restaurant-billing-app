@@ -233,13 +233,44 @@ export async function getNextInvoiceNumber(
   prefix: string,
   localFallback: () => string
 ): Promise<string> {
+  // Helper to ensure local fallback never reuses any existing invoice number
+  const resolveSafeLocal = async (fy: string): Promise<string> => {
+    let candidate = localFallback();
+    try {
+      const { useBillStore } = await import('../store/billStore');
+      const { useSettingsStore } = await import('../store/settingsStore');
+      const bills = useBillStore.getState().bills;
+      let maxCounter = 0;
+      const pfxPatt = new RegExp(`^${prefix}/${fy}/(\\d+)$`, 'i');
+      for (const b of bills) {
+        if (b.invoiceNumber) {
+          const m = b.invoiceNumber.match(pfxPatt);
+          if (m) {
+            const num = parseInt(m[1], 10);
+            if (!isNaN(num) && num > maxCounter) {
+              maxCounter = num;
+            }
+          }
+        }
+      }
+      const mCandidate = candidate.match(pfxPatt);
+      const candNum = mCandidate ? parseInt(mCandidate[1], 10) : 0;
+      if (maxCounter >= candNum) {
+        const nextNum = maxCounter + 1;
+        candidate = generateInvoiceNumber(prefix, nextNum);
+        useSettingsStore.getState().syncInvoiceCounter(candidate);
+      }
+    } catch {
+      // ignore
+    }
+    return candidate;
+  };
+
   // Chain onto the existing queue so calls are strictly serialized
   _invoiceQueue = _invoiceQueue.then(async () => {
+    const fy = getCurrentFY();
     try {
-      const fy = getCurrentFY();
-
-      // Race the RPC against a 1.5s timeout — if Supabase is quota-blocked (402)
-      // or slow, we immediately fall through to the local counter so billing is never delayed.
+      // Race the RPC against a 4s timeout (adequate for mobile/wi-fi)
       const rpcResult = await Promise.race<string | null>([
         supabase
           .rpc('get_invoice_number_v2', { p_prefix: prefix, p_fy: fy })
@@ -247,7 +278,7 @@ export async function getNextInvoiceNumber(
             if (error || !data) throw error;
             return data as string;
           }),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
       ]);
 
       if (rpcResult) {
@@ -255,20 +286,24 @@ export async function getNextInvoiceNumber(
           const { useBillStore } = await import('../store/billStore');
           const isDuplicate = useBillStore.getState().bills.some((b) => b.invoiceNumber === rpcResult);
           if (isDuplicate) {
-            console.warn('[getNextInvoiceNumber] RPC returned an already existing invoice number, falling back to local counter');
-            return localFallback();
+            console.warn('[getNextInvoiceNumber] RPC returned an already existing invoice number, retrying once...');
+            const retryRes = await supabase.rpc('get_invoice_number_v2', { p_prefix: prefix, p_fy: fy });
+            if (retryRes.data && !useBillStore.getState().bills.some((b) => b.invoiceNumber === retryRes.data)) {
+              return retryRes.data as string;
+            }
+            return await resolveSafeLocal(fy);
           }
         } catch {
           // ignore import failure
         }
         return rpcResult;
       }
-      // Timeout hit — fall to local counter below
+      // Timeout hit — fall to safe local counter below
       throw new Error('RPC timeout');
     } catch {
-      // Pure local fallback — instant, no network call
-      console.warn('[getNextInvoiceNumber] Using local counter (Supabase unavailable)');
-      return localFallback();
+      // Safe local fallback — verified against all existing local bills
+      console.warn('[getNextInvoiceNumber] Using safe local counter (Supabase unavailable or slow)');
+      return await resolveSafeLocal(fy);
     }
   });
   return _invoiceQueue;
