@@ -35,6 +35,8 @@ interface BillState {
     staffFilter?: { staffId?: string; staffName?: string }
   ) => Promise<Bill[]>;
   fetchCustomerBills: (startDate?: Date, endDate?: Date) => Promise<CustomerBillSummary[]>;
+  pendingSyncBillIds: string[];
+  syncPendingBills: () => Promise<void>;
   initBillSync: () => void;
   refreshTodayBills: () => Promise<void>;
   fetchBillsForShift: (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date) => Promise<Bill[]>;
@@ -98,10 +100,54 @@ export function mapDbBill(b: any): Bill {
   };
 }
 
+export function mapBillToPayload(bill: Bill): any {
+  const createdIso = (bill.createdAt instanceof Date ? bill.createdAt : new Date(bill.createdAt || Date.now())).toISOString();
+  return {
+    id: bill.id,
+    invoice_number: bill.invoiceNumber,
+    order_id: bill.orderId,
+    table_id: bill.tableId || null,
+    table_number: bill.tableNumber || null,
+    order_type: bill.orderType,
+    items: bill.items,
+    subtotal: bill.subtotal,
+    total_gst: bill.totalGST,
+    cgst_amount: bill.cgstAmount ?? 0,
+    sgst_amount: bill.sgstAmount ?? 0,
+    igst_amount: bill.igstAmount ?? 0,
+    service_charge: bill.serviceCharge,
+    discount_amount: bill.discountAmount,
+    total_amount: bill.totalAmount,
+    payments: bill.payments,
+    staff_name: bill.staffName,
+    status: bill.status || 'paid',
+    guest_count: bill.guestCount,
+    customer_name: bill.customerName || null,
+    customer_phone: bill.customerPhone || null,
+    customer_gstin: bill.customerGstin || null,
+    hsn_codes: bill.hsnCodes || null,
+    place_of_supply: bill.placeOfSupply || null,
+    outlet_gstin: bill.outletGSTIN || null,
+    is_gst_bill: bill.isGstBill !== false,
+    shift_id: bill.shiftId || null,
+    staff_id: bill.staffId || null,
+    created_at: createdIso,
+    voided_by: bill.voidedBy || null,
+    voided_at: bill.voidedAt ? (bill.voidedAt instanceof Date ? bill.voidedAt.toISOString() : new Date(bill.voidedAt).toISOString()) : null,
+    void_reason: bill.voidReason || null,
+    void_shift_id: bill.voidShiftId || null,
+    revised_by: bill.revisedBy || null,
+    revised_at: bill.revisedAt ? (bill.revisedAt instanceof Date ? bill.revisedAt.toISOString() : new Date(bill.revisedAt).toISOString()) : null,
+    revised_reason: bill.revisedReason || null,
+    revised_shift_id: bill.revisedShiftId || null,
+  };
+}
+
 export const useBillStore = create<BillState>()(
   persist(
     (set, get) => ({
       bills: [],
+      pendingSyncBillIds: [],
 
       addBill: async (bill: Bill) => {
         // Guard: skip if this bill ID is already in local state (prevents double-save on retry)
@@ -112,58 +158,75 @@ export const useBillStore = create<BillState>()(
 
         // Save locally FIRST for instant UI — billing never waits for the network
         const newBill = { ...bill, status: bill.status || ('paid' as const) };
-        set((state) => ({ bills: [newBill, ...state.bills.filter((b) => b.id !== newBill.id)] }));
+        set((state) => ({
+          bills: [newBill, ...state.bills.filter((b) => b.id !== newBill.id)],
+          pendingSyncBillIds: Array.from(new Set([...(state.pendingSyncBillIds || []), bill.id])),
+        }));
 
-        const createdIso = (bill.createdAt instanceof Date ? bill.createdAt : new Date(bill.createdAt || Date.now())).toISOString();
+        const billPayload = mapBillToPayload(newBill);
 
-        const billPayload: any = {
-          id: bill.id,
-          invoice_number: bill.invoiceNumber,
-          order_id: bill.orderId,
-          table_id: bill.tableId || null,
-          table_number: bill.tableNumber || null,
-          order_type: bill.orderType,
-          items: bill.items,
-          subtotal: bill.subtotal,
-          total_gst: bill.totalGST,
-          cgst_amount: bill.cgstAmount ?? 0,
-          sgst_amount: bill.sgstAmount ?? 0,
-          igst_amount: bill.igstAmount ?? 0,
-          service_charge: bill.serviceCharge,
-          discount_amount: bill.discountAmount,
-          total_amount: bill.totalAmount,
-          payments: bill.payments,
-          staff_name: bill.staffName,
-          status: newBill.status,
-          guest_count: bill.guestCount,
-          customer_name: bill.customerName || null,
-          customer_phone: bill.customerPhone || null,
-          customer_gstin: bill.customerGstin || null,
-          hsn_codes: bill.hsnCodes || null,
-          place_of_supply: bill.placeOfSupply || null,
-          outlet_gstin: bill.outletGSTIN || null,
-          is_gst_bill: bill.isGstBill !== false,
-          shift_id: bill.shiftId || null,
-          staff_id: bill.staffId || null,
-          created_at: createdIso,
-        };
-
-        supabase.from('bills').upsert(billPayload, { onConflict: 'id' }).then(async ({ error }) => {
-          if (error) {
-            console.warn('[addBill] Background Supabase sync error:', error.message);
+        try {
+          const { error } = await supabase.from('bills').upsert(billPayload, { onConflict: 'id' });
+          if (!error) {
+            set((state) => ({
+              pendingSyncBillIds: (state.pendingSyncBillIds || []).filter((id) => id !== bill.id),
+            }));
+            console.log('[addBill] Synced to Supabase ✓', bill.invoiceNumber);
+          } else {
+            console.warn('[addBill] Supabase upsert error, bill queued for offline retry:', error.message);
             // Fallback for integer table_number column if DB column has not been converted to TEXT yet
             if (error.code === '22P02' || error.message?.includes('integer')) {
               const numOnly = parseInt(String(bill.tableNumber || '').replace(/\D/g, ''), 10);
               billPayload.table_number = isNaN(numOnly) ? null : numOnly;
               const { error: retryError } = await supabase.from('bills').upsert(billPayload, { onConflict: 'id' });
               if (!retryError) {
-                console.log('[addBill] Synced to Supabase with fallback table_number ✓', bill.invoiceNumber);
+                set((state) => ({
+                  pendingSyncBillIds: (state.pendingSyncBillIds || []).filter((id) => id !== bill.id),
+                }));
+                console.log('[addBill] Synced with fallback table_number ✓', bill.invoiceNumber);
               }
             }
-          } else {
-            console.log('[addBill] Synced to Supabase ✓', bill.invoiceNumber);
           }
-        });
+        } catch (err) {
+          console.warn('[addBill] Offline: bill stored locally and queued for auto-sync:', bill.invoiceNumber);
+        }
+      },
+
+      syncPendingBills: async () => {
+        const pendingIds = get().pendingSyncBillIds || [];
+        if (pendingIds.length === 0) return;
+
+        const allBills = get().bills;
+        const pendingBills = allBills.filter((b) => pendingIds.includes(b.id));
+        if (pendingBills.length === 0) {
+          set({ pendingSyncBillIds: [] });
+          return;
+        }
+
+        const syncedIds: string[] = [];
+        for (const bill of pendingBills) {
+          try {
+            const payload = mapBillToPayload(bill);
+            const { error } = await supabase.from('bills').upsert(payload, { onConflict: 'id' });
+            if (!error) {
+              syncedIds.push(bill.id);
+            } else if (error.code === '22P02' || error.message?.includes('integer')) {
+              const numOnly = parseInt(String(bill.tableNumber || '').replace(/\D/g, ''), 10);
+              payload.table_number = isNaN(numOnly) ? null : numOnly;
+              const { error: retryError } = await supabase.from('bills').upsert(payload, { onConflict: 'id' });
+              if (!retryError) syncedIds.push(bill.id);
+            }
+          } catch {
+            // Still offline or transient error — will retry on next cycle
+          }
+        }
+
+        if (syncedIds.length > 0) {
+          set((state) => ({
+            pendingSyncBillIds: (state.pendingSyncBillIds || []).filter((id) => !syncedIds.includes(id)),
+          }));
+          console.log(`[syncPendingBills] Successfully synced ${syncedIds.length} offline bills to Supabase ✓`);
+        }
       },
 
   voidBill: async (billId: string, voidedBy: string, voidReason?: string, shiftId?: string) => {
@@ -445,6 +508,23 @@ export const useBillStore = create<BillState>()(
         }
       })
       .subscribe();
+
+    // Auto-sync any queued offline bills on startup, when coming online, and periodically
+    if (typeof window !== 'undefined') {
+      get().syncPendingBills();
+
+      window.addEventListener('online', () => {
+        console.log('[initBillSync] Device back online — syncing queued offline bills...');
+        get().syncPendingBills();
+      });
+
+      // Periodic safety check every 25s
+      setInterval(() => {
+        if (navigator.onLine && (get().pendingSyncBillIds?.length || 0) > 0) {
+          get().syncPendingBills();
+        }
+      }, 25000);
+    }
   },
 
   fetchBillsForShift: async (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date) => {

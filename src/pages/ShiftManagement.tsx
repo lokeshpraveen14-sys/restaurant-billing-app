@@ -268,6 +268,13 @@ export default function ShiftManagement() {
       return;
     }
 
+    // 0. Flush any offline pending bills to Supabase first before closing
+    try {
+      await useBillStore.getState().syncPendingBills();
+    } catch {
+      // ignore network errors
+    }
+
     // CRITICAL FIX: Always fetch fresh bills from server before closing
     // to avoid showing 0s in shift history on multi-device setups
     let freshBills: Bill[] = [];
@@ -1683,6 +1690,31 @@ export default function ShiftManagement() {
                       </span>
                     )}
                   </div>
+
+                  {Math.abs(modalRevenue - (detailModalShift?.totalRevenue || 0)) > 1 && !loadingModalBills && (
+                    <div style={{
+                      marginTop: -4,
+                      marginBottom: 12,
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid var(--status-occupied)',
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}>
+                      <span>⚠️ Live bills in database ({formatAmount(modalRevenue)}) differ from saved summary ({formatAmount(detailModalShift?.totalRevenue)}).</span>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '3px 10px', color: 'var(--brand-color)', fontWeight: 700 }}
+                        onClick={() => handleRecalculateClosedShift(detailModalShift)}
+                        disabled={recalculating}
+                      >
+                        ⚡ Sync Summary
+                      </button>
+                    </div>
+                  )}
 
                   {/* Cash Drawer Reconciliation */}
                   <div style={{

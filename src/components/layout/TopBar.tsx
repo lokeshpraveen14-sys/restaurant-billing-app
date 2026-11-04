@@ -1,7 +1,8 @@
 import React from 'react';
-import { Bell, WifiHigh, WifiSlash, Sun, Moon, CornersOut, CornersIn } from '@phosphor-icons/react';
+import { Bell, WifiHigh, WifiSlash, Sun, Moon, CornersOut, CornersIn, ArrowsClockwise } from '@phosphor-icons/react';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
+import { useBillStore } from '../../store/billStore';
 import { APP_VERSION, BUILD_TIMESTAMP } from '../../version';
 
 interface TopBarProps {
@@ -14,6 +15,7 @@ export default function TopBar({ title, actions }: TopBarProps) {
   const { setMobileSidebar, theme, toggleTheme } = useUIStore();
   const [isOnline, setIsOnline] = React.useState(navigator.onLine);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const pendingSyncBillIds = useBillStore((s) => s.pendingSyncBillIds || []);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
@@ -65,6 +67,31 @@ export default function TopBar({ title, actions }: TopBarProps) {
         <button className="btn btn-ghost btn-icon hide-on-mobile" onClick={toggleFullscreen} title="Toggle Fullscreen">
           {isFullscreen ? <CornersIn size={20} /> : <CornersOut size={20} />}
         </button>
+
+        {/* Offline Bills Sync Indicator */}
+        {pendingSyncBillIds.length > 0 && (
+          <button
+            onClick={() => useBillStore.getState().syncPendingBills()}
+            title={`${pendingSyncBillIds.length} offline bill(s) pending sync. Click to retry sync now.`}
+            className="btn btn-ghost btn-sm"
+            style={{
+              fontSize: '0.72rem',
+              padding: '2px 8px',
+              borderRadius: 12,
+              background: 'rgba(245, 158, 11, 0.15)',
+              border: '1px solid #f59e0b',
+              color: '#f59e0b',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              cursor: 'pointer',
+            }}
+          >
+            <ArrowsClockwise size={13} />
+            {pendingSyncBillIds.length} offline bill{pendingSyncBillIds.length > 1 ? 's' : ''}
+          </button>
+        )}
 
         {/* Online indicator */}
         <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600 }}>
