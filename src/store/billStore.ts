@@ -321,35 +321,71 @@ export const useBillStore = create<BillState>()(
     limit = 50,
     staffFilter?: { staffId?: string; staffName?: string }
   ) => {
-    // Server-side pagination: only fetch one page at a time to reduce egress
+    // 1. Immediately trigger background sync for any pending offline bills
+    if (typeof window !== 'undefined' && navigator.onLine && (get().pendingSyncBillIds?.length || 0) > 0) {
+      get().syncPendingBills().catch(() => {});
+    }
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    let query = supabase
-      .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at', { count: 'exact' })
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
+    // Helper to extract matching local bills
+    const getMatchingLocalBills = () => {
+      return (get().bills || [])
+        .filter((b) => {
+          const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+          if (d < startDate || d > endDate) return false;
+          if (!staffFilter) return true;
+          const matchId = staffFilter.staffId && b.staffId && String(b.staffId).trim() === String(staffFilter.staffId).trim();
+          const matchName = staffFilter.staffName && b.staffName && b.staffName.toLowerCase().trim() === staffFilter.staffName.toLowerCase().trim();
+          return Boolean(matchId || matchName);
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    };
 
-    if (staffFilter?.staffId && staffFilter?.staffName) {
-      query = query.or(`staff_id.eq.${staffFilter.staffId},staff_name.ilike.%${staffFilter.staffName.trim()}%`);
-    } else if (staffFilter?.staffId) {
-      query = query.eq('staff_id', staffFilter.staffId);
-    } else if (staffFilter?.staffName) {
-      query = query.ilike('staff_name', `%${staffFilter.staffName.trim()}%`);
+    try {
+      let query = supabase
+        .from('bills')
+        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at', { count: 'exact' })
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString());
+
+      if (staffFilter?.staffId && staffFilter?.staffName) {
+        query = query.or(`staff_id.eq.${staffFilter.staffId},staff_name.ilike.%${staffFilter.staffName.trim()}%`);
+      } else if (staffFilter?.staffId) {
+        query = query.eq('staff_id', staffFilter.staffId);
+      } else if (staffFilter?.staffName) {
+        query = query.ilike('staff_name', `%${staffFilter.staffName.trim()}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error || !data) {
+        console.warn('[fetchBillsByDateRange] Supabase query failed or offline, returning matching local bills:', error?.message);
+        const local = getMatchingLocalBills();
+        return { bills: local.slice(from, to + 1), total: local.length };
+      }
+
+      const mapped = data.map(mapDbBill);
+
+      // On first page, seamlessly prepend any local bills that are pending sync or not yet in Supabase
+      if (page === 1) {
+        const dbIds = new Set(mapped.map((b) => b.id));
+        const unsyncedLocal = getMatchingLocalBills().filter((b) => !dbIds.has(b.id));
+        if (unsyncedLocal.length > 0) {
+          const combined = [...unsyncedLocal, ...mapped];
+          return { bills: combined.slice(0, limit), total: (count ?? mapped.length) + unsyncedLocal.length };
+        }
+      }
+
+      return { bills: mapped, total: count ?? mapped.length };
+    } catch (err) {
+      console.warn('[fetchBillsByDateRange] Network error, using local fallback:', err);
+      const local = getMatchingLocalBills();
+      return { bills: local.slice(from, to + 1), total: local.length };
     }
-
-    const { data, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range(from, to);
-
-    if (error || !data) {
-      console.error('Failed to fetch bills:', error);
-      return { bills: [], total: 0 };
-    }
-
-    const mapped = data.map(mapDbBill);
-    return { bills: mapped, total: count ?? 0 };
   },
 
   fetchAllBillsForDateRange: async (
@@ -434,24 +470,39 @@ export const useBillStore = create<BillState>()(
   },
 
   initBillSync: async () => {
-    // Fetch past 48 hours of bills on startup so open shifts spanning midnight are fully covered
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 2);
-    startDate.setHours(0, 0, 0, 0);
+    // 1. Immediately register offline/online listeners and background sync workers (never block on network calls)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => {
+        console.log('[initBillSync] Device back online — syncing queued offline bills...');
+        get().syncPendingBills().catch(() => {});
+      });
 
-    const { data, error } = await supabase
-      .from('bills')
-      .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
-      .gte('created_at', startDate.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(250);
+      // Auto-sync on boot and every 25 seconds
+      get().syncPendingBills().catch(() => {});
+      setInterval(() => {
+        if (navigator.onLine && (get().pendingSyncBillIds?.length || 0) > 0) {
+          get().syncPendingBills().catch(() => {});
+        }
+      }, 25000);
+    }
 
-    if (!error && data) {
-      const dbBills = data.map(mapDbBill);
+    // 2. Fetch past 48 hours of bills on startup inside safe try/catch
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 2);
+      startDate.setHours(0, 0, 0, 0);
 
-      // Deduplicate DB bills strictly by primary key ID — NEVER by invoice_number
-      // (as multiple valid bills might share a number if a sequence collided, dropping real orders)
-      const deduplicatedDbBills = (() => {
+      const { data, error } = await supabase
+        .from('bills')
+        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(250);
+
+      if (!error && data) {
+        const dbBills = data.map(mapDbBill);
+
+        // Deduplicate DB bills strictly by primary key ID — NEVER by invoice_number
         const seenIds = new Set<string>();
         const list: Bill[] = [];
         for (const b of dbBills) {
@@ -460,70 +511,54 @@ export const useBillStore = create<BillState>()(
             list.push(b);
           }
         }
-        return list;
-      })();
 
-      // Merge: DB is source of truth, while preserving local-only bills
-      set((state) => {
-        const existingMap = new Map(state.bills.map((b) => [b.id, b]));
-        for (const b of deduplicatedDbBills) {
-          existingMap.set(b.id, b);
-        }
-        const merged = Array.from(existingMap.values()).sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        return { bills: merged };
-      });
+        // Merge: DB is source of truth, while preserving local-only bills
+        set((state) => {
+          const existingMap = new Map(state.bills.map((b) => [b.id, b]));
+          for (const b of list) {
+            existingMap.set(b.id, b);
+          }
+          const merged = Array.from(existingMap.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          return { bills: merged };
+        });
 
-      // Sync the invoice counter based on the bills we just fetched
-      dbBills.forEach((b) => useSettingsStore.getState().syncInvoiceCounter(b.invoiceNumber));
-    }
+        // Sync the invoice counter based on the bills we just fetched
+        dbBills.forEach((b) => useSettingsStore.getState().syncInvoiceCounter(b.invoiceNumber));
+      }
 
-    // Real-time listener on public.bills so admin and cashier devices receive cross-device bill creations instantly
-    const staleChannel = supabase.getChannels().find((c) => c.topic === 'realtime:bills-realtime-sync');
-    if (staleChannel) supabase.removeChannel(staleChannel);
+      // Real-time listener on public.bills so admin and cashier devices receive cross-device bill creations instantly
+      const staleChannel = supabase.getChannels().find((c) => c.topic === 'realtime:bills-realtime-sync');
+      if (staleChannel) supabase.removeChannel(staleChannel);
 
-    supabase
-      .channel('bills-realtime-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
-        const { eventType, new: newRow, old: oldRow } = payload as any;
-        if (eventType === 'DELETE') {
-          set((state) => ({
-            bills: state.bills.filter((b) => b.id !== oldRow.id),
-          }));
-          return;
-        }
+      supabase
+        .channel('bills-realtime-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
+          const { eventType, new: newRow, old: oldRow } = payload as any;
+          if (eventType === 'DELETE') {
+            set((state) => ({
+              bills: state.bills.filter((b) => b.id !== oldRow.id),
+            }));
+            return;
+          }
 
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          const mapped = mapDbBill(newRow);
-          set((state) => {
-            const existingIdx = state.bills.findIndex((b) => b.id === mapped.id);
-            if (existingIdx >= 0) {
-              const updated = [...state.bills];
-              updated[existingIdx] = mapped;
-              return { bills: updated };
-            }
-            return { bills: [mapped, ...state.bills] };
-          });
-        }
-      })
-      .subscribe();
-
-    // Auto-sync any queued offline bills on startup, when coming online, and periodically
-    if (typeof window !== 'undefined') {
-      get().syncPendingBills();
-
-      window.addEventListener('online', () => {
-        console.log('[initBillSync] Device back online — syncing queued offline bills...');
-        get().syncPendingBills();
-      });
-
-      // Periodic safety check every 25s
-      setInterval(() => {
-        if (navigator.onLine && (get().pendingSyncBillIds?.length || 0) > 0) {
-          get().syncPendingBills();
-        }
-      }, 25000);
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            const mapped = mapDbBill(newRow);
+            set((state) => {
+              const existingIdx = state.bills.findIndex((b) => b.id === mapped.id);
+              if (existingIdx >= 0) {
+                const updated = [...state.bills];
+                updated[existingIdx] = mapped;
+                return { bills: updated };
+              }
+              return { bills: [mapped, ...state.bills] };
+            });
+          }
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('[initBillSync] Boot fetch error or offline:', err);
     }
   },
 

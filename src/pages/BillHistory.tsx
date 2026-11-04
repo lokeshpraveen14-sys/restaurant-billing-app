@@ -31,6 +31,8 @@ export default function BillHistory() {
   const voidBill = useBillStore((s) => s.voidBill);
   const reviseBill = useBillStore((s) => s.reviseBill);
   const localBills = useBillStore((s) => s.bills);
+  const pendingSyncBillIds = useBillStore((s) => s.pendingSyncBillIds || []);
+  const syncPendingBills = useBillStore((s) => s.syncPendingBills);
   const settings = useSettingsStore((s) => s.settings);
   const recreateOrderWithItems = useOrderStore((s) => s.recreateOrderWithItems);
   const updateTableStatus = useTableStore((s) => s.updateTableStatus);
@@ -39,6 +41,11 @@ export default function BillHistory() {
   const isAdmin = currentUser?.role === 'admin';
   const toast = useToast();
   const navigate = useNavigate();
+
+  // Immediately try to sync any pending offline bills when opening Bill History
+  useEffect(() => {
+    syncPendingBills().catch(() => {});
+  }, [syncPendingBills]);
 
   const [historyTab, setHistoryTab] = useState<'all' | 'deleted' | 'revised'>('all');
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('today');
@@ -537,6 +544,25 @@ export default function BillHistory() {
                   </button>
                 ))}
               </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={async () => {
+                  await syncPendingBills();
+                  loadBillsManual(currentPage);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '5px 10px',
+                  fontSize: '0.8125rem',
+                  height: 32,
+                }}
+                title="Refresh bills and upload pending offline bills to cloud"
+              >
+                <ArrowsClockwise size={15} />
+                <span>Refresh</span>
+              </button>
               {dateRange === 'custom' && (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <input
@@ -785,6 +811,23 @@ export default function BillHistory() {
                   >
                     <div style={{ flex: '1.5', fontWeight: 600 }}>
                       {bill.invoiceNumber}
+                      {pendingSyncBillIds.includes(bill.id) && (
+                        <span
+                          title="Offline bill stored safely on device. Queued for cloud upload."
+                          style={{
+                            marginLeft: 6,
+                            fontSize: '0.65rem',
+                            background: 'rgba(249, 115, 22, 0.15)',
+                            color: '#ea580c',
+                            border: '1px solid rgba(249, 115, 22, 0.3)',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            fontWeight: 700,
+                          }}
+                        >
+                          ⚡ OFFLINE
+                        </span>
+                      )}
                       {invoiceCounts[bill.invoiceNumber] > 1 && (
                         <span
                           title="Duplicate invoice number"
@@ -852,7 +895,22 @@ export default function BillHistory() {
                           )}
                         </div>
                         <div style={{ flex: '1' }}>
-                          {bill.status === 'void' ? (
+                          {pendingSyncBillIds.includes(bill.id) ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                              <span
+                                className="badge"
+                                style={{
+                                  background: 'rgba(249, 115, 22, 0.15)',
+                                  color: '#ea580c',
+                                  border: '1px solid rgba(249, 115, 22, 0.3)',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ⚡ Offline
+                              </span>
+                              <span style={{ fontSize: '0.65rem', color: '#ea580c', fontWeight: 600 }}>Queued to Sync</span>
+                            </div>
+                          ) : bill.status === 'void' ? (
                             <span className="badge badge-error">Voided</span>
                           ) : bill.status === 'revised' ? (
                             <span
