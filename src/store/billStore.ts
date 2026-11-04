@@ -344,23 +344,38 @@ export const useBillStore = create<BillState>()(
     };
 
     try {
-      let query = supabase
+      let dataQuery = supabase
         .from('bills')
-        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at', { count: 'exact' })
+        .select('id,invoice_number,order_id,table_id,table_number,order_type,items,subtotal,total_gst,cgst_amount,sgst_amount,igst_amount,service_charge,discount_amount,total_amount,payments,staff_name,status,voided_by,voided_at,void_reason,guest_count,customer_name,customer_phone,customer_gstin,place_of_supply,hsn_codes,is_gst_bill,outlet_gstin,shift_id,staff_id,void_shift_id,revised_by,revised_at,revised_reason,created_at')
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString());
+
+      let countQuery = supabase
+        .from('bills')
+        .select('id', { count: 'exact', head: true })
         .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString());
 
       if (staffFilter?.staffId && staffFilter?.staffName) {
-        query = query.or(`staff_id.eq.${staffFilter.staffId},staff_name.ilike.%${staffFilter.staffName.trim()}%`);
+        dataQuery = dataQuery.or(`staff_id.eq.${staffFilter.staffId},staff_name.ilike.%${staffFilter.staffName.trim()}%`);
+        countQuery = countQuery.or(`staff_id.eq.${staffFilter.staffId},staff_name.ilike.%${staffFilter.staffName.trim()}%`);
       } else if (staffFilter?.staffId) {
-        query = query.eq('staff_id', staffFilter.staffId);
+        dataQuery = dataQuery.eq('staff_id', staffFilter.staffId);
+        countQuery = countQuery.eq('staff_id', staffFilter.staffId);
       } else if (staffFilter?.staffName) {
-        query = query.ilike('staff_name', `%${staffFilter.staffName.trim()}%`);
+        dataQuery = dataQuery.ilike('staff_name', `%${staffFilter.staffName.trim()}%`);
+        countQuery = countQuery.ilike('staff_name', `%${staffFilter.staffName.trim()}%`);
       }
 
-      const { data, error, count } = await query
-        .order('created_at', { ascending: false })
-        .range(from, to);
+      // Run data and lightweight count in parallel without statement timeout
+      const [dataRes, countRes] = await Promise.all([
+        dataQuery.order('created_at', { ascending: false }).range(from, to),
+        countQuery,
+      ]);
+
+      const data = dataRes.data;
+      const error = dataRes.error;
+      const count = countRes.count ?? (data ? data.length + from : 0);
 
       if (error || !data) {
         console.warn('[fetchBillsByDateRange] Supabase query failed or offline, returning matching local bills:', error?.message);
