@@ -112,7 +112,6 @@ export function mapBillToPayload(bill: Bill): any {
   const validTableId = isValidUuid(bill.tableId) ? bill.tableId : null;
   const validShiftId = isValidUuid(bill.shiftId) ? bill.shiftId : null;
   const validVoidShiftId = isValidUuid(bill.voidShiftId) ? bill.voidShiftId : null;
-  const validRevisedShiftId = isValidUuid(bill.revisedShiftId) ? bill.revisedShiftId : null;
 
   return {
     id: bill.id,
@@ -151,7 +150,6 @@ export function mapBillToPayload(bill: Bill): any {
     revised_by: bill.revisedBy || null,
     revised_at: bill.revisedAt ? (bill.revisedAt instanceof Date ? bill.revisedAt.toISOString() : new Date(bill.revisedAt).toISOString()) : null,
     revised_reason: bill.revisedReason || null,
-    revised_shift_id: validRevisedShiftId,
   };
 }
 
