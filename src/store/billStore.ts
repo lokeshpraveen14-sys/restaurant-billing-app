@@ -36,7 +36,8 @@ interface BillState {
   ) => Promise<Bill[]>;
   fetchCustomerBills: (startDate?: Date, endDate?: Date) => Promise<CustomerBillSummary[]>;
   pendingSyncBillIds: string[];
-  syncPendingBills: () => Promise<void>;
+  syncPendingBills: () => Promise<{ syncedCount: number; remainingCount: number }>;
+  syncAllLocalBillsToCloud: () => Promise<{ uploaded: number; total: number }>;
   initBillSync: () => void;
   refreshTodayBills: () => Promise<void>;
   fetchBillsForShift: (shiftId: string, staffId?: string, openedAt?: Date, closedAt?: Date) => Promise<Bill[]>;
@@ -100,28 +101,39 @@ export function mapDbBill(b: any): Bill {
   };
 }
 
+const isValidUuid = (val: any) =>
+  typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 export function mapBillToPayload(bill: Bill): any {
   const createdIso = (bill.createdAt instanceof Date ? bill.createdAt : new Date(bill.createdAt || Date.now())).toISOString();
+  
+  // Guard UUID fields to prevent DB invalid syntax errors
+  const validOrderId = isValidUuid(bill.orderId) ? bill.orderId : crypto.randomUUID();
+  const validTableId = isValidUuid(bill.tableId) ? bill.tableId : null;
+  const validShiftId = isValidUuid(bill.shiftId) ? bill.shiftId : null;
+  const validVoidShiftId = isValidUuid(bill.voidShiftId) ? bill.voidShiftId : null;
+  const validRevisedShiftId = isValidUuid(bill.revisedShiftId) ? bill.revisedShiftId : null;
+
   return {
     id: bill.id,
     invoice_number: bill.invoiceNumber,
-    order_id: bill.orderId,
-    table_id: bill.tableId || null,
-    table_number: bill.tableNumber || null,
+    order_id: validOrderId,
+    table_id: validTableId,
+    table_number: bill.tableNumber ? String(bill.tableNumber) : null,
     order_type: bill.orderType,
-    items: bill.items,
-    subtotal: bill.subtotal,
-    total_gst: bill.totalGST,
-    cgst_amount: bill.cgstAmount ?? 0,
-    sgst_amount: bill.sgstAmount ?? 0,
-    igst_amount: bill.igstAmount ?? 0,
-    service_charge: bill.serviceCharge,
-    discount_amount: bill.discountAmount,
-    total_amount: bill.totalAmount,
-    payments: bill.payments,
-    staff_name: bill.staffName,
+    items: Array.isArray(bill.items) ? bill.items : [],
+    subtotal: Number(bill.subtotal || 0),
+    total_gst: Number(bill.totalGST || 0),
+    cgst_amount: Number(bill.cgstAmount ?? 0),
+    sgst_amount: Number(bill.sgstAmount ?? 0),
+    igst_amount: Number(bill.igstAmount ?? 0),
+    service_charge: Number(bill.serviceCharge || 0),
+    discount_amount: Number(bill.discountAmount || 0),
+    total_amount: Number(bill.totalAmount || 0),
+    payments: Array.isArray(bill.payments) ? bill.payments : [],
+    staff_name: bill.staffName || null,
     status: bill.status || 'paid',
-    guest_count: bill.guestCount,
+    guest_count: typeof bill.guestCount === 'number' ? bill.guestCount : null,
     customer_name: bill.customerName || null,
     customer_phone: bill.customerPhone || null,
     customer_gstin: bill.customerGstin || null,
@@ -129,17 +141,17 @@ export function mapBillToPayload(bill: Bill): any {
     place_of_supply: bill.placeOfSupply || null,
     outlet_gstin: bill.outletGSTIN || null,
     is_gst_bill: bill.isGstBill !== false,
-    shift_id: bill.shiftId || null,
+    shift_id: validShiftId,
     staff_id: bill.staffId || null,
     created_at: createdIso,
     voided_by: bill.voidedBy || null,
     voided_at: bill.voidedAt ? (bill.voidedAt instanceof Date ? bill.voidedAt.toISOString() : new Date(bill.voidedAt).toISOString()) : null,
     void_reason: bill.voidReason || null,
-    void_shift_id: bill.voidShiftId || null,
+    void_shift_id: validVoidShiftId,
     revised_by: bill.revisedBy || null,
     revised_at: bill.revisedAt ? (bill.revisedAt instanceof Date ? bill.revisedAt.toISOString() : new Date(bill.revisedAt).toISOString()) : null,
     revised_reason: bill.revisedReason || null,
-    revised_shift_id: bill.revisedShiftId || null,
+    revised_shift_id: validRevisedShiftId,
   };
 }
 
@@ -193,40 +205,108 @@ export const useBillStore = create<BillState>()(
       },
 
       syncPendingBills: async () => {
-        const pendingIds = get().pendingSyncBillIds || [];
-        if (pendingIds.length === 0) return;
+        // Collect IDs: explicitly queued pending IDs AND any local bill from the last 48 hours
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 2);
 
-        const allBills = get().bills;
-        const pendingBills = allBills.filter((b) => pendingIds.includes(b.id));
-        if (pendingBills.length === 0) {
+        const allBills = get().bills || [];
+        const pendingSet = new Set<string>(get().pendingSyncBillIds || []);
+
+        // Also check any local bill from the last 48 hours that might not have been recorded in pendingSyncBillIds (e.g. from v3.4.5)
+        allBills.forEach((b) => {
+          const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+          if (d >= cutoff) {
+            pendingSet.add(b.id);
+          }
+        });
+
+        if (pendingSet.size === 0) return { syncedCount: 0, remainingCount: 0 };
+
+        const candidateBills = allBills.filter((b) => pendingSet.has(b.id));
+        if (candidateBills.length === 0) {
           set({ pendingSyncBillIds: [] });
-          return;
+          return { syncedCount: 0, remainingCount: 0 };
         }
 
+        const BATCH_SIZE = 25;
         const syncedIds: string[] = [];
-        for (const bill of pendingBills) {
+
+        for (let i = 0; i < candidateBills.length; i += BATCH_SIZE) {
+          const chunk = candidateBills.slice(i, i + BATCH_SIZE);
+          const payloads = chunk.map(mapBillToPayload);
+
           try {
-            const payload = mapBillToPayload(bill);
-            const { error } = await supabase.from('bills').upsert(payload, { onConflict: 'id' });
+            const { error } = await supabase.from('bills').upsert(payloads, { onConflict: 'id' });
             if (!error) {
-              syncedIds.push(bill.id);
-            } else if (error.code === '22P02' || error.message?.includes('integer')) {
-              const numOnly = parseInt(String(bill.tableNumber || '').replace(/\D/g, ''), 10);
-              payload.table_number = isNaN(numOnly) ? null : numOnly;
-              const { error: retryError } = await supabase.from('bills').upsert(payload, { onConflict: 'id' });
-              if (!retryError) syncedIds.push(bill.id);
+              chunk.forEach((b) => syncedIds.push(b.id));
+            } else {
+              // If batch upsert had an error, try one by one with table_number fallback
+              for (const bill of chunk) {
+                try {
+                  const p = mapBillToPayload(bill);
+                  const { error: sErr } = await supabase.from('bills').upsert(p, { onConflict: 'id' });
+                  if (!sErr) {
+                    syncedIds.push(bill.id);
+                  } else if (sErr.code === '22P02' || sErr.message?.includes('integer')) {
+                    const numOnly = parseInt(String(bill.tableNumber || '').replace(/\D/g, ''), 10);
+                    p.table_number = isNaN(numOnly) ? null : numOnly;
+                    const { error: rErr } = await supabase.from('bills').upsert(p, { onConflict: 'id' });
+                    if (!rErr) syncedIds.push(bill.id);
+                  }
+                } catch (_) {}
+              }
             }
-          } catch {
-            // Still offline or transient error — will retry on next cycle
+          } catch (_) {
+            // Network failure — stop and retry on next cycle
+            break;
           }
         }
 
+        let remaining = 0;
         if (syncedIds.length > 0) {
-          set((state) => ({
-            pendingSyncBillIds: (state.pendingSyncBillIds || []).filter((id) => !syncedIds.includes(id)),
-          }));
-          console.log(`[syncPendingBills] Successfully synced ${syncedIds.length} offline bills to Supabase ✓`);
+          set((state) => {
+            const nextPending = (state.pendingSyncBillIds || []).filter((id) => !syncedIds.includes(id));
+            remaining = nextPending.length;
+            return { pendingSyncBillIds: nextPending };
+          });
+          console.log(`[syncPendingBills] Successfully synced ${syncedIds.length} bills to Supabase ✓`);
+        } else {
+          remaining = (get().pendingSyncBillIds || []).length;
         }
+
+        return { syncedCount: syncedIds.length, remainingCount: remaining };
+      },
+
+      syncAllLocalBillsToCloud: async () => {
+        const allBills = get().bills || [];
+        if (allBills.length === 0) return { uploaded: 0, total: 0 };
+
+        const BATCH_SIZE = 25;
+        let uploaded = 0;
+
+        for (let i = 0; i < allBills.length; i += BATCH_SIZE) {
+          const chunk = allBills.slice(i, i + BATCH_SIZE);
+          const payloads = chunk.map(mapBillToPayload);
+          try {
+            const { error } = await supabase.from('bills').upsert(payloads, { onConflict: 'id' });
+            if (!error) {
+              uploaded += chunk.length;
+            } else {
+              for (const bill of chunk) {
+                try {
+                  const p = mapBillToPayload(bill);
+                  const { error: sErr } = await supabase.from('bills').upsert(p, { onConflict: 'id' });
+                  if (!sErr) uploaded++;
+                } catch (_) {}
+              }
+            }
+          } catch (_) {
+            break;
+          }
+        }
+
+        set({ pendingSyncBillIds: [] });
+        return { uploaded, total: allBills.length };
       },
 
   voidBill: async (billId: string, voidedBy: string, voidReason?: string, shiftId?: string) => {
@@ -495,10 +575,10 @@ export const useBillStore = create<BillState>()(
       // Auto-sync on boot and every 25 seconds
       get().syncPendingBills().catch(() => {});
       setInterval(() => {
-        if (navigator.onLine && (get().pendingSyncBillIds?.length || 0) > 0) {
+        if (navigator.onLine) {
           get().syncPendingBills().catch(() => {});
         }
-      }, 25000);
+      }, 20000);
     }
 
     // 2. Fetch past 48 hours of bills on startup inside safe try/catch

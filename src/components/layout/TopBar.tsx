@@ -1,7 +1,7 @@
 import React from 'react';
 import { Bell, WifiHigh, WifiSlash, Sun, Moon, CornersOut, CornersIn, ArrowsClockwise } from '@phosphor-icons/react';
 import { useAuthStore } from '../../store/authStore';
-import { useUIStore } from '../../store/uiStore';
+import { useUIStore, useToast } from '../../store/uiStore';
 import { useBillStore } from '../../store/billStore';
 import { APP_VERSION, BUILD_TIMESTAMP } from '../../version';
 
@@ -13,9 +13,31 @@ interface TopBarProps {
 export default function TopBar({ title, actions }: TopBarProps) {
   const { currentUser } = useAuthStore();
   const { setMobileSidebar, theme, toggleTheme } = useUIStore();
+  const toast = useToast();
   const [isOnline, setIsOnline] = React.useState(navigator.onLine);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [isSyncing, setIsSyncing] = React.useState(false);
   const pendingSyncBillIds = useBillStore((s) => s.pendingSyncBillIds || []);
+
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    toast.info('Syncing Bills', `Uploading ${pendingSyncBillIds.length} offline bills to cloud...`);
+    try {
+      const res = await useBillStore.getState().syncPendingBills();
+      if (res.syncedCount > 0) {
+        toast.success('Sync Complete', `Successfully uploaded ${res.syncedCount} bills to cloud!`);
+      } else if (res.remainingCount === 0) {
+        toast.success('All Synced', 'All bills are synced with the cloud.');
+      } else {
+        toast.warning('Sync Incomplete', `${res.remainingCount} bill(s) remaining. Will retry automatically.`);
+      }
+    } catch {
+      toast.error('Sync Error', 'Network error while uploading bills. Will retry.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
@@ -71,8 +93,9 @@ export default function TopBar({ title, actions }: TopBarProps) {
         {/* Offline Bills Sync Indicator */}
         {pendingSyncBillIds.length > 0 && (
           <button
-            onClick={() => useBillStore.getState().syncPendingBills()}
-            title={`${pendingSyncBillIds.length} offline bill(s) pending sync. Click to retry sync now.`}
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            title={`${pendingSyncBillIds.length} offline bill(s) pending sync. Click to upload now.`}
             className="btn btn-ghost btn-sm"
             style={{
               fontSize: '0.72rem',
@@ -85,11 +108,12 @@ export default function TopBar({ title, actions }: TopBarProps) {
               display: 'flex',
               alignItems: 'center',
               gap: 5,
-              cursor: 'pointer',
+              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              opacity: isSyncing ? 0.7 : 1,
             }}
           >
-            <ArrowsClockwise size={13} />
-            {pendingSyncBillIds.length} offline bill{pendingSyncBillIds.length > 1 ? 's' : ''}
+            <ArrowsClockwise size={13} className={isSyncing ? 'animate-spin' : ''} />
+            {isSyncing ? 'Syncing...' : `${pendingSyncBillIds.length} offline bill${pendingSyncBillIds.length > 1 ? 's' : ''}`}
           </button>
         )}
 
