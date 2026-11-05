@@ -10,6 +10,7 @@ import { useShiftStore } from './store/shiftStore';
 import { useSettingsStore } from './store/settingsStore';
 import { useAccountingStore } from './store/accountingStore';
 import { useStaffStore } from './store/staffStore';
+import { supabase } from './lib/supabase';
 
 import Sidebar from './components/layout/Sidebar';
 import ToastContainer from './components/ui/ToastContainer';
@@ -127,12 +128,31 @@ export default function App() {
     initUserSync();
     loadRolePermissions();
     
-    // Auto-refresh when tablet wakes up from sleep
+    // Auto-refresh when tablet wakes up from sleep — LIGHTWEIGHT: only refresh data, do NOT re-init channels
+    let _lastVisibleAt = Date.now();
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        useOrderStore.getState().fetchActiveOrders();
-        useAuthStore.getState().fetchUsers();
-        useTableStore.getState().initTableSync();
+        const sleepDuration = Date.now() - _lastVisibleAt;
+        // Only refresh if device was asleep for more than 60 seconds
+        if (sleepDuration > 60000) {
+          useOrderStore.getState().fetchActiveOrders();
+          useAuthStore.getState().fetchUsers();
+          // Refresh table statuses via a lightweight query instead of full re-init (which re-registers channels)
+          supabase.from('restaurant_tables').select('id,status,reserved_for,occupied_since').then(({ data }) => {
+            if (data) {
+              const { tables } = useTableStore.getState();
+              const updated = tables.map(t => {
+                const fresh = data.find((d: any) => d.id === t.id);
+                if (!fresh) return t;
+                return { ...t, status: fresh.status, reservedFor: fresh.reserved_for || undefined, occupiedSince: fresh.occupied_since ? new Date(fresh.occupied_since) : undefined };
+              });
+              useTableStore.setState({ tables: updated });
+            }
+          });
+        }
+        _lastVisibleAt = Date.now();
+      } else {
+        _lastVisibleAt = Date.now();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);

@@ -154,6 +154,7 @@ export function mapBillToPayload(bill: Bill): any {
 }
 
 let _isSyncing = false;
+let _syncIntervalRegistered = false;
 
 export const useBillStore = create<BillState>()(
   persist(
@@ -219,7 +220,7 @@ export const useBillStore = create<BillState>()(
             return { syncedCount: 0, remainingCount: 0 };
           }
 
-          const BATCH_SIZE = 25;
+          const BATCH_SIZE = 50;
           const syncedIds: string[] = [];
 
           for (let i = 0; i < candidateBills.length; i += BATCH_SIZE) {
@@ -273,7 +274,7 @@ export const useBillStore = create<BillState>()(
         const allBills = get().bills || [];
         if (allBills.length === 0) return { uploaded: 0, total: 0 };
 
-        const BATCH_SIZE = 25;
+        const BATCH_SIZE = 50;
         let uploaded = 0;
 
         for (let i = 0; i < allBills.length; i += BATCH_SIZE) {
@@ -564,13 +565,17 @@ export const useBillStore = create<BillState>()(
         get().syncPendingBills().catch(() => {});
       });
 
-      // Auto-sync on boot and every 25 seconds
-      get().syncPendingBills().catch(() => {});
-      setInterval(() => {
-        if (navigator.onLine && (get().pendingSyncBillIds?.length || 0) > 0) {
-          get().syncPendingBills().catch(() => {});
-        }
-      }, 30000);
+      // Guard: only register the interval once — prevents duplicate timers on reconnect / hot reload
+      if (!_syncIntervalRegistered) {
+        _syncIntervalRegistered = true;
+        // Auto-sync on boot and every 30 seconds
+        get().syncPendingBills().catch(() => {});
+        setInterval(() => {
+          if (navigator.onLine && (get().pendingSyncBillIds?.length || 0) > 0) {
+            get().syncPendingBills().catch(() => {});
+          }
+        }, 30000);
+      }
     }
 
     // 2. Fetch past 48 hours of bills on startup inside safe try/catch

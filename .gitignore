@@ -8,3 +8,4 @@ dist-ssr/
 !.env.example
 
 .DS_Store
+k6-tests/bin/

@@ -96,6 +96,23 @@ const syncOrderToDB = async (order: Order) => {
   }
 };
 
+// ── Debounced sync ──────────────────────────────────────────────────────────
+// Collapse rapid item add/remove/qty bursts into ONE Supabase write per order.
+// Without this, adding 5 items fires 5 sequential HTTP round-trips (~300ms each = 1.5s lag).
+const _pendingOrderSyncs = new Map<string, ReturnType<typeof setTimeout>>();
+const debouncedSyncOrderToDB = (order: Order, delayMs = 600) => {
+  const existing = _pendingOrderSyncs.get(order.id);
+  if (existing) clearTimeout(existing);
+  _pendingOrderSyncs.set(
+    order.id,
+    setTimeout(() => {
+      _pendingOrderSyncs.delete(order.id);
+      syncOrderToDB(order);
+    }, delayMs)
+  );
+};
+// ───────────────────────────────────────────────────────────────────────────
+
 const deleteOrderFromDB = async (orderId: string) => {
   try {
     // 1. Mark status as 'paid' immediately so that any active-order queries
@@ -183,7 +200,7 @@ export const useOrderStore = create<OrderState>()(
           };
         });
         const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
+        if (order) debouncedSyncOrderToDB(order);
       },
 
       removeItemFromOrder: (orderId, itemId) => {
@@ -199,7 +216,7 @@ export const useOrderStore = create<OrderState>()(
           };
         });
         const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
+        if (order) debouncedSyncOrderToDB(order);
       },
 
       updateItemQty: (orderId, itemId, qty) => {
@@ -226,7 +243,7 @@ export const useOrderStore = create<OrderState>()(
           };
         });
         const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
+        if (order) debouncedSyncOrderToDB(order);
       },
 
       updateItemNote: (orderId, itemId, note) => {
@@ -238,7 +255,7 @@ export const useOrderStore = create<OrderState>()(
           ),
         }));
         const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
+        if (order) debouncedSyncOrderToDB(order);
       },
 
       submitKOT: (orderId) => {
@@ -274,7 +291,7 @@ export const useOrderStore = create<OrderState>()(
           ),
         }));
         const order = get().orders.find((o) => o.id === orderId);
-        if (order) syncOrderToDB(order);
+        if (order) debouncedSyncOrderToDB(order);
       },
 
       updateOrderStatus: (orderId, status) => {
