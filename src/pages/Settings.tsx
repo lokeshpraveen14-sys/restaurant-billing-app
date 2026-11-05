@@ -334,6 +334,7 @@ export default function Settings() {
                   const b64 = btoa(unescape(encodeURIComponent(raw)));
                   try {
                     const { error } = await supabase.from('print_jobs').insert({
+                      printer_id: p.id,
                       printer_ip: p.ip,
                       printer_port: p.port || 9100,
                       receipt_data: b64,

@@ -293,6 +293,7 @@ export async function printReceipt(
   // 2. CLOUD QUEUE FALLBACK: Route via Supabase print_jobs for remote mobile/tablet devices
   try {
     const { error } = await supabase.from('print_jobs').insert({
+      printer_id: printer.id,
       printer_ip: printer.ip,
       printer_port: printer.port || 9100,
       receipt_data: b64,
