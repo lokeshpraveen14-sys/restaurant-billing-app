@@ -9,25 +9,47 @@ export default defineConfig({
     visualizer({ filename: 'bundle-analysis.json', template: 'raw-data', gzipSize: true }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png', 'icon-1024x1024.png'],
       manifest: {
-        name: 'Railway Coach - Restaurant Billing',
-        short_name: 'Railway Coach',
+        name: 'Railway Kitchen - Restaurant Billing',
+        short_name: 'Railway Kitchen',
         description: 'Complete restaurant management and billing software.',
-        theme_color: '#0c0e16',
-        background_color: '#0c0e16',
+        theme_color: '#4a0e17',
+        background_color: '#4a0e17',
         display: 'standalone',
+        orientation: 'any',
+        start_url: '/',
+        scope: '/',
         icons: [
           {
             src: '/pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: '/pwa-maskable-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/icon-1024x1024.png',
+            sizes: '1024x1024',
+            type: 'image/png',
+            purpose: 'any'
           }
         ]
       }
