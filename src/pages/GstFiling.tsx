@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { formatAmount, GST_STATE_CODES } from '../lib/gst';
-import { FilePdf, Download, FileText, CalendarBlank } from '@phosphor-icons/react';
+import { FilePdf, Download, FileText, CalendarBlank, SpinnerGap } from '@phosphor-icons/react';
 import TopBar from '../components/layout/TopBar';
 import { useBillStore } from '../store/billStore';
 import { useAccountingStore } from '../store/accountingStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useToast } from '../store/uiStore';
 import { Bill } from '../types';
 
 export default function GstFiling() {
@@ -21,6 +22,8 @@ export default function GstFiling() {
   const { fetchAllBillsForDateRange, bills: localBills } = useBillStore();
   const { bankAccounts, ledgerTransactions } = useAccountingStore();
   const { settings } = useSettingsStore();
+  const toast = useToast();
+  const [downloading, setDownloading] = useState<'daily' | 'auditor' | null>(null);
 
   const getBillsForPeriod = async (): Promise<{ start: Date; end: Date; bills: Bill[] }> => {
     const start = new Date(fromDate);
@@ -31,7 +34,8 @@ export default function GstFiling() {
     let gstrBills: Bill[] = [];
     try { 
       gstrBills = await fetchAllBillsForDateRange(start, end); 
-    } catch { 
+    } catch (err) { 
+      console.warn('[getBillsForPeriod] Remote fetch failed, using local bills:', err);
       gstrBills = localBills.filter(b => {
         const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
         return d >= start && d <= end;
@@ -41,14 +45,22 @@ export default function GstFiling() {
   };
 
   const downloadCSV = (lines: string[], filenamePrefix: string) => {
-    const csvData = new Blob([lines.join('\n')], { type: 'text/csv' });
+    // Add UTF-8 BOM (\uFEFF) and \r\n for universal Excel and Sheets compatibility
+    const csvContent = '\uFEFF' + lines.join('\r\n');
+    const csvData = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const csvUrl = URL.createObjectURL(csvData);
     const hiddenElement = document.createElement('a');
     hiddenElement.href = csvUrl;
-    hiddenElement.target = '_blank';
-    hiddenElement.download = `${filenamePrefix}-${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.csv`;
+    hiddenElement.setAttribute('download', `${filenamePrefix}-${fromDate}-to-${toDate}.csv`);
+    hiddenElement.style.display = 'none';
+    document.body.appendChild(hiddenElement);
     hiddenElement.click();
-    URL.revokeObjectURL(csvUrl);
+    setTimeout(() => {
+      if (document.body.contains(hiddenElement)) {
+        document.body.removeChild(hiddenElement);
+      }
+      URL.revokeObjectURL(csvUrl);
+    }, 3000);
   };
 
   // ── B2C CSV Report ──────────────────────────────────────────────────────────
@@ -104,72 +116,124 @@ export default function GstFiling() {
 
   // ── Daily GST Register CSV ───────────────────────────────────────────────────
   const handleDownloadDailyRegister = async () => {
-    const { start, end, bills: regBills } = await getBillsForPeriod();
-    const activeBills = regBills.filter(b => b.status !== 'void');
+    try {
+      setDownloading('daily');
+      const { start, end, bills: regBills } = await getBillsForPeriod();
+      const activeBills = regBills.filter(b => b.status !== 'void');
 
-    const dailyMap = new Map<string, Map<number, {
-      minInv: number; maxInv: number; minInvStr: string; maxInvStr: string;
-      taxable: number; cgst: number; sgst: number; total: number;
-    }>>();
+      if (activeBills.length === 0) {
+        toast.warning('No Bills Found', `No paid bills found between ${fromDate} and ${toDate}`);
+        return;
+      }
 
-    activeBills.forEach(b => {
-      const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-      const dateStr = d.toLocaleDateString('en-IN');
-      const invNum = parseInt(b.invoiceNumber.replace(/\D/g, ''), 10) || 0;
+      const dailyMap = new Map<string, Map<number, {
+        minInv: number; maxInv: number; minInvStr: string; maxInvStr: string;
+        taxable: number; cgst: number; sgst: number; total: number;
+      }>>();
 
-      if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, new Map());
-      const rateMap = dailyMap.get(dateStr)!;
+      activeBills.forEach(b => {
+        const d = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+        const dateStr = d.toLocaleDateString('en-IN');
+        const invStr = b.invoiceNumber || `INV-${b.id.slice(0, 8)}`;
+        const invNum = parseInt(invStr.replace(/\D/g, ''), 10) || 0;
 
-      b.items?.forEach(item => {
-        if (item.status === 'void') return;
-        const rate = item.gstRate || 0;
-        const taxable = item.totalPrice / (1 + rate / 100);
-        const tax = item.totalPrice - taxable;
+        if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, new Map());
+        const rateMap = dailyMap.get(dateStr)!;
 
-        if (!rateMap.has(rate)) {
-          rateMap.set(rate, {
-            minInv: invNum, maxInv: invNum, minInvStr: b.invoiceNumber, maxInvStr: b.invoiceNumber,
-            taxable: 0, cgst: 0, sgst: 0, total: 0
+        const rawItems = Array.isArray(b.items)
+          ? b.items
+          : typeof b.items === 'string'
+          ? (() => { try { return JSON.parse(b.items); } catch { return []; } })()
+          : [];
+
+        if (rawItems.length > 0) {
+          rawItems.forEach((item: any) => {
+            if (item.status === 'void') return;
+            const rate = Number(item.gstRate ?? 5);
+            const totalPrice = Number(item.totalPrice || item.price || 0);
+            const taxable = totalPrice / (1 + rate / 100);
+            const tax = totalPrice - taxable;
+
+            if (!rateMap.has(rate)) {
+              rateMap.set(rate, {
+                minInv: invNum, maxInv: invNum, minInvStr: invStr, maxInvStr: invStr,
+                taxable: 0, cgst: 0, sgst: 0, total: 0
+              });
+            }
+            const group = rateMap.get(rate)!;
+            if (invNum < group.minInv) { group.minInv = invNum; group.minInvStr = invStr; }
+            if (invNum > group.maxInv) { group.maxInv = invNum; group.maxInvStr = invStr; }
+            group.taxable += taxable;
+            group.cgst += tax / 2;
+            group.sgst += tax / 2;
+            group.total += totalPrice;
           });
+        } else {
+          // Bill has no item breakdown: fallback to bill level GST totals
+          const rate = (b.totalGST || 0) > 0 ? 5 : 0;
+          const totalAmt = Number(b.totalAmount || 0);
+          const taxableAmt = Number(b.subtotal || (totalAmt - (b.totalGST || 0)));
+          const cgstAmt = Number(b.cgstAmount || ((b.totalGST || 0) / 2) || 0);
+          const sgstAmt = Number(b.sgstAmount || ((b.totalGST || 0) / 2) || 0);
+
+          if (!rateMap.has(rate)) {
+            rateMap.set(rate, {
+              minInv: invNum, maxInv: invNum, minInvStr: invStr, maxInvStr: invStr,
+              taxable: 0, cgst: 0, sgst: 0, total: 0
+            });
+          }
+          const group = rateMap.get(rate)!;
+          if (invNum < group.minInv) { group.minInv = invNum; group.minInvStr = invStr; }
+          if (invNum > group.maxInv) { group.maxInv = invNum; group.maxInvStr = invStr; }
+          group.taxable += taxableAmt;
+          group.cgst += cgstAmt;
+          group.sgst += sgstAmt;
+          group.total += totalAmt;
         }
-        const group = rateMap.get(rate)!;
-        if (invNum < group.minInv) { group.minInv = invNum; group.minInvStr = b.invoiceNumber; }
-        if (invNum > group.maxInv) { group.maxInv = invNum; group.maxInvStr = b.invoiceNumber; }
-        group.taxable += taxable;
-        group.cgst += tax / 2;
-        group.sgst += tax / 2;
-        group.total += item.totalPrice;
       });
-    });
 
-    const header = 'Date,From Serial No.,To Serial No.,Tax Rate,Net Sales (Taxable),CGST,SGST,Gross Sales (Total)';
-    const rows: string[] = [];
+      const header = 'Date,From Serial No.,To Serial No.,Tax Rate,Net Sales (Taxable),CGST,SGST,Gross Sales (Total)';
+      const rows: string[] = [];
 
-    Array.from(dailyMap.entries()).forEach(([dateStr, rateMap]) => {
-      Array.from(rateMap.entries()).sort((a,b) => a[0]-b[0]).forEach(([rate, g]) => {
-        rows.push(`${dateStr},${g.minInvStr},${g.maxInvStr},${rate}%,${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`);
+      Array.from(dailyMap.entries()).forEach(([dateStr, rateMap]) => {
+        Array.from(rateMap.entries()).sort((a,b) => a[0]-b[0]).forEach(([rate, g]) => {
+          rows.push(`${dateStr},${g.minInvStr},${g.maxInvStr},${rate}%,${g.taxable.toFixed(2)},${g.cgst.toFixed(2)},${g.sgst.toFixed(2)},${g.total.toFixed(2)}`);
+        });
       });
-    });
 
-    const csvContent = [
-      `DAILY GST SALES REGISTER — ${settings.restaurantName}`,
-      `GSTIN: ${settings.gstin || 'N/A'}`,
-      `Period: ${start.toLocaleDateString('en-IN')} to ${end.toLocaleDateString('en-IN')}`,
-      '',
-      header,
-      ...rows
-    ];
+      const csvContent = [
+        `DAILY GST SALES REGISTER — ${settings.restaurantName}`,
+        `GSTIN: ${settings.gstin || 'N/A'}`,
+        `Period: ${start.toLocaleDateString('en-IN')} to ${end.toLocaleDateString('en-IN')}`,
+        '',
+        header,
+        ...rows
+      ];
 
-    downloadCSV(csvContent, 'Daily-GST-Register');
+      downloadCSV(csvContent, 'Daily-GST-Register');
+      toast.success('Download Complete', 'Daily GST Sales Register downloaded successfully');
+    } catch (err: any) {
+      console.error('Error downloading daily register:', err);
+      toast.error('Download Failed', err?.message || 'Failed to download daily register');
+    } finally {
+      setDownloading(null);
+    }
   };
 
   // ── jsPDF Auditor Report ─────────────────────────────────────────────────────
   const handleDownloadAuditorPDF = async () => {
-    const { start, end, bills: auditBills } = await getBillsForPeriod();
-    const activeBills = auditBills.filter(b => b.status !== 'void');
+    try {
+      setDownloading('auditor');
+      const { start, end, bills: auditBills } = await getBillsForPeriod();
+      const activeBills = auditBills.filter(b => b.status !== 'void');
 
-    const { default: jsPDF } = await import('jspdf');
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      if (activeBills.length === 0) {
+        toast.warning('No Bills Found', `No paid bills found between ${fromDate} and ${toDate}`);
+        return;
+      }
+
+      const { default: jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pw = doc.internal.pageSize.getWidth();
     let y = 18;
     const lm = 14; 
@@ -317,7 +381,14 @@ export default function GstFiling() {
       doc.text(`Page ${i} of ${totalPages}  |  Confidential Auditor Report  |  ${settings.restaurantName}`, pw / 2, 290, { align: 'center' });
     }
 
-    doc.save(`Auditor-Report-${start.toLocaleDateString('en-IN').replace(/\//g, '-')}-to-${end.toLocaleDateString('en-IN').replace(/\//g, '-')}.pdf`);
+      doc.save(`Auditor-Report-${fromDate}-to-${toDate}.pdf`);
+      toast.success('Download Complete', 'Auditor Summary PDF downloaded');
+    } catch (err: any) {
+      console.error('Error generating auditor report:', err);
+      toast.error('Download Failed', err?.message || 'Failed to generate Auditor PDF');
+    } finally {
+      setDownloading(null);
+    }
   };
 
   return (
@@ -377,18 +448,38 @@ export default function GstFiling() {
             <button 
               className="btn btn-primary" 
               onClick={handleDownloadDailyRegister}
-              style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 220, height: 48 }}
+              disabled={downloading !== null}
+              style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 240, height: 48, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
-              <FileText size={20} />
-              Daily Sales Register (CSV)
+              {downloading === 'daily' ? (
+                <>
+                  <SpinnerGap size={20} className="spin" />
+                  <span>Generating CSV...</span>
+                </>
+              ) : (
+                <>
+                  <FileText size={20} />
+                  <span>Daily Sales Register (CSV)</span>
+                </>
+              )}
             </button>
             <button 
               className="btn btn-secondary" 
               onClick={handleDownloadAuditorPDF}
-              style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 220, color: 'var(--accent)', height: 48, borderColor: 'var(--accent)' }}
+              disabled={downloading !== null}
+              style={{ padding: '12px 24px', fontSize: '1rem', minWidth: 240, color: 'var(--accent)', height: 48, borderColor: 'var(--accent)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
-              <FilePdf size={20} />
-              Auditor Summary (PDF)
+              {downloading === 'auditor' ? (
+                <>
+                  <SpinnerGap size={20} className="spin" />
+                  <span>Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FilePdf size={20} />
+                  <span>Auditor Summary (PDF)</span>
+                </>
+              )}
             </button>
           </div>
         </div>
