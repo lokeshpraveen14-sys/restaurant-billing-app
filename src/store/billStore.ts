@@ -458,13 +458,18 @@ export const useBillStore = create<BillState>()(
 
       const mapped = data.map(mapDbBill);
 
-      // On first page, seamlessly prepend any local bills that are pending sync or not yet in Supabase
+      // On first page, ONLY prepend genuinely pending offline bills that haven't reached Supabase yet
       if (page === 1) {
-        const dbIds = new Set(mapped.map((b) => b.id));
-        const unsyncedLocal = getMatchingLocalBills().filter((b) => !dbIds.has(b.id));
-        if (unsyncedLocal.length > 0) {
-          const combined = [...unsyncedLocal, ...mapped];
-          return { bills: combined.slice(0, limit), total: (count ?? mapped.length) + unsyncedLocal.length };
+        const pendingIds = new Set(get().pendingSyncBillIds || []);
+        if (pendingIds.size > 0) {
+          const dbIds = new Set(mapped.map((b) => b.id));
+          const trulyUnsynced = getMatchingLocalBills().filter(
+            (b) => pendingIds.has(b.id) && !dbIds.has(b.id)
+          );
+          if (trulyUnsynced.length > 0) {
+            const combined = [...trulyUnsynced, ...mapped];
+            return { bills: combined.slice(0, limit), total: (count ?? mapped.length) + trulyUnsynced.length };
+          }
         }
       }
 

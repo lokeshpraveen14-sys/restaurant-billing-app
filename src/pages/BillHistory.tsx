@@ -435,7 +435,7 @@ export default function BillHistory() {
                   color: 'var(--text-muted)',
                 }}
               >
-                {bills.length}
+                {totalBills || bills.length}
               </span>
             </button>
 
