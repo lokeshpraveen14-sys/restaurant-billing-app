@@ -220,7 +220,7 @@ export const useBillStore = create<BillState>()(
             return { syncedCount: 0, remainingCount: 0 };
           }
 
-          const BATCH_SIZE = 50;
+          const BATCH_SIZE = 25;
           const syncedIds: string[] = [];
 
           for (let i = 0; i < candidateBills.length; i += BATCH_SIZE) {
@@ -718,7 +718,11 @@ export const useBillStore = create<BillState>()(
     }),
     {
       name: 'bill-storage',
-      // We are persisting it so that even if Supabase is missing columns (like guest_count), local state remains
+      // Persist only the latest 100 bills and pending sync queue to avoid 5MB localStorage quota limits and slow synchronous serialization
+      partialize: (state) => ({
+        bills: (state.bills || []).slice(0, 100),
+        pendingSyncBillIds: state.pendingSyncBillIds || [],
+      }),
     }
   )
 );

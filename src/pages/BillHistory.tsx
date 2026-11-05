@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useBillStore } from '../store/billStore';
+import { useBillStore, mapDbBill } from '../store/billStore';
 import { useShiftStore } from '../store/shiftStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToast } from '../store/uiStore';
 import { useAuthStore } from '../store/authStore';
+import { supabase } from '../lib/supabase';
 import { Bill } from '../types';
 import { formatAmount } from '../lib/gst';
 import { printReceipt, buildBillReceipt } from '../lib/printer';
@@ -136,31 +137,31 @@ export default function BillHistory() {
 
   useEffect(() => {
     let isMounted = true;
+    const end = new Date();
+    const start = new Date();
+
+    if (dateRange === 'today') {
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'week') {
+      start.setDate(start.getDate() - 7);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'month') {
+      start.setMonth(start.getMonth() - 1);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'custom') {
+      const s = new Date(customStart);
+      s.setHours(0, 0, 0, 0);
+      const e = new Date(customEnd);
+      e.setHours(23, 59, 59, 999);
+      start.setTime(s.getTime());
+      end.setTime(e.getTime());
+    }
+
     const loadBills = async () => {
       setLoading(true);
-      const end = new Date();
-      const start = new Date();
-
-      if (dateRange === 'today') {
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-      } else if (dateRange === 'week') {
-        start.setDate(start.getDate() - 7);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-      } else if (dateRange === 'month') {
-        start.setMonth(start.getMonth() - 1);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-      } else if (dateRange === 'custom') {
-        const s = new Date(customStart);
-        s.setHours(0, 0, 0, 0);
-        const e = new Date(customEnd);
-        e.setHours(23, 59, 59, 999);
-        start.setTime(s.getTime());
-        end.setTime(e.getTime());
-      }
-
       try {
         const result = await fetchBillsByDateRange(start, end, 1, itemsPerPage, activeStaffFilter);
         if (!isMounted) return;
@@ -182,10 +183,69 @@ export default function BillHistory() {
     };
 
     loadBills();
+
+    // ── Realtime Listener: Instantly receive new bills, updates, and voids ──────
+    const channelName = `bill-history-${Date.now()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
+        if (!isMounted) return;
+        const { eventType, new: newRow, old: oldRow } = payload as any;
+
+        if (eventType === 'DELETE') {
+          setBills((prev) => prev.filter((b) => b.id !== oldRow.id));
+          setTotalBills((prev) => Math.max(0, prev - 1));
+          return;
+        }
+
+        if (eventType === 'INSERT') {
+          const mapped = mapDbBill(newRow);
+          if (!isBillForStaff(mapped, activeStaffFilter)) return;
+          const d = new Date(mapped.createdAt);
+          if (d < start || d > end) return;
+
+          setBills((prev) => {
+            if (prev.some((b) => b.id === mapped.id)) {
+              return prev.map((b) => (b.id === mapped.id ? mapped : b));
+            }
+            return [mapped, ...prev];
+          });
+          setTotalBills((prev) => prev + 1);
+        } else if (eventType === 'UPDATE') {
+          const mapped = mapDbBill(newRow);
+          setBills((prev) => prev.map((b) => (b.id === mapped.id ? mapped : b)));
+        }
+      })
+      .subscribe();
+
+    // ── Auto-refresh when tab becomes active again ─────────────────────────
+    const handleVisChange = () => {
+      if (document.visibilityState === 'visible' && isMounted) {
+        loadBills();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisChange);
+
+    // ── Silent background poll every 20s for today's bills ──────────────────
+    const pollInterval = setInterval(() => {
+      if (dateRange === 'today' && document.visibilityState === 'visible' && isMounted) {
+        fetchBillsByDateRange(start, end, 1, itemsPerPage, activeStaffFilter)
+          .then((result) => {
+            if (!isMounted) return;
+            setBills(result.bills);
+            setTotalBills(result.total);
+          })
+          .catch(() => {});
+      }
+    }, 20000);
+
     return () => {
       isMounted = false;
+      supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', handleVisChange);
+      clearInterval(pollInterval);
     };
-  }, [dateRange, activeStaffFilter]);
+  }, [dateRange, customStart, customEnd, activeStaffFilter]);
 
   const loadBillsManual = async (page = 1) => {
     setLoading(true);
@@ -546,8 +606,8 @@ export default function BillHistory() {
               </div>
               <button
                 className="btn btn-secondary btn-sm"
-                onClick={async () => {
-                  await syncPendingBills();
+                onClick={() => {
+                  syncPendingBills().catch(() => {});
                   loadBillsManual(currentPage);
                 }}
                 style={{
